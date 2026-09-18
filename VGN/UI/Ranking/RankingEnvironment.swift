@@ -81,10 +81,23 @@ struct LiveRankingBackend: RankingBackend {
         try await ranking.setTier(ids, tierID: tierID)
     }
 
+    // Drag / drop overrides
+    func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws {
+        try await ranking.move(gameID: gameID, toTier: toTier, atIndex: atIndex)
+    }
+    func clearTier(_ gameID: Int64) async throws { try await ranking.clearTier(gameID) }
+    func moveDivider(between upperTierID: Int64, and lowerTierID: Int64, by k: Int) async throws -> DividerMoveOutcome {
+        try await ranking.moveDivider(between: upperTierID, and: lowerTierID, by: k)
+    }
+
     // Reads
     func gameDetail(id: Int64) async throws -> GameDetail? { try await library.gameDetail(id: id) }
     func tiers() async throws -> [TierInfo] { try await library.tiers() }
     func tierBoardOnce() async throws -> [TierBoardRow] { try await ranking.tierBoardOnce() }
+    func theTopOnce(filter: LibraryFilter) async throws -> [TopRow] {
+        try await ranking.theTopOnce(filter: filter)
+    }
+    func derivedScores() async throws -> [Int64: DerivedScoreValue] { try await ranking.allDerivedScores() }
     func unrankedPlayedGames() async throws -> [GameSummary] {
         try await library.gamesOnce(filter: LibraryFilter(scope: .unranked, sort: .dateAdded, ascending: true))
     }
@@ -97,6 +110,10 @@ struct LiveRankingBackend: RankingBackend {
     func rankingStatsStream() -> AsyncStream<RankingStats> { Self.bridge(ranking.rankingStats()) }
     func unrankedGamesStream() -> AsyncStream<[GameSummary]> {
         Self.bridge(library.games(filter: LibraryFilter(scope: .unranked, sort: .dateAdded, ascending: true)))
+    }
+    func tierBoardStream() -> AsyncStream<[TierBoardRow]> { Self.bridge(ranking.tierBoard()) }
+    func theTopStream(filter: LibraryFilter) -> AsyncStream<[TopRow]> {
+        Self.bridge(ranking.theTop(filter: filter))
     }
 
     // Covers
