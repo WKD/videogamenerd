@@ -1,5 +1,7 @@
 [
   {
+    "aggregated_rating" : 91.111111111111114,
+    "aggregated_rating_count" : 18,
     "alternative_names" : [
       {
         "id" : 27171,
@@ -20,6 +22,20 @@
       "image_id" : "cob99l"
     },
     "first_release_date" : 1427155200,
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      },
+      {
+        "id" : 2,
+        "name" : "Multiplayer"
+      },
+      {
+        "id" : 3,
+        "name" : "Co-operative"
+      }
+    ],
     "game_type" : 0,
     "genres" : [
       {
@@ -32,6 +48,178 @@
       }
     ],
     "id" : 7334,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 1012,
+          "name" : "FromSoftware"
+        },
+        "developer" : true,
+        "id" : 17333
+      },
+      {
+        "company" : {
+          "id" : 13634,
+          "name" : "Sony Computer Entertainment"
+        },
+        "developer" : false,
+        "id" : 180655
+      },
+      {
+        "company" : {
+          "id" : 27364,
+          "name" : "Japan Studio"
+        },
+        "developer" : true,
+        "id" : 402970
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 129,
+        "name" : "bloody"
+      },
+      {
+        "id" : 159,
+        "name" : "disease"
+      },
+      {
+        "id" : 423,
+        "name" : "gothic"
+      },
+      {
+        "id" : 905,
+        "name" : "difficult"
+      },
+      {
+        "id" : 1033,
+        "name" : "action-adventure"
+      },
+      {
+        "id" : 1295,
+        "name" : "lovecraftian"
+      },
+      {
+        "id" : 1333,
+        "name" : "online"
+      },
+      {
+        "id" : 2472,
+        "name" : "sword & sorcery"
+      },
+      {
+        "id" : 2543,
+        "name" : "playstation network"
+      },
+      {
+        "id" : 4134,
+        "name" : "digital distribution"
+      },
+      {
+        "id" : 4245,
+        "name" : "playstation trophies"
+      },
+      {
+        "id" : 4284,
+        "name" : "leveling up"
+      },
+      {
+        "id" : 4796,
+        "name" : "playstation experience 2015"
+      },
+      {
+        "id" : 4823,
+        "name" : "character creation"
+      },
+      {
+        "id" : 4852,
+        "name" : "side quests"
+      },
+      {
+        "id" : 4854,
+        "name" : "pick your gender"
+      },
+      {
+        "id" : 4869,
+        "name" : "downloadable content"
+      },
+      {
+        "id" : 4897,
+        "name" : "auto-saving"
+      },
+      {
+        "id" : 4918,
+        "name" : "real-time combat"
+      },
+      {
+        "id" : 4974,
+        "name" : "male antagonist"
+      },
+      {
+        "id" : 5175,
+        "name" : "female antagonist"
+      },
+      {
+        "id" : 5316,
+        "name" : "pax prime 2014"
+      },
+      {
+        "id" : 5317,
+        "name" : "gamescom 2014"
+      },
+      {
+        "id" : 5323,
+        "name" : "mercenary"
+      },
+      {
+        "id" : 5447,
+        "name" : "canonical death"
+      },
+      {
+        "id" : 5564,
+        "name" : "british accent"
+      },
+      {
+        "id" : 6034,
+        "name" : "camera control"
+      },
+      {
+        "id" : 6076,
+        "name" : "sliding down ladders"
+      },
+      {
+        "id" : 6214,
+        "name" : "day one patch"
+      },
+      {
+        "id" : 6241,
+        "name" : "tokyo game show 2014"
+      },
+      {
+        "id" : 6648,
+        "name" : "new game plus"
+      },
+      {
+        "id" : 10045,
+        "name" : "no game pause"
+      },
+      {
+        "id" : 15076,
+        "name" : "the game awards 2014"
+      },
+      {
+        "id" : 17326,
+        "name" : "soulslike"
+      },
+      {
+        "id" : 29644,
+        "name" : "physical release"
+      },
+      {
+        "id" : 39050,
+        "name" : "the game awards - world premiere"
+      }
+    ],
     "name" : "Bloodborne",
     "platforms" : [
       {
@@ -39,7 +227,47 @@
         "id" : 48
       }
     ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 91.242684840975187,
+    "rating_count" : 1861,
+    "similar_games" : [
+      11133,
+      1887,
+      5619,
+      2368,
+      498,
+      27304,
+      7331,
+      28168,
+      105049,
+      7725
+    ],
     "slug" : "bloodborne",
-    "summary" : "An action RPG in which the player embodies a Hunter who, after being transfused with the mysterious blood local to the city of Yharnam, sets off into a \"night of the Hunt\", an extended night in which Hunters may phase in and out of dream and reality in order to thin the outbreak of abominable beasts that plague the land and, for the more resilient and insightful Hunters, uncover the answers to the Hunt's many mysteries."
+    "summary" : "An action RPG in which the player embodies a Hunter who, after being transfused with the mysterious blood local to the city of Yharnam, sets off into a \"night of the Hunt\", an extended night in which Hunters may phase in and out of dream and reality in order to thin the outbreak of abominable beasts that plague the land and, for the more resilient and insightful Hunters, uncover the answers to the Hunt's many mysteries.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      },
+      {
+        "id" : 19,
+        "name" : "Horror"
+      },
+      {
+        "id" : 38,
+        "name" : "Open world"
+      }
+    ],
+    "total_rating" : 91.176897976043151,
+    "total_rating_count" : 1879
   }
 ]

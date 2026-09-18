@@ -18,6 +18,25 @@ struct IGDBGameDTO: Decodable, Sendable {
     let bundles: [Int64]?
     let parentGame: Int64?
     let versionParent: Int64?
+    // §7b taste traits.
+    let franchise: NamedRef?
+    let franchises: [NamedRef]?
+    let collection: NamedRef?
+    let collections: [NamedRef]?
+    let involvedCompanies: [InvolvedCompany]?
+    let themes: [NamedRef]?
+    let gameModes: [NamedRef]?
+    let playerPerspectives: [NamedRef]?
+    let keywords: [NamedRef]?
+    let similarGames: [Int64]?
+    // §7b crowd prior. `total_*` is IGDB's blended critic+user score; falls back to
+    // `aggregated_*` (critics) then `rating`/`rating_count` (users).
+    let totalRating: Double?
+    let totalRatingCount: Int?
+    let aggregatedRating: Double?
+    let aggregatedRatingCount: Int?
+    let rating: Double?
+    let ratingCount: Int?
 
     struct Cover: Decodable, Sendable { let imageId: String?
         enum CodingKeys: String, CodingKey { case imageId = "image_id" }
@@ -26,14 +45,30 @@ struct IGDBGameDTO: Decodable, Sendable {
     struct PlatformRef: Decodable, Sendable { let id: Int; let abbreviation: String? }
     struct NamedRef: Decodable, Sendable { let id: Int64?; let name: String? }
     struct AltName: Decodable, Sendable { let id: Int64?; let name: String?; let comment: String? }
+    /// One `involved_companies` row: `developer` marks the studio (vs publisher/
+    /// porter/support).
+    struct InvolvedCompany: Decodable, Sendable {
+        let company: NamedRef?
+        let developer: Bool?
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, name, slug, summary, cover, platforms, genres, bundles
+        case franchise, franchises, collection, collections, themes, keywords, rating
         case firstReleaseDate = "first_release_date"
         case gameType = "game_type"
         case alternativeNames = "alternative_names"
         case parentGame = "parent_game"
         case versionParent = "version_parent"
+        case involvedCompanies = "involved_companies"
+        case gameModes = "game_modes"
+        case playerPerspectives = "player_perspectives"
+        case similarGames = "similar_games"
+        case totalRating = "total_rating"
+        case totalRatingCount = "total_rating_count"
+        case aggregatedRating = "aggregated_rating"
+        case aggregatedRatingCount = "aggregated_rating_count"
+        case ratingCount = "rating_count"
     }
 }
 
@@ -91,6 +126,39 @@ struct IGDBGameMetadata: Sendable, Equatable, Identifiable {
     let bundleMemberIDs: [Int64]
     let parentGameID: Int64?
     let versionParentID: Int64?
+    // §7b taste traits (names; deduped, in IGDB order). `similarGameIDs` are IGDB
+    // game ids. `keywords` is capped (see ``IGDBTraitLimits``).
+    var franchises: [String] = []
+    var series: [String] = []
+    var developers: [String] = []
+    var themes: [String] = []
+    var gameModes: [String] = []
+    var perspectives: [String] = []
+    var keywords: [String] = []
+    var similarGameIDs: [Int64] = []
+    /// Resolved crowd rating (0…100) and its sample count — `total_rating` when
+    /// present, else `aggregated_rating`, else `rating` (PLAN §7b, verified live).
+    var igdbRating: Double? = nil
+    var igdbRatingCount: Int? = nil
+
+    /// The `[GameTrait]` this metadata contributes (PLAN §7b game_traits).
+    var traits: [GameTrait] {
+        var out: [GameTrait] = []
+        for v in franchises { out.append(GameTrait(kind: .franchise, value: v)) }
+        for v in series { out.append(GameTrait(kind: .series, value: v)) }
+        for v in developers { out.append(GameTrait(kind: .developer, value: v)) }
+        for v in themes { out.append(GameTrait(kind: .theme, value: v)) }
+        for v in gameModes { out.append(GameTrait(kind: .mode, value: v)) }
+        for v in perspectives { out.append(GameTrait(kind: .perspective, value: v)) }
+        for v in keywords { out.append(GameTrait(kind: .keyword, value: v)) }
+        for id in similarGameIDs { out.append(GameTrait(kind: .similar, value: String(id))) }
+        return out
+    }
+}
+
+/// Caps for high-cardinality IGDB trait lists (some games have 100+ keywords).
+enum IGDBTraitLimits {
+    static let keywords = 12
 }
 
 /// Average completion times (PLAN §5.1 / §6.4). All durations in seconds.
@@ -113,11 +181,20 @@ enum IGDBFields {
         "alternative_names.name", "slug", "parent_game", "version_parent",
     ]
 
-    /// Fuller set for enrichment: adds summary and the bundle relation.
+    /// Fuller set for enrichment: adds summary, the bundle relation, and the §7b
+    /// taste traits + crowd-rating fields. `franchises`/`collections` (arrays) are
+    /// more reliably populated than the singular `franchise`/`collection`, so both
+    /// are requested; `total_rating` falls back to `aggregated_rating`/`rating`.
     static let full = [
         "name", "slug", "summary", "first_release_date",
         "platforms.abbreviation", "cover.image_id", "genres.name", "game_type",
         "alternative_names.name", "bundles", "parent_game", "version_parent",
+        "franchise.name", "franchises.name", "collection.name", "collections.name",
+        "involved_companies.company.name", "involved_companies.developer",
+        "themes.name", "game_modes.name", "player_perspectives.name", "keywords.name",
+        "similar_games",
+        "total_rating", "total_rating_count", "aggregated_rating",
+        "aggregated_rating_count", "rating", "rating_count",
     ]
 
     static let timeToBeat = ["game_id", "hastily", "normally", "completely", "count"]
