@@ -1,0 +1,35 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "{\"picks\":[{\"id\":200,\"reason\":\"With Bloodborne at S and Dark Souls III at A, this is FromSoftware's same stamina-and-punish combat stretched across a huge open world, which suits a long haul. The tone is bleak and cryptic, the bosses are brutal, and when you hit a wall you can ride off and explore somewhere else.\",\"caveat\":\"The ≈53 h figure is a focused run; thorough exploration easily doubles it. The pacing is looser and less tightly curated than Bloodborne's dense level design.\"},{\"id\":201,\"reason\":\"This is the closest thing to Souls in 2D: a melancholy ruined kingdom, lore told through fragments, a corpse-run on death, and demanding pattern-based bosses. It should hit the same nerve as Bloodborne's atmosphere and difficulty. At about 45 h of slow-burn exploration it fits a long-haul slot well.\",\"caveat\":\"The first few hours are slow and the map system is deliberately obtuse. It is precision platforming and nail combat, not 3D action.\"},{\"id\":202,\"reason\":\"It is a superbly crafted, joyful platformer, but nothing in your tier list points toward it. It is breezy, low-stakes and nearly frictionless, while your top ranks all favor dark tone and hard-won victories. It works best as a palate cleanser between punishing games, not as your main long-haul commitment.\",\"caveat\":\"The main story is only about 12-15 h. The ≈45 h figure assumes moon-hunting completionism, and the difficulty stays gentle until the post-game.\"}]}",
+  "structured_output": {
+    "picks": [
+      {
+        "id": 200,
+        "reason": "With Bloodborne at S and Dark Souls III at A, this is FromSoftware's same stamina-and-punish combat stretched across a huge open world, which suits a long haul. The tone is bleak and cryptic, the bosses are brutal, and when you hit a wall you can ride off and explore somewhere else.",
+        "caveat": "The ≈53 h figure is a focused run; thorough exploration easily doubles it. The pacing is looser and less tightly curated than Bloodborne's dense level design."
+      },
+      {
+        "id": 201,
+        "reason": "This is the closest thing to Souls in 2D: a melancholy ruined kingdom, lore told through fragments, a corpse-run on death, and demanding pattern-based bosses. It should hit the same nerve as Bloodborne's atmosphere and difficulty. At about 45 h of slow-burn exploration it fits a long-haul slot well.",
+        "caveat": "The first few hours are slow and the map system is deliberately obtuse. It is precision platforming and nail combat, not 3D action."
+      },
+      {
+        "id": 202,
+        "reason": "It is a superbly crafted, joyful platformer, but nothing in your tier list points toward it. It is breezy, low-stakes and nearly frictionless, while your top ranks all favor dark tone and hard-won victories. It works best as a palate cleanser between punishing games, not as your main long-haul commitment.",
+        "caveat": "The main story is only about 12-15 h. The ≈45 h figure assumes moon-hunting completionism, and the difficulty stays gentle until the post-game."
+      }
+    ]
+  },
+  "total_cost_usd": 0.7329500000000001,
+  "num_turns": 2,
+  "duration_ms": 9766,
+  "duration_api_ms": 9720,
+  "usage": {
+    "input_tokens": 2,
+    "output_tokens": 665,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 34984
+  }
+}
