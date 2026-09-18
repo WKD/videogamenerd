@@ -69,6 +69,25 @@ struct TitleNormalizerTests {
         #expect(artless("Platinum") == "platinum")
     }
 
+    @Test("Ambiguous budget-line labels survive at articleless, strip only at core")
+    func budgetLabelsGated() {
+        // A genuine title that ends in a retail budget-line word must survive the
+        // recommended fuzzy-matching level, so it never collapses onto the bare
+        // series name (regression: "Pokémon Platinum" → "pokemon").
+        #expect(artless("Pokémon Platinum") == "pokemon platinum")
+        #expect(artless("Pokémon Essentials") == "pokemon essentials")
+        #expect(artless("Gran Turismo 4 Greatest Hits") == "gran turismo 4 greatest hits")
+        // The parenthesised disc form is still stripped (foldBasics), which is the
+        // common way budget labels actually appear on boxes.
+        #expect(artless("Gran Turismo 4 (Platinum)") == "gran turismo 4")
+        // At the loosest, deliberate level the budget label is dropped.
+        #expect(core("Pokémon Platinum") == "pokemon")
+        #expect(core("Gran Turismo 4 Greatest Hits") == "gran turismo 4")
+        // Genuine edition qualifiers still strip at articleless (unchanged).
+        #expect(artless("Halo 2 Deluxe") == "halo 2")
+        #expect(artless("Skyrim Special Edition") == "skyrim")
+    }
+
     @Test("Remasters / HD / Remake / Part are NEVER stripped (separate games)")
     func remastersPreserved() {
         #expect(artless("The Last of Us Remastered") == "last of us remastered")
