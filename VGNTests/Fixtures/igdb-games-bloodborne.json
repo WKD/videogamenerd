@@ -1,0 +1,45 @@
+[
+  {
+    "alternative_names" : [
+      {
+        "id" : 27171,
+        "name" : "Project Beast"
+      },
+      {
+        "id" : 130571,
+        "name" : "血源诅咒"
+      }
+    ],
+    "bundles" : [
+      42931,
+      150034,
+      136691
+    ],
+    "cover" : {
+      "id" : 525225,
+      "image_id" : "cob99l"
+    },
+    "first_release_date" : 1427155200,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 7334,
+    "name" : "Bloodborne",
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "slug" : "bloodborne",
+    "summary" : "An action RPG in which the player embodies a Hunter who, after being transfused with the mysterious blood local to the city of Yharnam, sets off into a \"night of the Hunt\", an extended night in which Hunters may phase in and out of dream and reality in order to thin the outbreak of abominable beasts that plague the land and, for the more resilient and insightful Hunters, uncover the answers to the Hunt's many mysteries."
+  }
+]

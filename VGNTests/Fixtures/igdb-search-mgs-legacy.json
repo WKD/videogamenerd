@@ -1,0 +1,33 @@
+[
+  {
+    "cover" : {
+      "id" : 193803,
+      "image_id" : "co45jf"
+    },
+    "first_release_date" : 1373328000,
+    "game_type" : 3,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 20196,
+    "name" : "Metal Gear Solid: The Legacy Collection",
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      }
+    ],
+    "slug" : "metal-gear-solid-the-legacy-collection"
+  }
+]

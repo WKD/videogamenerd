@@ -1,0 +1,377 @@
+[
+  {
+    "cover" : {
+      "id" : 393801,
+      "image_id" : "co8fux"
+    },
+    "first_release_date" : 1096588800,
+    "game_type" : 10,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 307496,
+    "name" : "Metal Gear 2: Solid Snake",
+    "parent_game" : 377,
+    "platforms" : [
+      {
+        "abbreviation" : "Mobile",
+        "id" : 55
+      }
+    ],
+    "slug" : "metal-gear-2-solid-snake--1"
+  },
+  {
+    "cover" : {
+      "id" : 79916,
+      "image_id" : "co1pnw"
+    },
+    "first_release_date" : 1150156800,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      },
+      {
+        "id" : 34,
+        "name" : "Visual Novel"
+      }
+    ],
+    "id" : 77232,
+    "name" : "Metal Gear Solid: Digital Graphic Novel",
+    "platforms" : [
+      {
+        "abbreviation" : "PSP",
+        "id" : 38
+      }
+    ],
+    "slug" : "metal-gear-solid-digital-graphic-novel"
+  },
+  {
+    "cover" : {
+      "id" : 430391,
+      "image_id" : "co983b"
+    },
+    "first_release_date" : 1320710400,
+    "game_type" : 9,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      }
+    ],
+    "id" : 45178,
+    "name" : "Metal Gear Solid: Peace Walker - HD Edition",
+    "parent_game" : 382,
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "X360",
+        "id" : 12
+      }
+    ],
+    "slug" : "metal-gear-solid-peace-walker-hd-edition"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 4195,
+        "name" : "MGS4"
+      },
+      {
+        "id" : 71992,
+        "name" : "Metal Gear Solid IV"
+      }
+    ],
+    "cover" : {
+      "id" : 252138,
+      "image_id" : "co5eju"
+    },
+    "first_release_date" : 1213228800,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 380,
+    "name" : "Metal Gear Solid 4: Guns of the Patriots",
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      }
+    ],
+    "slug" : "metal-gear-solid-4-guns-of-the-patriots"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 106506,
+        "name" : "Metal Gear Solid : Missions Spéciales"
+      },
+      {
+        "id" : 105725,
+        "name" : "MGS:VR"
+      }
+    ],
+    "cover" : {
+      "id" : 129911,
+      "image_id" : "co2s8n"
+    },
+    "first_release_date" : 938563200,
+    "game_type" : 4,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 9,
+        "name" : "Puzzle"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 18683,
+    "name" : "Metal Gear Solid: VR Missions",
+    "parent_game" : 375,
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "PS1",
+        "id" : 7
+      },
+      {
+        "abbreviation" : "PSP",
+        "id" : 38
+      }
+    ],
+    "slug" : "metal-gear-solid-vr-missions"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 215209,
+        "name" : "launcher.exe"
+      }
+    ],
+    "cover" : {
+      "id" : 430915,
+      "image_id" : "co98hv"
+    },
+    "first_release_date" : 1320710400,
+    "game_type" : 9,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 99821,
+    "name" : "Metal Gear Solid 3: Snake Eater - HD Edition",
+    "parent_game" : 479,
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "Android",
+        "id" : 34
+      },
+      {
+        "abbreviation" : "Vita",
+        "id" : 46
+      },
+      {
+        "abbreviation" : "X360",
+        "id" : 12
+      }
+    ],
+    "slug" : "metal-gear-solid-3-snake-eater-hd-edition"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 264821,
+        "name" : "launcher.exe"
+      }
+    ],
+    "cover" : {
+      "id" : 430365,
+      "image_id" : "co982l"
+    },
+    "first_release_date" : 1320710400,
+    "game_type" : 9,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 55041,
+    "name" : "Metal Gear Solid 2: Sons of Liberty - HD Edition",
+    "parent_game" : 474,
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "Android",
+        "id" : 34
+      },
+      {
+        "abbreviation" : "Vita",
+        "id" : 46
+      },
+      {
+        "abbreviation" : "X360",
+        "id" : 12
+      }
+    ],
+    "slug" : "metal-gear-solid-2-sons-of-liberty-hd-edition"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 24602,
+        "name" : "MGS"
+      },
+      {
+        "id" : 24601,
+        "name" : "MGS1"
+      },
+      {
+        "id" : 105495,
+        "name" : "特攻神諜"
+      },
+      {
+        "id" : 105496,
+        "name" : "Metal Gear 3"
+      }
+    ],
+    "cover" : {
+      "id" : 545996,
+      "image_id" : "cobpak"
+    },
+    "first_release_date" : 904780800,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 375,
+    "name" : "Metal Gear Solid",
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "PS1",
+        "id" : 7
+      },
+      {
+        "abbreviation" : "PSP",
+        "id" : 38
+      }
+    ],
+    "slug" : "metal-gear-solid"
+  },
+  {
+    "cover" : {
+      "id" : 393789,
+      "image_id" : "co8ful"
+    },
+    "first_release_date" : 1092787200,
+    "game_type" : 10,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 307493,
+    "name" : "Metal Gear",
+    "parent_game" : 374,
+    "platforms" : [
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      },
+      {
+        "abbreviation" : "Mobile",
+        "id" : 55
+      }
+    ],
+    "slug" : "metal-gear--3"
+  }
+]
