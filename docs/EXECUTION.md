@@ -50,6 +50,8 @@ IGDB credentials for fixture recording / live smoke tests: `~/.config/vgn/igdb.e
 | 4 M4 + M5 UI, M6 engine | M6 pipeline: tiler, `ClaudeCLIRecognizer`, Vision OCR + serial codes, overlap merge, IGDB match scoring | Triage + Duel views; playtime/status inspector UI, me-vs-average bar | Tier Board (drag), The Top (dividers, podium, filters, CSV export) | `m4` `m5` |
 | 5 M6 + hardening | Scan review sheet, photo input, scan Settings, single-transaction add | Accuracy harness over the 6 real samples + prompt/tiling tuning | Hardening: concurrency warnings, debug seed for perf, review of the merged whole, CLAUDE.md refresh | `m6` |
 
+**Milestone 5b — Play Next + ROM format** (added 2026-09-18, PLAN §7b) is woven into the waves: ROM format → data lane now (migration + `ProductFormat.rom` + format filter), Quick Add `⌘D` and the ROM badge with the Quick Add / M2 UI work; `VGN/Recommendation/` pure engine + backtest → data lane once `RankingStore` is merged (it only needs plain values); `game_traits` / IGDB rating / `rec_feedback` schema + enrichment fields → with the enrichment queue; Play Next view → wave 4–5 UI. Tag `m5b`. "Ask Claude" second opinion is an open owner decision — not built unless confirmed.
+
 HLTB optional provider: skipped in this run.
 
 The table is a plan, not a contract: the orchestrator re-sequences as lanes free up (a lane never idles waiting for a wave boundary), keeping at most 3 agents running and the owned-paths rule intact.
