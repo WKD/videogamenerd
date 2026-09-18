@@ -5,10 +5,10 @@ Things machines can't judge (or that need the owner's data/eyes). Updated by the
 ## To verify by hand
 
 ### Wave 0 / M0
-- [ ] `docs/shelf-truth-draft.json` — correct the draft list of games per sample photo. It becomes the answer key for the M6 accuracy run. Two music DVDs at the right of IMG_3685 were excluded on purpose.
-  - Owner feedback 2026-09-18: the second "ELDEN RING" spine was an empty sleeve (box now back inside) → one Elden Ring; the white Konami MGS V box is a special vendor SteelBook collector's edition (which MGS V game — Phantom Pain or Ground Zeroes — still to confirm).
-  - **Sample set changed 2026-09-18** (done): `IMG_3681`/`IMG_3682` retired, `IMG_3687` added; fixtures, tiles 1–3 and the truth file were refreshed. Items per photo: 3683: 30 · 3684: 19 · 3685: 26 · 3686: 1 · 3687: 93.
-  - Doubts to check first in `IMG_3687`: (1) which MGS V game is the white SteelBook (spine unreadable); (2) a slim all-black spine between *Death Stranding* and *Terminator 2D*, and a plain dark-grey spine between the MGS box and *Detroit* — games or empty slipcases? (not listed); (3) *Deponia* (PS4), low confidence; (4) *Death Stranding* PS5 = Director's Cut? *FF VII Remake* PS5 = Intergrade?
+- [x] `docs/shelf-truth-draft.json` — **owner-reviewed 2026-09-18.** Items per photo: 3683: 59 · 3684: 20 · 3685: 27 · 3686: 1 · 3687: 93. It is now the answer key for the M6 accuracy run.
+  - Owner corrections applied: MGS V = *The Phantom Pain* (special vendor SteelBook); one Elden Ring (the second spine was an empty sleeve); PS5 *Death Stranding* is *Death Stranding 2*; *Deponia* is *Goodbye Deponia*; *Catherine* (PS3) added after *Darksiders* in 3684/3685; *Alice: Madness Returns* is Xbox 360; the *L.A. Noire* in 3684 is the Xbox 360 copy; IMG_3683 rebuilt (the draft had 30 of ~59 spines and two games that are not in that photo).
+  - Still open (minor): two unlabelled spines in IMG_3687 (slim black next to *Terminator 2D*, dark grey next to *Detroit*) — games or empty slipcases?; PS5 *FF VII Remake* = Intergrade?
+  - **Lesson for the M6 recogniser/harness** (from the draft's IMG_3683 failure): a vision model reading several overlapping shelf photos in one context (a) silently skips most of a dense row when working from a downsized image and (b) pattern-completes from neighbouring photos (it listed *Darksiders* / *Alice* in a frame where they don't appear). The app's design already isolates each tile in its own `claude -p` call with full-resolution crops; the accuracy harness must measure **recall per row** and **false positives per photo** separately, not just overall precision.
 - [ ] `VGN/Resources/platforms.json` — skim the 61 platforms: slugs are forever (DB primary keys), sidebar `group` assignments, anything you own that is missing.
 
 ## Known issues / watch list
