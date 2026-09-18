@@ -19,6 +19,10 @@ actor CoverStore {
     private let coversDirectory: URL
     private let thumbsDirectory: URL
     private let clock: ServiceClock
+    /// Wall-clock seconds source for the on-disk negative sentinels. Must be
+    /// wall-clock (persisted to a file mtime and compared across process launches),
+    /// unlike ``clock`` which is monotonic and only valid within one run.
+    private let sentinelClock: @Sendable () -> TimeInterval
     private let downloadLimiter: AsyncSemaphore
     private let negativeTTL: TimeInterval
 
@@ -36,6 +40,7 @@ actor CoverStore {
         coversDirectory: URL,
         thumbsDirectory: URL,
         clock: ServiceClock = SystemClock(),
+        sentinelClock: @escaping @Sendable () -> TimeInterval = { Date().timeIntervalSince1970 },
         maxConcurrentDownloads: Int = 6,
         negativeTTL: TimeInterval = 7 * 24 * 60 * 60,
         memoryCostLimit: Int = 96 * 1024 * 1024
@@ -45,6 +50,7 @@ actor CoverStore {
         self.coversDirectory = coversDirectory
         self.thumbsDirectory = thumbsDirectory
         self.clock = clock
+        self.sentinelClock = sentinelClock
         self.downloadLimiter = AsyncSemaphore(permits: maxConcurrentDownloads)
         self.negativeTTL = negativeTTL
         self.memoryCache.totalCostLimit = memoryCostLimit
@@ -113,7 +119,12 @@ actor CoverStore {
         let result = await chain.run(query)
         let ordered = orderedCandidates(result)
         guard !ordered.isEmpty else {
-            writeNegativeSentinel(gameID: gameID)
+            // Providers ran and found nothing → a real miss worth caching. But if a
+            // provider could not reach its source (transient), do NOT poison the
+            // cache for 7 days over a momentary outage (PLAN §5.2 / §9).
+            if !result.hadTransientFailure {
+                writeNegativeSentinel(gameID: gameID)
+            }
             return nil
         }
 
@@ -210,21 +221,33 @@ actor CoverStore {
         let url = sentinelURL(gameID: gameID)
         guard let stamp = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         else { return false }
-        return clock.now - stamp.timeIntervalSince1970 < negativeTTL
+        // Wall-clock comparison: the sentinel's age must survive process restarts
+        // (a monotonic clock resets at reboot and would make stale sentinels look
+        // forever fresh, permanently suppressing the cover fetch).
+        return sentinelClock() - stamp.timeIntervalSince1970 < negativeTTL
     }
 
     private func writeNegativeSentinel(gameID: Int64) {
         let url = sentinelURL(gameID: gameID)
         try? Data().write(to: url, options: .atomic)
-        // Stamp with the injected clock so tests can age it deterministically.
+        // Stamp with the wall clock so age is meaningful across launches (tests
+        // inject a controllable wall clock to age it deterministically).
         try? FileManager.default.setAttributes(
-            [.modificationDate: Date(timeIntervalSince1970: clock.now)],
+            [.modificationDate: Date(timeIntervalSince1970: sentinelClock())],
             ofItemAtPath: url.path
         )
     }
 
     private func clearNegativeSentinel(gameID: Int64) {
         try? FileManager.default.removeItem(at: sentinelURL(gameID: gameID))
+    }
+
+    /// Public "forget the miss": drop the negative sentinel for a game so the next
+    /// enrichment pass re-runs the provider chain immediately (PLAN §5.2 — the
+    /// inspector's "Remove custom cover" must be able to re-fetch at once, without
+    /// waiting out the 7-day TTL). Safe to call when no sentinel exists.
+    func clearNegativeCache(gameID: Int64) {
+        clearNegativeSentinel(gameID: gameID)
     }
 
     // MARK: - Helpers

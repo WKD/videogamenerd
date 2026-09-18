@@ -6,4 +6,37 @@ import Foundation
 protocol CoverProvider: Sendable {
     var id: String { get }
     func candidates(for query: CoverQuery) async -> [CoverCandidate]
+
+    /// Richer variant the chain uses to tell a genuine miss (the source was
+    /// reached and had nothing) from a transient failure (the source could not be
+    /// reached). Defaults to wrapping ``candidates(for:)`` as `.found`; a provider
+    /// whose empty result may be a transient outage (e.g. a network listing fetch)
+    /// overrides this so the negative cache is not poisoned by a blip.
+    func probe(for query: CoverQuery) async -> CoverProbe
+}
+
+extension CoverProvider {
+    func probe(for query: CoverQuery) async -> CoverProbe {
+        .found(await candidates(for: query))
+    }
+}
+
+/// Outcome of probing one cover provider (see ``CoverProvider/probe(for:)``).
+enum CoverProbe: Sendable {
+    /// The source was reached; these are its candidates (possibly empty = a
+    /// genuine miss, which is safe to negatively cache).
+    case found([CoverCandidate])
+    /// The source could not be reached; the empty result is not a real miss and
+    /// must not poison the negative cache.
+    case transientFailure
+
+    var candidates: [CoverCandidate] {
+        if case let .found(c) = self { return c }
+        return []
+    }
+
+    var isTransientFailure: Bool {
+        if case .transientFailure = self { return true }
+        return false
+    }
 }

@@ -19,6 +19,26 @@ struct StubCoverProvider: CoverProvider {
     }
 }
 
+/// A `CoverProvider` whose `probe` result is controllable, so tests can drive the
+/// "transient failure must not poison the negative cache" path.
+struct ProbeCoverProvider: CoverProvider {
+    let id: String
+    let probeResult: @Sendable (CoverQuery) -> CoverProbe
+
+    init(id: String = "probe", _ probeResult: @escaping @Sendable (CoverQuery) -> CoverProbe) {
+        self.id = id
+        self.probeResult = probeResult
+    }
+
+    func candidates(for query: CoverQuery) async -> [CoverCandidate] {
+        probeResult(query).candidates
+    }
+
+    func probe(for query: CoverQuery) async -> CoverProbe {
+        probeResult(query)
+    }
+}
+
 enum TestImage {
     /// A solid-colour PNG of the given pixel size, as bytes.
     static func png(width: Int = 400, height: Int = 533) -> Data {

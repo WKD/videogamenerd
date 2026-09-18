@@ -20,10 +20,13 @@ struct CoverProviderChain: Sendable {
     }
 
     /// Result of running the chain: candidates in provider order (each provider's own
-    /// best first), and the first confident one if any.
+    /// best first), and the first confident one if any. `hadTransientFailure` is set
+    /// when a provider could not reach its source — so an empty candidate list must
+    /// not be treated (and negatively cached) as a genuine miss.
     struct Result: Sendable, Equatable {
         var allCandidates: [CoverCandidate]
         var bestConfident: CoverCandidate?
+        var hadTransientFailure: Bool = false
     }
 
     /// Run every provider and collect candidates. Providers are queried in order; the
@@ -32,14 +35,17 @@ struct CoverProviderChain: Sendable {
     func run(_ query: CoverQuery) async -> Result {
         var all: [CoverCandidate] = []
         var best: CoverCandidate?
+        var transient = false
         for provider in providers {
-            let candidates = await provider.candidates(for: query)
+            let probe = await provider.probe(for: query)
+            if probe.isTransientFailure { transient = true; continue }
+            let candidates = probe.candidates
             all.append(contentsOf: candidates)
             if best == nil, let confident = candidates.first(where: { $0.isConfident }) {
                 best = confident
                 break   // good hit — stop hitting further providers
             }
         }
-        return Result(allCandidates: all, bestConfident: best)
+        return Result(allCandidates: all, bestConfident: best, hadTransientFailure: transient)
     }
 }

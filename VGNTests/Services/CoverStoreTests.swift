@@ -13,13 +13,47 @@ private struct CoverStoreFixture {
     init(
         candidates: @escaping @Sendable (CoverQuery) -> [CoverCandidate],
         transport: StubHTTPTransport,
-        clock: ManualClock = ManualClock(now: 0)
+        clock: ManualClock = ManualClock(now: 0),
+        sentinelClock: ManualClock? = nil
+    ) {
+        let calls = AtomicCounter()
+        self.init(
+            providersFrom: { calls2 in [
+                StubCoverProvider(id: "stub") { query in _ = calls2.increment(); return candidates(query) },
+            ] },
+            calls: calls,
+            transport: transport, clock: clock, sentinelClock: sentinelClock)
+    }
+
+    /// Build with a controllable ``CoverProbe`` result (for the transient-failure
+    /// negative-cache path).
+    init(
+        probe: @escaping @Sendable (CoverQuery) -> CoverProbe,
+        transport: StubHTTPTransport,
+        clock: ManualClock = ManualClock(now: 0),
+        sentinelClock: ManualClock? = nil
+    ) {
+        let calls = AtomicCounter()
+        self.init(
+            providersFrom: { calls2 in [
+                ProbeCoverProvider(id: "probe") { query in _ = calls2.increment(); return probe(query) },
+            ] },
+            calls: calls,
+            transport: transport, clock: clock, sentinelClock: sentinelClock)
+    }
+
+    private init(
+        providersFrom: (AtomicCounter) -> [any CoverProvider],
+        calls: AtomicCounter,
+        transport: StubHTTPTransport,
+        clock: ManualClock,
+        sentinelClock: ManualClock?
     ) {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("vgn-covers-\(UUID().uuidString)")
-        let calls = AtomicCounter()
-        let chain = CoverProviderChain(providers: [
-            StubCoverProvider(id: "stub") { query in _ = calls.increment(); return candidates(query) },
-        ])
+        let chain = CoverProviderChain(providers: providersFrom(calls))
+        // Sentinels use a wall clock; default it to follow the (monotonic) test
+        // clock so existing tests age it via `clock.advance`, or take a separate one.
+        let wall = sentinelClock ?? clock
         self.root = root
         self.providerCalls = calls
         self.transport = transport
@@ -29,7 +63,8 @@ private struct CoverStoreFixture {
             transport: transport,
             coversDirectory: root.appendingPathComponent("covers"),
             thumbsDirectory: root.appendingPathComponent("thumbs"),
-            clock: clock
+            clock: clock,
+            sentinelClock: { wall.now }
         )
     }
 
@@ -235,6 +270,74 @@ struct CoverStoreNegativeCacheTests {
         transport.setThrow(nil)
         let recovered = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "Game"), gameID: 12)
         #expect(recovered != nil)
+    }
+
+    @Test("The negative sentinel expires on WALL time, not the monotonic service clock")
+    func sentinelUsesWallClockNotMonotonic() async throws {
+        // A monotonic clock (used for downloads/rate limiting) and a *separate* wall
+        // clock for the sentinel: advancing only the monotonic clock must never age
+        // the sentinel, or a reboot (monotonic reset) would suppress covers forever.
+        let mono = ManualClock(now: 1_000_000)
+        let wall = ManualClock(now: 1_000_000)
+        let fixture = CoverStoreFixture(
+            candidates: { _ in [] }, transport: pngStub(), clock: mono, sentinelClock: wall)
+        defer { fixture.cleanup() }
+
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "Ghost"), gameID: 9)
+        #expect(fixture.providerCalls.count == 1)
+
+        // 100 days pass on the MONOTONIC clock only — the sentinel is wall-based, so
+        // it must still be fresh (chain not re-run).
+        mono.advance(by: 100 * 24 * 60 * 60)
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "Ghost"), gameID: 9)
+        #expect(fixture.providerCalls.count == 1)
+
+        // Only advancing WALL time past the TTL expires it.
+        wall.advance(by: 8 * 24 * 60 * 60)
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "Ghost"), gameID: 9)
+        #expect(fixture.providerCalls.count == 2)
+    }
+
+    @Test("A transient provider failure (empty result, source unreachable) does NOT poison")
+    func transientEmptyResultDoesNotPoison() async throws {
+        let fixture = CoverStoreFixture(
+            probe: { _ in .transientFailure }, transport: pngStub())
+        defer { fixture.cleanup() }
+
+        // First run can't reach the source → no candidates, but no sentinel either.
+        let first = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "Retro"), gameID: 7)
+        #expect(first == nil)
+        #expect(fixture.providerCalls.count == 1)
+
+        // A second run must retry (not be short-circuited by a poisoned sentinel).
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "Retro"), gameID: 7)
+        #expect(fixture.providerCalls.count == 2)
+    }
+
+    @Test("A genuine miss (source reached, nothing found) still writes a sentinel")
+    func genuineMissStillPoisons() async throws {
+        let fixture = CoverStoreFixture(
+            probe: { _ in .found([]) }, transport: pngStub())
+        defer { fixture.cleanup() }
+
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "Nope"), gameID: 8)
+        #expect(fixture.providerCalls.count == 1)
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "Nope"), gameID: 8)
+        #expect(fixture.providerCalls.count == 1)   // short-circuited by the fresh sentinel
+    }
+
+    @Test("clearNegativeCache lets a game re-fetch immediately (Remove custom cover)")
+    func clearNegativeCacheReFetches() async throws {
+        let fixture = CoverStoreFixture(probe: { _ in .found([]) }, transport: pngStub())
+        defer { fixture.cleanup() }
+
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "X"), gameID: 3)
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "X"), gameID: 3)
+        #expect(fixture.providerCalls.count == 1)   // sentinel suppresses the second
+
+        await fixture.store.clearNegativeCache(gameID: 3)
+        _ = try await fixture.store.fetchAndStoreCover(for: CoverQuery(title: "X"), gameID: 3)
+        #expect(fixture.providerCalls.count == 2)   // re-runs immediately
     }
 
     @Test("removeCover deletes the original and its thumbnails")
