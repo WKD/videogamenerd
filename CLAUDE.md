@@ -21,15 +21,37 @@ Run the built app:
 open .build/dd/Build/Products/Debug/VGN.app
 ```
 
-Run a single test (Swift Testing) by name:
+Run a single test (Swift Testing) by name, or a whole suite:
 
 ```sh
 xcodebuild -project VGN.xcodeproj -scheme VGN -destination 'platform=macOS' \
   -derivedDataPath .build/dd test -only-testing:VGNTests/SmokeTests/sqliteHasFTS5
+xcodebuild ... test -only-testing:VGNTests/ScalePerfTests    # perf numbers (DEBUG, printed)
+```
+
+Release-ish build (optimised, what you'd actually run day to day):
+
+```sh
+xcodebuild -project VGN.xcodeproj -scheme VGN -destination 'platform=macOS' \
+  -configuration Release -derivedDataPath .build/dd build
 ```
 
 `.build/` is git-ignored. `VGN` is the only shared scheme; it builds + tests from a
 fresh clone.
+
+### Launch arguments (`LaunchMode`)
+
+Never launch a dev build against the owner's real library. Use:
+
+- `-VGNSampleData YES` → throwaway **in-memory** DB seeded with the sample library
+  (demos, UI checks); no real file, no network.
+- `-VGNSeedGames <n>` (DEBUG) → throwaway in-memory DB with `n` synthetic games for
+  perf work (`PerfSeeder`).
+- default (no args) → the live on-disk database at `~/Library/Application Support/VGN/`.
+
+```sh
+open .build/dd/Build/Products/Debug/VGN.app --args -VGNSampleData YES
+```
 
 ## Toolchain
 
@@ -64,6 +86,40 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   (`ps5`, `snes`, `pc`, `mac`). Fine-rank key aliased once as `RankKey` in
   `VGN/Model/RankKey.swift`.
 
+## Architecture map (per folder)
+
+- `VGN/Model/` — plain `Sendable` value types the UI consumes (`GameSummary`,
+  `LibraryFilter`, `SidebarSelection`, `Tier`, `PlayNextTypes`, `GameTrait`…).
+- `VGN/Ranking/` — **pure** tier/duel engine (Foundation only): sparse `RankKeySpace`,
+  `PlacementSession` (binary insertion), `RankMoves`, `RefineMode`, `Consistency`
+  (invariants + contradiction cycles), `DerivedScore` (1–10 bands), `GlobalRank`,
+  `TierDividerMove`.
+- `VGN/Matching/` — **pure** title work: `TitleNormalizer` (the fold/canonical/
+  articleless/core ladder), `FuzzyMatch`, `Dedupe`, `LibretroIndex`/`LibretroFilename`.
+- `VGN/Recommendation/` — **pure** Play Next engine (Foundation only): `TimeFit`,
+  `TasteScoring`, `DirectLinks`, `CrowdPrior`, `RecommendationEngine`, `TasteBacktest`.
+- `VGN/Database/` — GRDB. `AppDatabase` (pool/queue factories + migrator),
+  `Migrations` (**one closure per version, lane A only** — v1 is the whole PLAN §4
+  schema; v2 FTS/sort rebuild; v3 `rom` format; v4 Play Next tables). `LibraryStore`
+  (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
+  side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
+  `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`
+  (backup + `restore`).
+- `VGN/Services/` — everything with I/O, behind protocols where PLAN names one:
+  `IGDB/` (token actor, rate limiter, Apicalypse), `Covers/` (`CoverStore` actor +
+  `CoverProvider` chain), `Enrichment/` (`EnrichmentCoordinator` actor + job queue),
+  `TimeToBeat/`, `Keychain/`, `Networking/` (transport, `RateLimiter`, `Retry`,
+  monotonic `ServiceClock`, `AsyncSemaphore`), `ClaudeCLI/` (`ClaudeProcessRunner`),
+  `Recognition/` (photo scan), `SecondOpinion/` ("Ask Claude").
+- `VGN/UI/`, `VGN/VGNApp.swift`, `VGN/AppEnvironment.swift` — SwiftUI + the composition
+  root. `@MainActor @Observable` stores adapt DB observations to Model value types.
+
+**Data-safety invariants** (PLAN §4, enforced by DB CHECKs *and* `LibraryStore`):
+played-or-owned (removing the last leaves a game orphaned → `.wouldOrphan`, never a
+silent delete); only played games carry a tier/rank; rank order is consistent with
+tiers. Enrichment honours the `games.user_edited` marker and only fills empty fields
+(unless an explicit refresh). Every write method is one transaction.
+
 ## On-disk layout
 
 ```
@@ -97,6 +153,46 @@ table: `docs/EXECUTION.md`. The essentials:
 App support dir at runtime: `~/Library/Application Support/VGN/`
 (`vgn.sqlite`, `covers/`, `thumbs/`, `backups/`). Tests use in-memory / temp-dir
 DBs, never the real one.
+
+## Testing conventions
+
+- Swift Testing (`import Testing`, `@testable import VGN`), target `VGNTests`, hosted
+  by the app. **No network** — stub with `URLProtocol` + recorded fixtures; strip
+  credentials from anything recorded. **No real Keychain** (one guarded round-trip
+  test exists — keep it guarded), **no real Application Support dir** (use
+  `AppDatabase.inMemory()` / `.temporary()`).
+- **`@MainActor` tests that touch GRDB must sit in a `@Suite(.serialized)`** — parallel
+  ones deadlock under Swift Testing. Give every async test a hard timeout. `UndoManager.undo()`
+  hangs headless (assert `canUndo` + apply the inverse directly).
+- **No wall-clock assertions.** Perf tests (`ScalePerfTests`, `GridQueryPerfTests`,
+  the `PerformanceTests`/`RecommendationStore` perf cases) assert correctness and
+  **print** timings — never `#expect(ms < …)`, which flakes under parallel load.
+  Deterministic time via the injected `ServiceClock` (`ManualClock` in tests) and, for
+  the cover negative-cache TTL, `CoverStore`'s injected wall-clock closure.
+- **Suites as they exist now:** `VGNTests/UI/**` (UI-model + fake-backend tests, several
+  `@Suite(.serialized)`) is owned by the UI lanes; `VGNTests/Snapshots/**` (off-screen
+  PNG renders) and a `VGNUITests` XCUITest target are added by the hardening UI lanes —
+  the UI suite is not part of the default `xcodebuild test` gate (it takes over the
+  keyboard/mouse and needs a one-time permission grant). Everything else is the normal gate.
+
+## Scripts & recording fixtures
+
+`scripts/` (run with `swift scripts/<name>.swift`; live recorders need
+`~/.config/vgn/igdb.env` = `IGDB_CLIENT_ID`/`IGDB_CLIENT_SECRET`, never committed —
+strip `Authorization`/`Client-ID` and tokens from anything recorded):
+
+- `record-igdb-fixtures.swift` — refresh the IGDB search/game/bundle/time-to-beat JSON in
+  `VGNTests/Fixtures/`.
+- `record-libretro-fixture.swift` / `record-vision-fixture.swift` — libretro tree + Vision OCR fixtures.
+- `crop-tiles.swift` — regenerate shelf tiles from the (git-ignored) originals in `../samples/` (see `docs/fixtures.md`).
+- `smoke-live.swift` — one live IGDB round-trip to sanity-check credentials.
+- `scan-accuracy.sh` — arms the gated photo-scan accuracy harness (`docs/recognition-accuracy.md`); inert otherwise.
+- `validate-platforms.sh` — lint `VGN/Resources/platforms.json`.
+- `snapshots.sh` / `uitests.sh` — the hardening UI lanes' snapshot render + XCUITest runners.
+
+Fixture rules: bundle resources are flattened, so **fixture file names must be unique**
+per bundle (prefix by topic, e.g. `igdb-search-bloodborne.json`). Swift file basenames
+and top-level type names must be unique across the whole target.
 
 ## Signing
 

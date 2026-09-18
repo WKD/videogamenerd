@@ -76,6 +76,97 @@ import GRDB
         #expect(remaining.1 == 0)
     }
 
+    // MARK: - Full v1-with-data → v4 (every intermediate migration on real data)
+
+    /// Build a database at **v1**, fill it with a representative graph (games with
+    /// tiers/ranks/alt-titles, per-platform rows, a compilation product with two
+    /// members, and a comparison), then apply v2→v4 and prove nothing is lost. This
+    /// exercises the two dangerous intermediate migrations on live data: v2's FTS
+    /// rebuild + `sort_title` recompute, and v3's full `products` table rebuild
+    /// (which must not let `product_games`' ON DELETE CASCADE fire when the old
+    /// table is dropped).
+    @Test func v1WithDataMigratesToV4LosingNothing() async throws {
+        var config = Configuration()
+        config.foreignKeysEnabled = true
+        let queue = try DatabaseQueue(configuration: config)
+
+        var v1 = DatabaseMigrator()
+        Migrations.registerV1(in: &v1)
+        try v1.migrate(queue)
+
+        try await queue.write { db in
+            try db.execute(sql: """
+                INSERT INTO platforms (id, name, short, manufacturer, group_name, kind, sort)
+                VALUES ('ps3', 'PlayStation 3', 'PS3', 'Sony', 'Sony', 'console', 1)
+                """)
+            // A game whose title carries diacritics + an alternative title (FTS).
+            try db.execute(sql: """
+                INSERT INTO games (id, title, alt_titles, played, tier_id, rank_key)
+                VALUES (1, 'Pokémon Diamond', 'Pocket Monsters', 1, 1, 100)
+                """)
+            try db.execute(sql: "INSERT INTO games (id, title, played, tier_id) VALUES (2, 'Ōkami', 1, 2)")
+            try db.execute(sql: "INSERT INTO games (id, title, played) VALUES (3, 'Filler', 1)")
+            try db.execute(sql: """
+                INSERT INTO game_platforms (game_id, platform_id, played) VALUES (1,'ps3',1),(2,'ps3',1)
+                """)
+            // A compilation product with two members — the graph v3's rebuild must keep.
+            try db.execute(sql: """
+                INSERT INTO products (id, platform_id, kind, format, source)
+                VALUES (7, 'ps3', 'compilation', 'physical', 'manual')
+                """)
+            try db.execute(sql: """
+                INSERT INTO product_games (product_id, game_id, position) VALUES (7,2,0),(7,3,1)
+                """)
+            try db.execute(sql: """
+                INSERT INTO comparisons (winner_id, loser_id, context) VALUES (1, 2, 'placement')
+                """)
+        }
+
+        // Apply the remaining migrations on the populated database.
+        var full = v1
+        Migrations.registerV2(in: &full)
+        Migrations.registerV3(in: &full)
+        Migrations.registerV4(in: &full)
+        try full.migrate(queue)
+
+        try await queue.read { db in
+            // Nothing dropped.
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games") == 3)
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM comparisons") == 1)
+            // v3's products rebuild kept the product AND its memberships (the
+            // product_games CASCADE must NOT have fired when the table was dropped).
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM products WHERE id = 7") == 1)
+            #expect(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM product_games WHERE product_id = 7") == 2)
+            // Rank + tier preserved.
+            #expect(try Int64.fetchOne(db, sql: "SELECT rank_key FROM games WHERE id = 1") == 100)
+            #expect(try Int64.fetchOne(db, sql: "SELECT tier_id FROM games WHERE id = 1") == 1)
+            // v2 recomputed sort_title into the new shape.
+            let sort1 = try String.fetchOne(db, sql: "SELECT sort_title FROM games WHERE id = 1")
+            #expect(sort1 == SortTitle.make(from: "Pokémon Diamond"))
+            #expect(sort1?.isEmpty == false)
+            // v2's diacritics-insensitive FTS rebuild: "pokemon" finds "Pokémon".
+            let hit = try Int64.fetchOne(db, sql:
+                "SELECT rowid FROM games_fts WHERE games_fts MATCH 'pokemon'")
+            #expect(hit == 1)
+            // The alternative title is still searchable too.
+            let altHit = try Int64.fetchOne(db, sql:
+                "SELECT rowid FROM games_fts WHERE games_fts MATCH 'pocket'")
+            #expect(altHit == 1)
+        }
+
+        // v3 widened products.format to allow 'rom' — a value v1's CHECK rejected.
+        try await queue.write { db in
+            try db.execute(sql: """
+                INSERT INTO products (id, platform_id, kind, format, source)
+                VALUES (8, 'ps3', 'single', 'rom', 'manual')
+                """)
+        }
+        let romCount = try await queue.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM products WHERE format = 'rom'")
+        }
+        #expect(romCount == 1)
+    }
+
     // MARK: - Trait writes (replace-all; non-persisted kinds skipped)
 
     @Test func setTraitsReplacesAllAndSkipsSyntheticKinds() async throws {

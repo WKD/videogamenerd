@@ -41,6 +41,12 @@ enum FuzzyMatch {
         let c3b = TitleNormalizer.normalize(b, level: .core)
         if !c3a.isEmpty && c3a == c3b { return 0.90 }
 
+        // A title that normalises to nothing (pure punctuation / a lone region
+        // tag like "(USA)") carries no signal: never let two such inputs — or a
+        // real title vs. an empty one — score as a fuzzy match, which would merge
+        // unrelated games in dedupe (`levenshteinRatio("","") == 1.0`).
+        if c2a.isEmpty || c2b.isEmpty { return 0.0 }
+
         // Fuzzy on the articleless form: token-sort (order-insensitive but
         // length-sensitive) and raw edit distance. Jaro-Winkler is deliberately
         // NOT used here — its shared-prefix boost wrongly rewards numbered
@@ -121,9 +127,11 @@ enum FuzzyMatch {
         return prev[y.count]
     }
 
-    /// 1 − distance / maxLen, in [0, 1]. Empty vs empty is 1.
+    /// 1 − distance / maxLen, in [0, 1]. Empty vs empty is 1. `maxLen` is measured
+    /// in unicode scalars, the same unit ``levenshtein(_:_:)`` counts in, so the
+    /// ratio can never fall below 0 for strings with multi-scalar characters.
     static func levenshteinRatio(_ a: String, _ b: String) -> Double {
-        let maxLen = Swift.max(a.count, b.count)
+        let maxLen = Swift.max(a.unicodeScalars.count, b.unicodeScalars.count)
         if maxLen == 0 { return 1.0 }
         return 1.0 - Double(levenshtein(a, b)) / Double(maxLen)
     }
@@ -136,7 +144,9 @@ enum FuzzyMatch {
         if s1.isEmpty && s2.isEmpty { return 1.0 }
         if s1.isEmpty || s2.isEmpty { return 0.0 }
 
-        let matchDistance = Swift.max(s1.count, s2.count) / 2 - 1
+        // Clamp at 0: for length-1 strings `max/2 - 1` underflows to -1, which
+        // empties the match window and wrongly scores identical single characters 0.
+        let matchDistance = Swift.max(0, Swift.max(s1.count, s2.count) / 2 - 1)
         var s1Matches = [Bool](repeating: false, count: s1.count)
         var s2Matches = [Bool](repeating: false, count: s2.count)
         var matches = 0

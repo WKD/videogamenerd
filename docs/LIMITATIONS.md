@@ -6,6 +6,69 @@ Legend: **[decide]** needs an owner decision · **[follow-up]** small, scheduled
 
 ---
 
+## Hardening pass — wave 6, lane C (whole-app engineering review, 2026-09-19)
+
+Closed / added this pass (details in the relevant sections below):
+
+- **Cover negative cache, two real bugs fixed** (data-quality). (1) The 7-day
+  "no cover" sentinel stamped/compared its file mtime with the *monotonic*
+  `ServiceClock` (uptime), so any sentinel written before a reboot read as forever
+  "fresh" → a once-missing cover was **never re-fetched**. Now wall-clock. (2) A
+  transient provider failure (e.g. the libretro listing unreachable during a blip)
+  produced an empty candidate list that was negatively cached for 7 days like a
+  genuine miss. Added a `CoverProbe.transientFailure` signal through the provider
+  chain; the sentinel is only written on a confirmed empty-but-reachable result.
+- **Manual-cover sentinel [follow-up] — CLOSED.** `CoverStore.clearNegativeCache(gameID:)`
+  is now public. **UI hook the orchestrator must add:** in `AppEnvironment.onRemoveCover`,
+  after `store.clearUserCover(gameID:)`, call `await coverStore.clearNegativeCache(gameID:)`
+  then re-trigger enrichment (`await enrichment.refresh(gameID:)` or `notifyLibraryChanged()`).
+- **Title normaliser budget-label over-strip [watch] — CLOSED.** `.articleless` no
+  longer strips the ambiguous retail budget-line labels (Platinum / Essentials /
+  Greatest Hits / Player's Choice); they strip only at `.core`. "Pokémon Platinum"
+  survives fuzzy matching. Genuine edition tags (…Edition / …Cut / Deluxe) still strip.
+- **FuzzyMatch empty-title false-confident — fixed.** Two inputs that normalise to
+  "" (pure punctuation, a lone "(USA)") scored 1.0 and merged as duplicates in
+  Dedupe. Now returns 0 when either normal form is empty. (Also fixed two latent
+  numeric bugs: jaroWinkler length-1 underflow, levenshteinRatio scalar/grapheme unit.)
+- **Library export (JSON/CSV) [later] — BUILT (non-UI).** `LibraryExporter.exportJSON()`
+  (complete, re-importable graph) and `.exportCSV()` (flat sheet with derived score +
+  rank). **UI hook the orchestrator must add:** a File ▸ Export Library… menu item that
+  calls the two methods and writes to a user-chosen file (`NSSavePanel`).
+- **Backup restore — BUILT + tested.** `AppDatabase.restore(from:to:)` /
+  `restoreLive(from:)` (validate → stage → atomic swap, clears stale WAL). **UI hook:**
+  a Settings/File "Restore from backup…" that, on next launch, calls `restoreLive(from:)`
+  **before** `AppDatabase.live()` (precondition: no open pool on the target).
+- **Flaky perf tests [follow-up] — CLOSED.** RecommendationStore + grid/sidebar perf
+  tests assert correctness only and print timings; new `ScalePerfTests` at 2 k / 10 k.
+- **Migration coverage — added** a full v1-with-data → v4 test (exercises v2 FTS rebuild
+  and v3 products-table rebuild on live compilation/rank/comparison data).
+
+New **[watch]** items discovered (not fixed — see notes below): cover-fetch
+cancellation is not truly propagated (unstructured `Task`); thumbnail decode runs on
+the `CoverStore` actor; `CatalogTitleIndex` search is O(n) per keystroke; the grid CTE
+scans all games per emission; `DerivedScore` fallback bands (non-6-tier) share
+endpoints; `CrowdPrior` has a latent (non-live) 0/0.
+
+Perf numbers (DEBUG, in-memory, best-of-3), 2 k / 10 k games:
+
+| metric | @2 000 | @10 000 |
+|---|---|---|
+| grid query (`.tierRank`) | 44 ms | 203 ms |
+| sidebar counts | 2.6 ms | 13 ms |
+| FTS search | 5.0 ms | 22 ms |
+| tier board | 17 ms | 77 ms |
+| The Top | 47 ms | 216 ms |
+| recommend (month) | 66 ms | 309 ms |
+| enrichment enqueueMissing | 2.2 ms | 10 ms |
+| CatalogTitleIndex build | 121 ms | 554 ms |
+| CatalogTitleIndex search | 37 ms | 147 ms |
+
+DEBUG figures; release is roughly an order of magnitude faster. All are comfortable
+for a realistic personal library (hundreds–low thousands). At 10 k the grid CTE and
+`CatalogTitleIndex` linear search are the two to revisit if the library ever gets huge.
+
+---
+
 ## 0. The big caveat: nobody has driven the GUI
 
 Agents cannot operate the app's windows. Every screen was built from model-level tests (537 of them), SwiftUI previews that compile, and "process stays alive, console clean" launch checks in sample-data mode. **Layout, focus/keyboard routing, drag feel, animation, and anything visual are unverified.** The per-milestone checklists in `docs/ACCEPTANCE.md` are the real acceptance tests. **Mitigation decided 2026-09-18 (hardening pass):** off-screen snapshot rendering of every screen inside the unit tests (agents get eyes on layout) and an on-demand XCUITest smoke suite with window-only screenshots (keyboard/focus flows); drag feel, animation and taste remain human-only. Highest-risk items, in order:
@@ -32,7 +95,7 @@ Agents cannot operate the app's windows. Every screen was built from model-level
 - **"Choose cover…" sheet** — `CoverStore` returns every candidate from every provider, but there is no UI to browse them; today you get the first good hit or drop your own image.
 - **`ClaudeAPIRecognizer`** (API-key variant of photo scan) — protocol seam exists, not built.
 - **Editable tier labels/colours** — tiers are data (seeded S–F) but there is no editing UI.
-- **Library export (JSON/CSV)** from PLAN §9 "Safety" — not built. Only The Top exports CSV. Launch snapshots (last 10) are the only backup.
+- ~~**Library export (JSON/CSV)** from PLAN §9 "Safety" — not built.~~ **Non-UI built (wave 6, lane C):** `LibraryExporter.exportJSON()` / `.exportCSV()`. Only the File ▸ Export Library… menu item + `NSSavePanel` remain (UI lane). Launch snapshots (last 10) can now be restored via `AppDatabase.restoreLive(from:)` (call before `live()`), a Restore-from-backup UI entry still to add.
 - **Signing**: "Sign to Run Locally" (ad-hoc). Consequence: macOS may re-prompt for Keychain access after each rebuild, and the hardened runtime is effectively relaxed. Switch to an Apple Development team id when convenient. [decide]
 
 ## 3. Library, Quick Add, search
@@ -42,7 +105,7 @@ Agents cannot operate the app's windows. Every screen was built from model-level
 - **IGDB `search` quirks**: returns nothing for mid-word prefixes and alt-name-only titles; a name-prefix + alternative-name fallback covers "bloodb" and "chevaliers de baphomet", verified live, but odd titles may still need "Create '…' manually".
 - **Bulk "Mark Owned"** adds a *physical* copy on each game's *primary platform* without asking (the platform/format popover only appears for a single ambiguous game). [decide]
 - **Type-to-select vs tier keys in the grid**: with a selection, S/A/B/C/D/F/O/P/0 act immediately; to type-to-select a title starting with one of those letters you must deselect first (or already be typing within ~1 s). [watch]
-- **Manual cover edge case** *(still open — needs a Services/Covers change lane C can't make)*: setting a custom cover *before* enrichment has fetched the IGDB image id writes a 7-day "no cover" sentinel, so "Remove custom cover" won't re-fetch until it expires. `CoverStore.clearNegativeSentinel(gameID:)` exists but is **private**; `importCover` clears it (as a side effect of writing a file) but there is no public "clear the sentinel" API. **What's missing:** a public `CoverStore.clearNegativeCache(gameID:)` (or a `force:` flag on the cover fetch), called from `AppEnvironment.onRemoveCover` after `store.clearUserCover`. Normal order (enrich → override) is fine. [follow-up — owner: services lane]
+- ~~**Manual cover edge case**~~ **CLOSED (wave 6, lane C):** public `CoverStore.clearNegativeCache(gameID:)` added. **UI hook to add:** in `AppEnvironment.onRemoveCover`, after `store.clearUserCover(gameID:)`, `await coverStore.clearNegativeCache(gameID:)` then re-run enrichment for the game. (The related monotonic-clock sentinel bug and the transient-failure poisoning bug were also fixed — see the hardening summary at the top.)
 - **Enrichment never overwrites non-empty fields** (plus the `user_edited` marker) — so a wrong-but-non-empty IGDB value is only replaced by an explicit "Refresh metadata". Manual entries (no IGDB id) get no metadata/time-to-beat; they get a cover job only on platforms that have a libretro repo.
 - **Grid query** ≈ 33 ms at 2 000 games in DEBUG (was ~45 ms); fine, but it is one full re-query per emission — no paging. [watch]
 - **`ManualAddSheet` view** — **removed** (wave 5, lane C); `ManualAddModel` kept (Quick Add uses it inline). File renamed `ManualAddModel.swift`.
@@ -84,7 +147,9 @@ Agents cannot operate the app's windows. Every screen was built from model-level
 
 ## 7. Title matching & covers
 
-- **Title normaliser over-strips budget labels** at its loosest level ("Pokémon Platinum" → "pokemon"); exact matching protects precision. Gate behind a flag if it ever mis-merges. [watch]
+- ~~**Title normaliser over-strips budget labels**~~ **CLOSED (wave 6, lane C):** the ambiguous retail budget-line labels (Platinum / Essentials / Greatest Hits / Player's Choice) now strip only at `.core`, not the `.articleless` level used for fuzzy matching, so "Pokémon Platinum" → "pokemon platinum". Edition tags (…Edition / …Cut / Deluxe / Complete) still strip at `.articleless`. `stripEditionTags(_:includeBudgetLabels:)` is the seam.
+- **CatalogTitleIndex** offline autocomplete search is O(n) over the whole `catalog_cache` per keystroke (build+search DEBUG: 2 k ≈ 121+37 ms, 10 k ≈ 554+147 ms). Off the main actor and debounced, so fine at realistic sizes; if the catalogue grows to many thousands, index into an FTS table. `catalog_cache` is never pruned. [watch]
+- **Cover fetch cancellation** is not truly propagated: `CoverStore.fetchAndStoreCover`/`thumbnail` run the shared work in an unstructured `Task` that nothing cancels, so scrolling away doesn't stop an in-flight download (it just isn't awaited). De-dup itself is correct. Wasted bandwidth only. **Thumbnail decode + file writes run on the `CoverStore` actor**, serialising the store under heavy scroll; move ImageIO decode off the actor if grid scroll ever stutters. [watch]
 - **Fuzzy thresholds** (0.90 confident / 0.74 plausible) were tuned on a hand-made table, then held up in the live scan — still worth re-checking on libretro cover matching with your real library.
 - Libretro cover matching is fuzzy against No-Intro/Redump names with Europe → USA → World → Japan preference; in the 10-game live smoke test 9 of 10 covers came from IGDB, only 1 from libretro (modern platforms have no libretro art, so this is expected — but retro hit rate is unmeasured). [watch]
 - LibretroIndex (DEBUG): indexing 10 k names ≈ 620 ms, 1 k lookups ≈ 950 ms — off the main thread.

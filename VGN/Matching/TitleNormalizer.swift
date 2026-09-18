@@ -35,23 +35,36 @@ enum TitleNormalizer {
         "the", "a", "an", "le", "la", "les", "l", "un", "une", "des",
     ]
 
-    /// Trailing edition / budget-range tags, longest phrases first so the longest
-    /// trailing match wins.
-    static let editionPhrases: [[String]] = {
-        let raw = [
-            "game of the year edition", "game of the year",
-            "goty edition", "goty",
-            "complete edition", "definitive edition", "deluxe edition",
-            "collectors edition", "collector s edition", "gold edition",
-            "special edition", "anniversary edition", "ultimate edition",
-            "directors cut", "director s cut",
-            "greatest hits", "players choice", "player s choice",
-            "platinum", "essentials", "complete", "definitive", "deluxe",
-            "collectors",
-        ]
-        return raw.map { $0.split(separator: " ").map(String.init) }
+    /// Unambiguous trailing edition tags, longest phrases first so the longest
+    /// trailing match wins. Every entry is either an explicit edition/cut suffix or
+    /// a qualifier that is never itself a game title, so stripping it at
+    /// `.articleless` is safe.
+    static let editionPhrases: [[String]] = tokenizedPhrases([
+        "game of the year edition", "game of the year",
+        "goty edition", "goty",
+        "complete edition", "definitive edition", "deluxe edition",
+        "collectors edition", "collector s edition", "gold edition",
+        "special edition", "anniversary edition", "ultimate edition",
+        "directors cut", "director s cut",
+        "complete", "definitive", "deluxe", "collectors",
+    ])
+
+    /// Ambiguous retail *budget-line* labels. A genuine game title can end in one of
+    /// these (e.g. *Pokémon Platinum*, *Pokémon Essentials*), so — unlike the
+    /// edition tags above — they are stripped **only at `.core`** (the loosest,
+    /// deliberate level), never at the fuzzy-matching default `.articleless`. On a
+    /// real box a budget label almost always appears parenthesised
+    /// (`Gran Turismo 4 (Platinum)`), which ``foldBasics`` already removes at every
+    /// level; the bare trailing form is far more likely to be part of the title.
+    static let budgetLabelPhrases: [[String]] = tokenizedPhrases([
+        "greatest hits", "players choice", "player s choice",
+        "platinum", "essentials",
+    ])
+
+    private static func tokenizedPhrases(_ raw: [String]) -> [[String]] {
+        raw.map { $0.split(separator: " ").map(String.init) }
             .sorted { $0.count > $1.count }
-    }()
+    }
 
     // MARK: - Public
 
@@ -72,7 +85,9 @@ enum TitleNormalizer {
         }
         if level >= .articleless {
             s = stripLeadingArticle(s)
-            s = stripEditionTags(s)
+            // Ambiguous budget-line labels only come off at `.core` (see
+            // ``budgetLabelPhrases``), so genuine titles survive fuzzy matching.
+            s = stripEditionTags(s, includeBudgetLabels: level >= .core)
         }
         return collapse(s)
     }
@@ -154,13 +169,18 @@ enum TitleNormalizer {
         return tokens.joined(separator: " ")
     }
 
-    /// Strip trailing edition/budget tags (never reducing the title to empty).
-    static func stripEditionTags(_ s: String) -> String {
+    /// Strip trailing edition tags (never reducing the title to empty). When
+    /// `includeBudgetLabels` is set, the ambiguous retail budget-line labels
+    /// (``budgetLabelPhrases``) are stripped too — reserved for `.core`.
+    static func stripEditionTags(_ s: String, includeBudgetLabels: Bool = false) -> String {
+        let phrases = includeBudgetLabels
+            ? (editionPhrases + budgetLabelPhrases).sorted { $0.count > $1.count }
+            : editionPhrases
         var tokens = s.split(separator: " ").map(String.init)
         var changed = true
         while changed {
             changed = false
-            for phrase in editionPhrases where tokens.count > phrase.count {
+            for phrase in phrases where tokens.count > phrase.count {
                 if Array(tokens.suffix(phrase.count)) == phrase {
                     tokens.removeLast(phrase.count)
                     changed = true

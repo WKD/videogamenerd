@@ -89,4 +89,22 @@ struct FuzzyMatchTests {
         #expect(FuzzyMatch.levenshteinRatio("", "") == 1.0)
         #expect(FuzzyMatch.levenshteinRatio("abc", "") == 0.0)
     }
+
+    @Test("Titles that normalise to empty are never a fuzzy match (no bogus dedupe)")
+    func emptyNormalizedTitlesDoNotMatch() {
+        // Both inputs collapse to "" after tag/punctuation folding: no signal,
+        // so they must NOT read as a confident duplicate.
+        #expect(FuzzyMatch.score("(USA)", "[Europe]") == 0.0)
+        #expect(FuzzyMatch.classify(FuzzyMatch.score("(USA)", "(Japan)")) == .none)
+        // A real title vs. an empty one is likewise not a match.
+        #expect(FuzzyMatch.classify(FuzzyMatch.score("Bloodborne", "(USA)")) == .none)
+        // A genuine identical pair is still a confident match.
+        #expect(FuzzyMatch.classify(FuzzyMatch.score("Halo", "Halo")) == .confident)
+    }
+
+    @Test("Jaro-Winkler scores identical single characters as 1 (no window underflow)")
+    func jaroWinklerSingleChar() {
+        #expect(FuzzyMatch.jaroWinkler("a", "a") == 1.0)
+        #expect(FuzzyMatch.jaroWinkler("a", "b") == 0.0)
+    }
 }
