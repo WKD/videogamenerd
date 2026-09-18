@@ -78,7 +78,8 @@ final class AppEnvironment {
             let built = buildServices(mode: mode, database: database, secrets: settings.secretStore)
             let coverLoader: any CoverLoading = built?.graph.coverStore ?? NoopCoverLoader()
 
-            let dataSource = GRDBLibraryDataSource(store: store)
+            let rankingStore = RankingStore(database)
+            let dataSource = GRDBLibraryDataSource(store: store, ranking: rankingStore)
             let vm = LibraryViewModel(dataSource: dataSource, coverLoader: coverLoader)
             let actions = LibraryActions(store: store, vm: vm)
             actions.install()
@@ -100,7 +101,7 @@ final class AppEnvironment {
                 services: built?.graph, quickAdd: wiring.quickAdd,
                 quickAddController: wiring.controller, enrichment: wiring.enrichment,
                 ranking: RankingEnvironment(
-                    ranking: RankingStore(database), library: store, coverLoader: coverLoader
+                    ranking: rankingStore, library: store, coverLoader: coverLoader
                 )
             )
         } catch {

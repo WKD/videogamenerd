@@ -13,8 +13,13 @@ import GRDB
 /// level up, in ``LibraryViewModel``'s generation guard.
 struct GRDBLibraryDataSource: LibraryDataSource {
     let store: LibraryStore
+    /// The ranking store, for the inspector's live derived-score line (PLAN §7).
+    let ranking: RankingStore?
 
-    init(store: LibraryStore) { self.store = store }
+    init(store: LibraryStore, ranking: RankingStore? = nil) {
+        self.store = store
+        self.ranking = ranking
+    }
 
     func sidebarCounts() -> AsyncStream<SidebarCounts> {
         Self.bridge(store.sidebarCounts())
@@ -50,6 +55,15 @@ struct GRDBLibraryDataSource: LibraryDataSource {
 
     func compilationMemberIDs(productID: Int64) async -> [Int64] {
         ((try? await store.compilationMembers(productID: productID)) ?? []).map(\.gameID)
+    }
+
+    func scoreLineStream(for gameID: Int64) -> AsyncStream<DerivedScoreLine?> {
+        guard let ranking else { return onceStream(nil) }
+        return Self.bridge(ranking.scoreLineObservation(for: gameID))
+    }
+
+    func libraryStats() async -> LibraryStats {
+        (try? await store.libraryStats()) ?? .empty
     }
 
     /// Republish a GRDB `ValueObservation` async sequence (itself `Sendable`) as

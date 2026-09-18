@@ -134,6 +134,11 @@ final class LibraryViewModel {
     /// the inspector updates itself after any write (PLAN §8).
     private(set) var selectedDetail: GameDetail?
 
+    /// The single selected game's live derived-score line ("9.6 · #4 overall") —
+    /// re-emitted after any duel / drag / divider move (PLAN §7). Nil for an
+    /// unranked or unselected game.
+    private(set) var selectedScoreLine: DerivedScoreLine?
+
     // MARK: Per-cell boxes (PLAN §9)
     private var cellModels: [Int64: GameCellModel] = [:]
 
@@ -143,6 +148,7 @@ final class LibraryViewModel {
     private var tiersTask: Task<Void, Never>?
     private var gamesTask: Task<Void, Never>?
     private var detailTask: Task<Void, Never>?
+    private var scoreLineTask: Task<Void, Never>?
     private var genresTask: Task<Void, Never>?
     private var decadesTask: Task<Void, Never>?
     private var bannerDismissTask: Task<Void, Never>?
@@ -220,6 +226,7 @@ final class LibraryViewModel {
         tiersTask?.cancel(); tiersTask = nil
         gamesTask?.cancel(); gamesTask = nil
         detailTask?.cancel(); detailTask = nil
+        scoreLineTask?.cancel(); scoreLineTask = nil
         genresTask?.cancel(); genresTask = nil
         decadesTask?.cancel(); decadesTask = nil
     }
@@ -269,16 +276,26 @@ final class LibraryViewModel {
         guard single != observedDetailID else { return }
         observedDetailID = single
         detailTask?.cancel()
+        scoreLineTask?.cancel()
         guard let id = single else {
             selectedDetail = nil
+            selectedScoreLine = nil
             detailTask = nil
+            scoreLineTask = nil
             return
         }
         if selectedDetail?.id != id { selectedDetail = nil }
+        selectedScoreLine = nil
         detailTask = Task { [dataSource] in
             for await detail in dataSource.gameDetailStream(id: id) {
                 if Task.isCancelled || self.observedDetailID != id { break }
                 self.selectedDetail = detail
+            }
+        }
+        scoreLineTask = Task { [dataSource] in
+            for await line in dataSource.scoreLineStream(for: id) {
+                if Task.isCancelled || self.observedDetailID != id { break }
+                self.selectedScoreLine = line
             }
         }
     }
@@ -667,6 +684,9 @@ final class LibraryViewModel {
             self.selectionAnchor = ids.first
         }
     }
+
+    /// Load a fresh library-stats snapshot for the sidebar popover (PLAN §6.4).
+    func libraryStats() async -> LibraryStats { await dataSource.libraryStats() }
 
     // MARK: Empty states
     var isEmptyLibrary: Bool { counts.all == 0 }

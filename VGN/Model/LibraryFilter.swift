@@ -49,6 +49,11 @@ struct LibraryFilter: Hashable, Sendable {
     /// a game matches if it has ≥ 1 owned product in one of these formats.
     var formats: Set<ProductFormat>
 
+    /// Playtime-band facet (< 10 h / 10–40 h / > 40 h). Empty = no constraint. The
+    /// value bucketed is the effective playtime (manual over PSN), falling back to
+    /// the IGDB main estimate for a game I have not played (PLAN §6.4).
+    var playtimes: Set<PlaytimeBucket>
+
     /// A single explicit platform facet (slug), independent of the scope.
     /// (Legacy single facet; the multi-select facet below is `platforms`.)
     var platform: String?
@@ -72,6 +77,7 @@ struct LibraryFilter: Hashable, Sendable {
         tierIDs: Set<Int64> = [],
         statuses: Set<PlayStatus> = [],
         formats: Set<ProductFormat> = [],
+        playtimes: Set<PlaytimeBucket> = [],
         platform: String? = nil,
         platforms: Set<String> = [],
         scope: SidebarSelection = .all,
@@ -84,6 +90,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.tierIDs = tierIDs
         self.statuses = statuses
         self.formats = formats
+        self.playtimes = playtimes
         self.platform = platform
         self.platforms = platforms
         self.scope = scope
@@ -96,6 +103,6 @@ struct LibraryFilter: Hashable, Sendable {
     var hasActiveFacets: Bool {
         !searchText.isEmpty || !genres.isEmpty || !decades.isEmpty
             || !tierIDs.isEmpty || !statuses.isEmpty || !formats.isEmpty
-            || platform != nil || !platforms.isEmpty
+            || !playtimes.isEmpty || platform != nil || !platforms.isEmpty
     }
 }

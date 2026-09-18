@@ -182,17 +182,41 @@ private struct SingleGameInspector: View {
             TierPickerRow(tiers: vm.tiers, current: detail.tierLetter) { letter in
                 vm.setTier(letter, for: ids)
             }
-            Text(rankDescription)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            scoreLineView
         }
     }
 
-    private var rankDescription: String {
-        if !detail.played { return "Only played games can be ranked." }
-        if detail.tierID == nil { return "Unranked — press S…F to place it in a tier." }
-        if detail.isUnplaced { return "Placed in tier, not yet ranked (unplaced)." }
-        return "Ranked. (Overall position — “#12 overall” — arrives with ranking.)"
+    /// The derived-score line (PLAN §7): "9.6 · #4 overall · A, #2 of 14" for a
+    /// placed game; "~8.5 · unplaced in A" + "Place now" for an unplaced one;
+    /// a plain hint for unranked / unplayed games (nothing but the tier picker).
+    @ViewBuilder
+    private var scoreLineView: some View {
+        if !detail.played {
+            Text("Only played games can be ranked.")
+                .font(.caption).foregroundStyle(.secondary)
+        } else if detail.tierID == nil {
+            Text("Unranked — press S…F to place it in a tier.")
+                .font(.caption).foregroundStyle(.secondary)
+        } else if let line = vm.selectedScoreLine, line.isPlaced {
+            Text(line.summary())
+                .font(.callout.weight(.medium))
+                .monospacedDigit()
+        } else if let line = vm.selectedScoreLine {
+            HStack(spacing: 8) {
+                Text(line.summary())
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Button("Place now") { vm.select(.duel) }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Run this game's placement duels now.")
+            }
+        } else {
+            // Placed in a tier, score still resolving.
+            Text(detail.isUnplaced ? "Placed in tier, not yet ranked (unplaced)."
+                                   : "Ranked.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     // MARK: Copies
@@ -296,35 +320,73 @@ private struct SingleGameInspector: View {
     // MARK: Playtime
 
     private var playtimeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Playtime").font(.headline)
             PlaytimeEditor(detail: detail) { seconds in
                 Task { await vm.actions?.setMyPlaytime(gameID: detail.id, seconds: seconds) }
             }
+            if let psn = detail.psnPlaytimeS, psn > 0 {
+                psnRow(psn)
+            }
             if hasAverages {
-                MeVsAverageBar(mine: detail.effectivePlaytimeS, average: detail.ttbNormallyS)
                 averagesText
+                MeVsAverageBar(bar: bar)
             } else {
-                Text("Average completion times arrive with metadata (milestone 5).")
+                Text("Average completion times arrive with metadata.")
                     .font(.caption).foregroundStyle(.tertiary)
             }
+            hltbLink
         }
+    }
+
+    private var bar: PlaytimeBar {
+        PlaytimeBar.make(mineSeconds: detail.effectivePlaytimeS,
+                         rushed: detail.ttbHastilyS, main: detail.ttbNormallyS,
+                         completionist: detail.ttbCompletelyS)
     }
 
     private var hasAverages: Bool {
         detail.ttbHastilyS != nil || detail.ttbNormallyS != nil || detail.ttbCompletelyS != nil
     }
 
-    private var averagesText: some View {
-        HStack(spacing: 10) {
-            if let s = detail.ttbNormallyS {
-                Text("Main \(PlaytimeParser.formatApprox(seconds: s))")
+    /// PSN playtime, shown with the "manual wins" note when a manual value overrides
+    /// it (PLAN §6.4 — both are kept, manual is effective).
+    private func psnRow(_ psn: Int) -> some View {
+        HStack {
+            Text("PSN").foregroundStyle(.secondary)
+            Text(PlaytimeParser.format(seconds: psn)).foregroundStyle(.secondary)
+            if detail.myPlaytimeS != nil {
+                Text("(manual wins)").font(.caption2).foregroundStyle(.tertiary)
             }
-            if let s = detail.ttbCompletelyS {
-                Text("100% \(PlaytimeParser.formatApprox(seconds: s))")
+            Spacer()
+        }
+        .font(.callout)
+    }
+
+    private var averagesText: some View {
+        // PLAN §10: "Main ≈ 32 h · Rushed ≈ 27 h · Completionist ≈ 61 h" + source.
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 10) {
+                if let s = detail.ttbNormallyS { Text("Main \(PlaytimeParser.formatApprox(seconds: s))") }
+                if let s = detail.ttbHastilyS { Text("Rushed \(PlaytimeParser.formatApprox(seconds: s))") }
+                if let s = detail.ttbCompletelyS { Text("Completionist \(PlaytimeParser.formatApprox(seconds: s))") }
+            }
+            if let source = detail.ttbSource, !source.isEmpty {
+                Text("Source: \(source)").font(.caption2).foregroundStyle(.tertiary)
             }
         }
         .font(.caption).foregroundStyle(.secondary)
+    }
+
+    /// "Open on HowLongToBeat" — a plain search link, no scraping (PLAN §5.3/§6.4).
+    @ViewBuilder
+    private var hltbLink: some View {
+        if let url = HowLongToBeatLink.searchURL(title: detail.title) {
+            Link(destination: url) {
+                Label("Open on HowLongToBeat", systemImage: "arrow.up.forward.square")
+            }
+            .font(.caption)
+        }
     }
 }
 
@@ -364,10 +426,15 @@ private struct TierPickerRow: View {
     }
 }
 
-/// A status menu (Playing / Finished / 100% / Abandoned, or None).
+/// A status menu (Playing / Finished / 100% / Abandoned, or None) with inspector
+/// keyboard shortcuts (⌃⌘1…4 set a status, ⌃⌘0 clears — PLAN §12 / milestone 5).
 private struct StatusPickerRow: View {
     let current: PlayStatus?
     let onPick: (PlayStatus?) -> Void
+
+    private static let shortcuts: [PlayStatus: KeyEquivalent] = [
+        .playing: "1", .finished: "2", .completed: "3", .abandoned: "4",
+    ]
 
     var body: some View {
         HStack {
@@ -375,9 +442,11 @@ private struct StatusPickerRow: View {
             Spacer()
             Menu(current?.label ?? "None") {
                 Button("None") { onPick(nil) }
+                    .keyboardShortcut("0", modifiers: [.control, .command])
                 Divider()
                 ForEach(PlayStatus.allCases) { status in
                     Button(status.label) { onPick(status) }
+                        .keyboardShortcut(Self.shortcuts[status] ?? "0", modifiers: [.control, .command])
                 }
             }
             .fixedSize()
@@ -439,30 +508,64 @@ private struct PlaytimeEditor: View {
     }
 }
 
-/// A minimal "me vs. average" bar (polished later — PLAN milestone 5).
+/// The "me vs. average" bar (PLAN §6.4): my playtime as a fill, with the IGDB
+/// rushed / main / completionist averages as labelled markers on the same scale.
+/// Geometry is the pure ``PlaytimeBar``; this only draws it.
 private struct MeVsAverageBar: View {
-    let mine: Int?
-    let average: Int?
+    let bar: PlaytimeBar
+
+    private let height: CGFloat = 12
 
     var body: some View {
-        GeometryReader { geo in
-            let maxV = Double(max(mine ?? 0, average ?? 0, 1))
-            VStack(alignment: .leading, spacing: 4) {
-                bar(width: geo.size.width, value: mine, of: maxV, color: .accentColor, label: "You")
-                bar(width: geo.size.width, value: average, of: maxV, color: .secondary, label: "Avg")
+        if bar.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                GeometryReader { geo in
+                    let width = geo.size.width
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.quaternary).frame(height: height)
+                        Capsule().fill(Color.accentColor)
+                            .frame(width: max(bar.mineSeconds == nil ? 0 : 3, width * bar.fillFraction),
+                                   height: height)
+                        // Average markers.
+                        ForEach(bar.markers) { marker in
+                            Rectangle()
+                                .fill(.primary.opacity(0.55))
+                                .frame(width: 2, height: height + 6)
+                                .offset(x: min(width - 2, width * marker.fraction))
+                        }
+                    }
+                }
+                .frame(height: height + 6)
+
+                HStack(spacing: 10) {
+                    if let mine = bar.mineSeconds {
+                        Label("You \(PlaytimeParser.format(seconds: mine))", systemImage: "person.fill")
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    ForEach(bar.markers) { marker in
+                        Text("\(marker.label) \(PlaytimeParser.formatApprox(seconds: marker.seconds))")
+                    }
+                    if bar.exceedsCompletionist {
+                        Text("· beyond 100%").foregroundStyle(.orange)
+                    }
+                }
+                .font(.caption2).foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityText)
         }
-        .frame(height: 30)
     }
 
-    private func bar(width: CGFloat, value: Int?, of maxV: Double, color: Color, label: String) -> some View {
-        let fraction = value.map { Double($0) / maxV } ?? 0
-        return ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 3).fill(.quaternary).frame(height: 10)
-            RoundedRectangle(cornerRadius: 3).fill(color)
-                .frame(width: max(2, width * fraction), height: 10)
+    private var accessibilityText: String {
+        var parts: [String] = []
+        if let mine = bar.mineSeconds { parts.append("Your playtime \(PlaytimeParser.format(seconds: mine))") }
+        for marker in bar.markers {
+            parts.append("\(marker.label) average \(PlaytimeParser.formatApprox(seconds: marker.seconds))")
         }
-        .accessibilityLabel("\(label): \(value.map { PlaytimeParser.format(seconds: $0) } ?? "—")")
+        if bar.exceedsCompletionist { parts.append("beyond the completionist estimate") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -540,5 +643,18 @@ private struct FlowChips: View {
     InspectorView(vm: vm)
         .task { vm.start(); vm.selectedGameIDs = [1, 2, 3] }
         .frame(width: 300, height: 640)
+}
+
+#Preview("Me-vs-average bar") {
+    VStack(alignment: .leading, spacing: 24) {
+        MeVsAverageBar(bar: .make(mineSeconds: 40 * 3600, rushed: 27 * 3600,
+                                  main: 32 * 3600, completionist: 61 * 3600))
+        MeVsAverageBar(bar: .make(mineSeconds: 120 * 3600, rushed: 27 * 3600,
+                                  main: 32 * 3600, completionist: 61 * 3600))
+        MeVsAverageBar(bar: .make(mineSeconds: nil, rushed: 27 * 3600,
+                                  main: 32 * 3600, completionist: 61 * 3600))
+    }
+    .padding(24)
+    .frame(width: 300)
 }
 #endif

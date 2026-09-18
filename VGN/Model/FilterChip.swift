@@ -11,7 +11,7 @@ import Foundation
 /// ``LibraryFilterChips`` to remove one or clear all.
 struct FilterChip: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable, CaseIterable {
-        case search, genre, decade, tier, status, format, platform
+        case search, genre, decade, tier, status, format, playtime, platform
 
         var label: String {
             switch self {
@@ -21,6 +21,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .tier: return "Tier"
             case .status: return "Status"
             case .format: return "Format"
+            case .playtime: return "Playtime"
             case .platform: return "Platform"
             }
         }
@@ -86,6 +87,11 @@ enum LibraryFilterChips {
             .map { ($0.rawValue, $0.label) }
         add(.format, formatPairs)
 
+        let playtimePairs = PlaytimeBucket.allCases
+            .filter { filter.playtimes.contains($0) }
+            .map { ($0.rawValue, $0.label) }
+        add(.playtime, playtimePairs)
+
         add(.platform, filter.platforms.sorted().map { ($0, platformShort($0)) })
 
         return out
@@ -102,6 +108,7 @@ enum LibraryFilterChips {
         case .tier: if let t = Int64(chip.value) { f.tierIDs.remove(t) }
         case .status: if let s = PlayStatus(rawValue: chip.value) { f.statuses.remove(s) }
         case .format: if let fmt = ProductFormat(rawValue: chip.value) { f.formats.remove(fmt) }
+        case .playtime: if let b = PlaytimeBucket(rawValue: chip.value) { f.playtimes.remove(b) }
         case .platform: f.platforms.remove(chip.value)
         }
         return f

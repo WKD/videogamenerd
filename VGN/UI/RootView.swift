@@ -148,6 +148,7 @@ struct RootView: View {
             tierMenu
             statusMenu
             formatMenu
+            playtimeMenu
             platformMenu
             sortMenu
 
@@ -255,6 +256,25 @@ struct RootView: View {
         } label: {
             Label("Format", systemImage: "opticaldisc")
                 .symbolVariant(vm.filter.formats.isEmpty ? .none : .fill)
+        }
+    }
+
+    // Playtime bands (< 10 h / 10–40 h / > 40 h) over effective playtime, falling
+    // back to the IGDB main estimate when unplayed (PLAN §6.4).
+    private var playtimeMenu: some View {
+        Menu {
+            ForEach(PlaytimeBucket.allCases) { bucket in
+                Toggle(bucket.label, isOn: membership(\.playtimes, bucket))
+            }
+            Divider()
+            Text("Uses your time, or the IGDB main estimate when unplayed.")
+            if !vm.filter.playtimes.isEmpty {
+                Divider()
+                Button("Clear") { clear(\.playtimes) }
+            }
+        } label: {
+            Label("Playtime", systemImage: "clock")
+                .symbolVariant(vm.filter.playtimes.isEmpty ? .none : .fill)
         }
     }
 

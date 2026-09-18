@@ -178,10 +178,37 @@ enum LibraryQuery {
                 """)
             args.append(contentsOf: gs.map { $0 as DatabaseValueConvertible })
         }
+        appendPlaytimeBuckets(filter.playtimes, into: &wheres, args: &args)
         if let match = ftsMatch(filter.searchText) {
             wheres.append("g.id IN (SELECT rowid FROM games_fts WHERE games_fts MATCH ?)")
             args.append(match)
         }
+    }
+
+    /// The seconds a game is bucketed on for the playtime filter: effective
+    /// playtime (manual over PSN), falling back to the IGDB main estimate for a
+    /// game with none (PLAN §6.4). Reused so the SQL and any test agree.
+    static let playtimeBucketExpr = "COALESCE(g.my_playtime_s, g.psn_playtime_s, g.ttb_normally_s)"
+
+    /// OR-within-kind band filter: a game matches if its bucket value falls in any
+    /// selected band. Games with no value at all are excluded.
+    private static func appendPlaytimeBuckets(
+        _ buckets: Set<PlaytimeBucket>,
+        into wheres: inout [String], args: inout [DatabaseValueConvertible]
+    ) {
+        guard !buckets.isEmpty else { return }
+        var ors: [String] = []
+        for bucket in buckets.sorted(by: { $0.rawValue < $1.rawValue }) {
+            var conds: [String] = ["\(playtimeBucketExpr) IS NOT NULL"]
+            if let lower = bucket.lowerSeconds {
+                conds.append("\(playtimeBucketExpr) >= ?"); args.append(lower)
+            }
+            if let upper = bucket.upperSeconds {
+                conds.append("\(playtimeBucketExpr) < ?"); args.append(upper)
+            }
+            ors.append("(" + conds.joined(separator: " AND ") + ")")
+        }
+        wheres.append("(" + ors.joined(separator: " OR ") + ")")
     }
 
     // MARK: - Ordering
