@@ -307,7 +307,12 @@ struct LibraryStore: Sendable {
             try Self.setIf(patch.ttbNormallyS, column: "ttb_normally_s", gameID: gameID, db: db)
             try Self.setIf(patch.ttbCompletelyS, column: "ttb_completely_s", gameID: gameID, db: db)
             try Self.setIf(patch.ttbSource, column: "ttb_source", gameID: gameID, db: db)
+            try Self.setIf(patch.igdbRating, column: "igdb_rating", gameID: gameID, db: db)
+            try Self.setIf(patch.igdbRatingCount, column: "igdb_rating_count", gameID: gameID, db: db)
 
+            if let traits = patch.traits {
+                try Self.setTraits(traits, gameID: gameID, db: db)
+            }
             if let altTitles = patch.altTitles {
                 // Rewrites alt_titles → triggers keep games_fts in sync.
                 try db.execute(sql: "UPDATE games SET alt_titles = ? WHERE id = ?",
@@ -318,6 +323,38 @@ struct LibraryStore: Sendable {
             }
             try db.execute(sql: "UPDATE games SET updated_at = ? WHERE id = ?",
                            arguments: [Date(), gameID])
+        }
+    }
+
+    // MARK: - Manual edits (mark user_edited so enrichment never clobbers them)
+
+    /// Import / choose a cover by hand (PLAN §5.2 "Choose cover…" / drag-drop).
+    /// Sets `cover_file` and marks the `cover` field user-edited so background
+    /// enrichment never replaces it.
+    func setUserCover(gameID: Int64, coverFile: String) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: "UPDATE games SET cover_file = ?, updated_at = ? WHERE id = ?",
+                           arguments: [coverFile, Date(), gameID])
+            try Self.markUserEdited(.cover, gameID: gameID, db: db)
+        }
+    }
+
+    /// Edit a game's title by hand — updates `title` + `sort_title` and marks the
+    /// `title` field user-edited (protected from enrichment).
+    func editTitle(gameID: Int64, _ title: String) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: "UPDATE games SET title = ?, sort_title = ?, updated_at = ? WHERE id = ?",
+                           arguments: [title, SortTitle.make(from: title), Date(), gameID])
+            try Self.markUserEdited(.title, gameID: gameID, db: db)
+        }
+    }
+
+    /// Edit a game's release year by hand — marks the `year` field user-edited.
+    func editYear(gameID: Int64, _ year: Int?) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: "UPDATE games SET year = ?, updated_at = ? WHERE id = ?",
+                           arguments: [year, Date(), gameID])
+            try Self.markUserEdited(.year, gameID: gameID, db: db)
         }
     }
 

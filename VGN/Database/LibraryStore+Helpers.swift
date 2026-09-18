@@ -156,6 +156,42 @@ extension LibraryStore {
         }
     }
 
+    /// Replace a game's IGDB-derived trait set (PLAN §7b). Traits come from a
+    /// single IGDB response, so this is a clean replace-all: every existing row is
+    /// dropped and the new set inserted (deduped by the composite PK). `similar`
+    /// values are IGDB game ids as strings.
+    static func setTraits(_ traits: [GameTrait], gameID: Int64, db: Database) throws {
+        try db.execute(sql: "DELETE FROM game_traits WHERE game_id = ?", arguments: [gameID])
+        for trait in traits {
+            // genre / platform / decade are engine-only features, never persisted.
+            guard trait.kind.isPersisted else { continue }
+            let value = trait.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { continue }
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO game_traits (game_id, kind, value) VALUES (?, ?, ?)
+                """, arguments: [gameID, trait.kind.rawValue, value])
+        }
+    }
+
+    // MARK: - User-edited marker (PLAN §7b)
+
+    /// Read the `games.user_edited` marker set for a game.
+    static func userEditedFields(_ gameID: Int64, _ db: Database) throws -> UserEditedFields {
+        let raw = try String.fetchOne(db, sql: "SELECT user_edited FROM games WHERE id = ?",
+                                      arguments: [gameID]) ?? ""
+        return UserEditedFields(raw: raw)
+    }
+
+    /// Mark `field` as user-edited on a game (idempotent), so background enrichment
+    /// never overwrites it again — not even on an explicit refresh.
+    static func markUserEdited(_ field: UserEditedFields.Field, gameID: Int64, db: Database) throws {
+        let current = try userEditedFields(gameID, db)
+        let updated = current.inserting(field)
+        guard updated != current else { return }
+        try db.execute(sql: "UPDATE games SET user_edited = ?, updated_at = ? WHERE id = ?",
+                       arguments: [updated.raw, Date(), gameID])
+    }
+
     /// Delete a game and any product left with no members afterwards.
     static func deleteGameRow(_ gameID: Int64, _ db: Database) throws {
         // Product ids this game belongs to, so we can garbage-collect empties.
