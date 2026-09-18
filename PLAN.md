@@ -238,27 +238,42 @@ Mechanics: `rank_key` is a sparse sortable key per tier (insert = midpoint of ne
 
 **Question it answers:** *"I have roughly this much time over the next few weeks — what should I play from my library?"* The answer is always a game I own and have **not completed before**.
 
+### Local or external? — local computation, external *facts*
+- **The engine itself is 100 % local**: a pure, deterministic Swift module (`VGN/Recommendation/`, Foundation only, like `Ranking/`). Picking a game makes **no network call**, works offline, takes milliseconds, and the same inputs always give the same pick. No ML service, no account, nothing about my taste leaves the Mac.
+- **What it knows about each game comes from IGDB**, fetched once by the normal background enrichment job and stored in the local DB: genres, themes, franchise / series, developer, game modes, player perspective, `similar_games`, aggregated rating (+ count), and time-to-beat. My taste comes **only from my own tiers and ranks** (§7). So: *external facts about games, local judgement about me*.
+- Consequence: a game with no IGDB match (manual entry, obscure ROM) has no traits — it can still be recommended on time fit alone, and is labelled "no metadata" instead of being silently ranked last.
+
 ### Inputs
-- **Time commitment bracket** (one click): *An evening* (≤ 5 h) · *A week or two* (5–15 h) · *A month* (15–40 h) · *A long haul* (40 h+). Optional precise mode: hours per week × weeks → a budget in hours. A *completionist* toggle switches the estimate from IGDB `normally` to `completely`.
-- **Taste profile**, learned only from my own rankings (§7): each ranked game gets a score from its global position (percentile; tier midpoint for tiered-but-unplaced games). Nothing is asked twice — the ranking work *is* the training data.
+- **Time commitment bracket** (one click): *An evening* (≤ 5 h) · *A week or two* (5–15 h) · *A month* (15–40 h) · *A long haul* (40 h+). Optional precise mode: hours per week × weeks → a budget. A *completionist* toggle switches the estimate from IGDB `normally` to `completely`.
+- **Taste profile** from my rankings: every ranked game gets a score in 0…1 from its global position (percentile), tiered-but-unplaced games get their tier's midpoint. The ranking work *is* the training data — nothing is asked twice.
 
 ### Candidates
-Owned games (any format, incl. ROMs and compilation members) whose status is not *finished* / *completed*: the backlog (owned, unplayed), games marked *playing* (their remaining time = estimate − my playtime) and *abandoned* ones (opt-in, flagged as "give it another go?"). Played games with no status are excluded by default (toggle), since "played" may well mean "finished". Games with no time estimate are not dropped: they are shown in a separate "unknown length" lane rather than guessed at.
+Owned games (any format, incl. ROMs and compilation members) whose status is not *finished* / *completed*: the backlog (owned, unplayed), games marked *playing* (remaining time = estimate − my playtime) and, opt-in, *abandoned* ones ("give it another go?"). Played games with no status are excluded by default (toggle) — "played" may well mean "finished". Games with no time estimate go to a separate **"unknown length"** lane rather than being guessed at.
 
-### Scoring (pure, deterministic, explainable — `VGN/Recommendation/`, no network, no ML service)
-1. **Feature affinities**: for every trait value (genre, franchise/series, developer, theme, game mode, perspective, platform, decade) compute a *shrunk mean* of the scores of my ranked games having it (Bayesian average toward my overall mean, so one S-tier game doesn't crown a whole genre). Traits I ranked consistently low count against a candidate just as strongly.
-2. **Direct links**: sequel / same franchise as something in my S–A tiers; IGDB `similar_games` of my top-ranked games; same developer as a top game.
-3. **Prior** for cold candidates: IGDB aggregated rating (weighted by rating count), low weight — my taste wins over the crowd's.
-4. **Fit to the bracket**: full marks when the estimate (or remaining time) sits inside the bracket, smooth falloff outside it, hard exclusion beyond ~1.5× the upper bound.
-5. **Rotation**: a small freshness/diversity term so the same game isn't pitched forever; "Not this one" snoozes a game for a few weeks, "Never" removes it from recommendations (`rec_feedback`).
+### How a pick is made
+1. **Filter by time.** Keep candidates whose estimate (or remaining time) fits the bracket; smooth falloff just outside it, hard exclusion beyond ~1.5× the upper bound. At my library size this step does most of the work: ~50 candidates become a **shortlist of roughly 5–15**.
+2. **Score the shortlist for taste** — three signals, blended:
+   - **Trait affinities.** For each trait value (genre, theme, franchise, developer, mode, perspective, platform, decade): the average score of my ranked games that have it, *shrunk toward my overall average* (Bayesian average, prior strength ≈ 4 games). With 3 souls-likes all in S, "souls-like" becomes a strong positive; with a single S-tier racing game, "racing" barely moves. Consistently low-ranked traits count *against* a candidate just as strongly. A candidate's affinity = confidence-weighted mean over its traits.
+   - **Direct links** (the strongest, most legible signal at small scale): same franchise / sequel of a game in my S–A tiers; listed in IGDB `similar_games` of my top-ranked games (this borrows IGDB's crowd-level "people who like X like Y" knowledge, which my 50 rankings could never produce on their own); same developer as a top game. Links to games I ranked D–F subtract.
+   - **Crowd prior.** IGDB aggregated rating, weighted by its rating count. Its weight *shrinks as my ranked count grows* — dominant with 10 ranked games, a tie-breaker with 200.
+3. **Rotate.** Small freshness term so the same game isn't pitched forever; **Not this one** snoozes a game for a few weeks, **Never** removes it (`rec_feedback`). `R` re-rolls among near-ties.
+4. **Explain.** Every suggestion lists the 2–3 contributions that actually drove its score, in plain words — *"Because you ranked Bloodborne S and Dark Souls A · FromSoftware · ≈ 32 h fits 'A month'"* — plus a **match strength** (strong / fair / weak) derived from how much evidence backed the score. A weak match says so.
 
-Predicted score = weighted blend of 1–3, multiplied by 4, adjusted by 5. Weights are constants in one place, unit-tested on synthetic libraries (a souls-like lover gets the unplayed souls-like; a 60 h JRPG never shows up in "An evening").
+All weights are constants in one file, unit-tested on synthetic libraries (a souls-like lover gets the unplayed souls-like; a 60 h JRPG never appears in "An evening"; one outlier never crowns a genre).
 
-### Output & UI
-- Sidebar entry **Play Next** (LIBRARY section). Bracket picker on top; one **hero pick** (big cover, estimate vs. bracket bar, platform/format I own it on) + 4 alternatives + the "unknown length" lane.
-- Every suggestion carries its reasons in plain words: *"Because you ranked Bloodborne S and Dark Souls A · FromSoftware · ≈ 32 h fits 'A month'"*.
-- Actions: **Start playing** (sets status = playing), **Not this one** (snooze), **Never**, open in inspector. `R` re-rolls among near-ties.
-- Needs from enrichment: the `game_traits` rows + IGDB rating (one more field group on the metadata job) and time-to-beat (§6.4). Recommendation quality grows with the number of ranked games; under ~15 ranked games the view says so and leans on the IGDB prior.
+### Will it work with ~100 games, half of them played? — yes, as a shortlist-ranker, not as a "learning" system
+Honest sizing: ~50 ranked games is far too little for anything statistical in the Netflix sense, and the design doesn't pretend otherwise.
+- **What works well at this size:** the time filter (needs no taste data at all), direct links (one S-tier game is enough to surface its sequel or its `similar_games`), and genre/theme affinities for my *dominant* tastes — IGDB has ~20 genres and ~20 themes, so 50 ranked games give 5–15 samples for the ones I play most, which is enough with shrinkage.
+- **What stays weak:** niche traits with 1–2 samples (shrunk to near-neutral on purpose), developers/franchises I've never touched (only the crowd prior speaks), and fine ordering *within* the shortlist — positions 2 to 5 are close calls, which is why the UI shows a hero pick **plus alternatives with reasons** instead of a single verdict.
+- **Why that is still useful:** the real decision is "which of these ~10 games that fit my month?", and the combination *fits the time + resembles what I ranked high + well regarded* orders ten games sensibly even with thin data. The reasons let me overrule it in two seconds.
+- **It checks itself:** a built-in **leave-one-out backtest** — hide each ranked game, predict its score from the others, compare with where I actually ranked it (Spearman correlation). Cheap at this size, run on demand; the Play Next view shows the result as "taste model: good / rough / not enough data", and it is how the weights get tuned on my real library rather than on guesses. Under ~15 ranked games the view says so and leans on the crowd prior.
+- **It improves for free:** every newly ranked game sharpens the affinities; the crowd prior fades out automatically.
+
+### Optional second opinion: "Ask Claude" *(open decision — off by default)*
+The one thing sparse statistics cannot supply is *knowledge of what the games are actually like* (pacing, tone, difficulty, "plays like…"). The local `claude` CLI already used for photo scan (§6.2, subscription-billed, no API key) can re-rank the **shortlist only**: it receives my tier list, the 5–15 candidates with their estimates, and the bracket, and returns an ordered pick with reasons. ~10–20 s, non-deterministic, needs Claude Code installed — so it is a button next to the deterministic pick, never the default path, and the engine never depends on it.
+
+### UI
+Sidebar entry **Play Next** (LIBRARY section). Bracket picker on top; one **hero pick** (big cover, estimate-vs-bracket bar, the platform/format I own it on, reasons, match strength) + up to 4 alternatives + the "unknown length" lane. Actions: **Start playing** (status = playing), **Not this one**, **Never**, open in inspector.
 
 ---
 
