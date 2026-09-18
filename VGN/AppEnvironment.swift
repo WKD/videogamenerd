@@ -143,7 +143,7 @@ final class AppEnvironment {
     /// Cover/thumb/libretro directories. Live ⇒ the real app-support dirs (nil lets
     /// `ServicesFactory` resolve them). Sample ⇒ a fresh temp tree — never the real
     /// library.
-    private static func serviceDirectories(
+    static func serviceDirectories(
         for mode: LaunchMode
     ) -> (covers: URL?, thumbs: URL?, libretro: URL?) {
         switch mode {

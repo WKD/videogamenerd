@@ -180,7 +180,9 @@ final class QuickAddModel {
     // Internal search state
     private var catalogResults: [IGDBSearchResult] = []
     private var localMatches: [QuickAddLibraryMatch] = []
-    private var searchGeneration = 0
+    /// Bumped on every query change; `applyRemote`/`applyLocal` drop a response
+    /// carrying an older generation (stale-drop). `internal` read for tests.
+    private(set) var searchGeneration = 0
     private var localTask: Task<Void, Never>?
     private var remoteTask: Task<Void, Never>?
     private var commitTask: Task<Void, Never>?
