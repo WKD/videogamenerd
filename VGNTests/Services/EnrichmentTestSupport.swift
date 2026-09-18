@@ -98,6 +98,20 @@ final class ScriptedIGDBTransport: HTTPTransport, @unchecked Sendable {
             "platforms": [["id": 48, "abbreviation": "PS4"]],
             "genres": [["id": 1, "name": "Action"], ["id": 2, "name": "Adventure"]],
             "alternative_names": [["id": 1, "name": "altbaphomet\(id)"]],
+            // §7b traits + crowd rating.
+            "franchises": [["id": 7, "name": "Synthetica"]],
+            "collections": [["id": 8, "name": "Synth Saga"]],
+            "involved_companies": [
+                ["company": ["id": 9, "name": "Stub Studio"], "developer": true],
+                ["company": ["id": 10, "name": "Stub Publisher"], "developer": false],
+            ],
+            "themes": [["id": 1, "name": "Action"], ["id": 17, "name": "Fantasy"]],
+            "game_modes": [["id": 1, "name": "Single player"]],
+            "player_perspectives": [["id": 2, "name": "Third person"]],
+            "keywords": [["id": 1, "name": "kw-a"], ["id": 2, "name": "kw-b"]],
+            "similar_games": [5000, 5001],
+            "total_rating": 88.5,
+            "total_rating_count": 300,
         ]
     }
 

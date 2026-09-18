@@ -152,13 +152,32 @@ actor EnrichmentCoordinator {
     }
 
     static func enqueueMissingJobs(now: Date, db: Database) throws {
-        // metadata: igdb games whose summary was never filled.
+        // metadata: igdb games whose summary was never filled, OR (PLAN §7b — for
+        // libraries enriched before traits/rating existed) whose §7b enrichment is
+        // missing: igdb_id present ∧ no game_traits rows ∧ no igdb_rating.
         try db.execute(sql: """
             INSERT INTO enrichment_jobs (kind, game_id, state, attempts, next_attempt_at, created_at)
             SELECT 'metadata', g.id, 'pending', 0, :now, :now FROM games g
-            WHERE g.igdb_id IS NOT NULL AND g.summary IS NULL
+            WHERE g.igdb_id IS NOT NULL
+              AND (g.summary IS NULL
+                   OR (g.igdb_rating IS NULL
+                       AND NOT EXISTS (SELECT 1 FROM game_traits t WHERE t.game_id = g.id)))
               AND NOT EXISTS (SELECT 1 FROM enrichment_jobs j WHERE j.game_id = g.id AND j.kind = 'metadata')
             ON CONFLICT(kind, game_id) DO NOTHING
+            """, arguments: ["now": now])
+
+        // Re-arm already-`done` metadata jobs whose §7b traits/rating are still
+        // missing (the metadata job predates v4). Only metadata is re-run — covers
+        // and time-to-beat are left alone.
+        try db.execute(sql: """
+            UPDATE enrichment_jobs
+               SET state = 'pending', attempts = 0, next_attempt_at = :now, last_error = NULL
+             WHERE kind = 'metadata' AND state = 'done'
+               AND game_id IN (
+                   SELECT g.id FROM games g
+                   WHERE g.igdb_id IS NOT NULL AND g.igdb_rating IS NULL
+                     AND NOT EXISTS (SELECT 1 FROM game_traits t WHERE t.game_id = g.id)
+               )
             """, arguments: ["now": now])
 
         // timeToBeat: igdb games whose ttb_source was never set ('igdb' marks tried).
@@ -329,12 +348,15 @@ actor EnrichmentCoordinator {
                     do {
                         let stored = try await store.fetchAndStoreCover(for: query, gameID: row.id)
                         if let stored {
-                            // Don't clobber a user-set cover (only fill when empty, unless force).
+                            // Don't clobber a user-set cover: a user-edited cover is
+                            // protected even on a refresh; otherwise fill when empty
+                            // (or re-fetch on force).
+                            let coverEdited = row.userEdited.contains(.cover)
                             let current: String? = (try? await library.dbReader.read { db in
                                 try String.fetchOne(db, sql: "SELECT cover_file FROM games WHERE id = ?",
                                                     arguments: [row.id])
                             }) ?? nil
-                            if force || current == nil {
+                            if !coverEdited && (force || current == nil) {
                                 try await library.updateMetadata(gameID: row.id, MetadataPatch(coverFile: stored.coverFile))
                             }
                         }
@@ -357,18 +379,34 @@ actor EnrichmentCoordinator {
         await credentials() != nil
     }
 
-    /// Never rename/overwrite a value a user (or a prior fill) already set: keep a
-    /// full patch field only when the current DB value is empty, unless `force`.
+    /// Never overwrite a value a user edited or a prior fill already set (PLAN §7b
+    /// `user_edited`):
+    ///  - a **user-edited** field is dropped from the patch always — even on a
+    ///    `refresh` (`force`);
+    ///  - a **non-user-edited** field is filled when empty, and on `refresh` is
+    ///    re-fetched even when non-empty (the pre-§7b behaviour);
+    ///  - `title` is never renamed by *background* enrichment, only on a refresh
+    ///    (and never if the title was user-edited).
     private func guardMetadata(_ full: MetadataPatch, row: EnrichmentGameRow, force: Bool) -> MetadataPatch {
-        if force { return full }
         var patch = full
-        patch.title = nil                                   // never rename via background enrichment
-        if row.summary?.isEmpty == false { patch.summary = nil }
-        if row.year != nil { patch.year = nil }
-        if row.releaseDate != nil { patch.releaseDate = nil }
-        if !row.altTitles.isEmpty { patch.altTitles = nil }
-        if row.hasGenres { patch.genres = nil }
-        if row.igdbCoverImageID != nil { patch.igdbCoverImageID = nil }
+        let edited = row.userEdited
+
+        // `keep` = should the patch's value for this field survive?
+        func keep(currentEmpty: Bool, _ field: UserEditedFields.Field) -> Bool {
+            if edited.contains(field) { return false }   // user-edited: protected always
+            if force { return true }                     // refresh: re-fetch untouched fields
+            return currentEmpty                          // background: fill only when empty
+        }
+
+        if edited.contains(.title) || !force { patch.title = nil }
+        if !keep(currentEmpty: row.summary?.isEmpty != false, .summary) { patch.summary = nil }
+        if !keep(currentEmpty: row.year == nil, .year) { patch.year = nil }
+        if !keep(currentEmpty: row.releaseDate == nil, .year) { patch.releaseDate = nil }
+        if !keep(currentEmpty: row.altTitles.isEmpty, .altTitles) { patch.altTitles = nil }
+        if !keep(currentEmpty: !row.hasGenres, .genres) { patch.genres = nil }
+        if !keep(currentEmpty: row.igdbCoverImageID == nil, .cover) { patch.igdbCoverImageID = nil }
+        if !keep(currentEmpty: !row.hasTraits, .traits) { patch.traits = nil }
+        if !keep(currentEmpty: !row.hasRating, .rating) { patch.igdbRating = nil; patch.igdbRatingCount = nil }
         return patch
     }
 
@@ -387,6 +425,11 @@ actor EnrichmentCoordinator {
                 let hasGenres = (try Int.fetchOne(
                     db, sql: "SELECT EXISTS(SELECT 1 FROM game_genres WHERE game_id = ?)",
                     arguments: [id]) ?? 0) == 1
+                let hasTraits = (try Int.fetchOne(
+                    db, sql: "SELECT EXISTS(SELECT 1 FROM game_traits WHERE game_id = ?)",
+                    arguments: [id]) ?? 0) == 1
+                let hasRating = row["igdb_rating"] as Double? != nil
+                let userEdited = UserEditedFields(raw: (row["user_edited"] as String?) ?? "")
                 let slugs = try String.fetchAll(db, sql: """
                     SELECT DISTINCT pid FROM (
                       SELECT platform_id AS pid FROM game_platforms WHERE game_id = ?1
@@ -407,7 +450,10 @@ actor EnrichmentCoordinator {
                     coverFile: row["cover_file"],
                     igdbCoverImageID: row["igdb_cover_image_id"],
                     ttbSource: row["ttb_source"],
-                    platformSlugs: slugs
+                    platformSlugs: slugs,
+                    hasTraits: hasTraits,
+                    hasRating: hasRating,
+                    userEdited: userEdited
                 )
             }
             return out
@@ -430,4 +476,7 @@ struct EnrichmentGameRow: Sendable, Equatable {
     var igdbCoverImageID: String?
     var ttbSource: String?
     var platformSlugs: [String]
+    var hasTraits: Bool = false
+    var hasRating: Bool = false
+    var userEdited: UserEditedFields = UserEditedFields()
 }
