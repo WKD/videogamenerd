@@ -169,7 +169,10 @@ final class TierBoardModel {
     private func apply(_ plan: TierDropPlan) async {
         rows = plan.board
         inFlight += 1
-        for move in plan.moves {
+        // A multi-move drop is one transaction / one undo step (PLAN §7 follow-up).
+        if plan.moves.count > 1 {
+            try? await backend.moveBatch(plan.moves)
+        } else if let move = plan.moves.first {
             try? await backend.move(gameID: move.gameID, toTier: move.toTier, atIndex: move.atIndex)
         }
         inFlight -= 1

@@ -80,7 +80,43 @@ struct GameDetail: Sendable, Hashable, Identifiable {
         var position: Int
         /// Total number of games in the product (> 1 ⇒ compilation).
         var memberCount: Int
+        /// Titles of **all** member games of the product, in position order (only
+        /// populated for a compilation copy, `memberCount > 1`). Lets the inspector
+        /// and the copy-removal sheet name every game the all-or-nothing ownership
+        /// affects, without a second async read (PLAN §8).
+        var memberTitles: [String] = []
+        /// Member game ids, parallel to ``memberTitles`` (so a member row can select
+        /// the game it names). Empty for a single-game copy.
+        var memberIDs: [Int64] = []
 
         var isCompilation: Bool { kind == .compilation || memberCount > 1 }
+
+        init(
+            productID: Int64,
+            platformID: String,
+            format: ProductFormat,
+            kind: ProductKind,
+            title: String? = nil,
+            edition: String? = nil,
+            region: String? = nil,
+            source: ProductSource,
+            position: Int,
+            memberCount: Int,
+            memberTitles: [String] = [],
+            memberIDs: [Int64] = []
+        ) {
+            self.productID = productID
+            self.platformID = platformID
+            self.format = format
+            self.kind = kind
+            self.title = title
+            self.edition = edition
+            self.region = region
+            self.source = source
+            self.position = position
+            self.memberCount = memberCount
+            self.memberTitles = memberTitles
+            self.memberIDs = memberIDs
+        }
     }
 }

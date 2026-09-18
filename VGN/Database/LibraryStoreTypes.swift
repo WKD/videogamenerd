@@ -203,6 +203,18 @@ enum WriteOutcome: Sendable, Equatable {
     case wouldOrphan([Int64])
 }
 
+/// The result of ``LibraryStore/markNotPlayed(_:)`` — the Triage-safe un-play
+/// (PLAN §7 follow-up). Never deletes; the caller decides what to do next.
+enum UnplayOutcome: Sendable, Equatable {
+    /// The game was owned → it is now not-played (Backlog).
+    case becameBacklog
+    /// The game was not owned → **no change**; the caller should offer an explicit
+    /// "Remove from library" rather than surprise-deleting it.
+    case notOwned
+    /// No such game.
+    case notFound
+}
+
 /// The result of ``LibraryStore/setTier(gameIDs:tierID:)``. Only played games
 /// can carry a tier (invariant 2), so unplayed games are skipped and reported.
 struct SetTierOutcome: Sendable, Equatable {

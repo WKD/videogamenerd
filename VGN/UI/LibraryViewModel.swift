@@ -108,6 +108,11 @@ final class LibraryViewModel {
     /// Inspector "Remove custom cover" — clears the hand-picked cover + marker and
     /// re-enqueues the cover job (wired by the app).
     var onRemoveCover: (Int64) -> Void = { _ in }
+    /// Open the compilation editor for a product (wired by the app to build a
+    /// ``CompilationEditorModel`` and present it — PLAN §5.1).
+    var onEditCompilation: (Int64) -> Void = { _ in }
+    /// "Group as compilation…" from the current selection (wired by the app).
+    var onGroupAsCompilation: (Set<Int64>) -> Void = { _ in }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
@@ -118,11 +123,21 @@ final class LibraryViewModel {
     var ownershipRequest: OwnershipRequest?
     /// A pending "remove which copies?" flow.
     var copyRemovalRequest: CopyRemovalRequest?
+    /// The compilation editor sheet's model, or nil (PLAN §5.1). Set by the app's
+    /// `onEditCompilation` hook, which builds the model with the store + catalog.
+    var compilationEditor: CompilationEditorModel?
+    /// A pending "Group as compilation…" flow (title + platform + format).
+    var groupCompilationRequest: GroupCompilationRequest?
 
     // MARK: Inspector live detail (single selection)
     /// Full detail for the single selected game, kept live by an observation so
     /// the inspector updates itself after any write (PLAN §8).
     private(set) var selectedDetail: GameDetail?
+
+    /// The single selected game's live derived-score line ("9.6 · #4 overall") —
+    /// re-emitted after any duel / drag / divider move (PLAN §7). Nil for an
+    /// unranked or unselected game.
+    private(set) var selectedScoreLine: DerivedScoreLine?
 
     // MARK: Per-cell boxes (PLAN §9)
     private var cellModels: [Int64: GameCellModel] = [:]
@@ -133,6 +148,7 @@ final class LibraryViewModel {
     private var tiersTask: Task<Void, Never>?
     private var gamesTask: Task<Void, Never>?
     private var detailTask: Task<Void, Never>?
+    private var scoreLineTask: Task<Void, Never>?
     private var genresTask: Task<Void, Never>?
     private var decadesTask: Task<Void, Never>?
     private var bannerDismissTask: Task<Void, Never>?
@@ -210,6 +226,7 @@ final class LibraryViewModel {
         tiersTask?.cancel(); tiersTask = nil
         gamesTask?.cancel(); gamesTask = nil
         detailTask?.cancel(); detailTask = nil
+        scoreLineTask?.cancel(); scoreLineTask = nil
         genresTask?.cancel(); genresTask = nil
         decadesTask?.cancel(); decadesTask = nil
     }
@@ -259,16 +276,26 @@ final class LibraryViewModel {
         guard single != observedDetailID else { return }
         observedDetailID = single
         detailTask?.cancel()
+        scoreLineTask?.cancel()
         guard let id = single else {
             selectedDetail = nil
+            selectedScoreLine = nil
             detailTask = nil
+            scoreLineTask = nil
             return
         }
         if selectedDetail?.id != id { selectedDetail = nil }
+        selectedScoreLine = nil
         detailTask = Task { [dataSource] in
             for await detail in dataSource.gameDetailStream(id: id) {
                 if Task.isCancelled || self.observedDetailID != id { break }
                 self.selectedDetail = detail
+            }
+        }
+        scoreLineTask = Task { [dataSource] in
+            for await line in dataSource.scoreLineStream(for: id) {
+                if Task.isCancelled || self.observedDetailID != id { break }
+                self.selectedScoreLine = line
             }
         }
     }
@@ -641,6 +668,25 @@ final class LibraryViewModel {
 
     /// Remove a hand-picked cover and let enrichment fetch one again (PLAN §5.2).
     func removeCustomCover(gameID: Int64) { onRemoveCover(gameID) }
+
+    /// Open the compilation editor for a product (PLAN §5.1).
+    func editCompilation(productID: Int64) { onEditCompilation(productID) }
+
+    /// "Group as compilation…" from the current multi-selection (PLAN §8).
+    func groupSelectionAsCompilation() { onGroupAsCompilation(selectedGameIDs) }
+
+    /// "Show compilation" — select every member of a compilation product (PLAN §8).
+    func showCompilation(productID: Int64) {
+        Task { [dataSource] in
+            let ids = await dataSource.compilationMemberIDs(productID: productID)
+            guard !ids.isEmpty else { return }
+            self.selectedGameIDs = Set(ids)
+            self.selectionAnchor = ids.first
+        }
+    }
+
+    /// Load a fresh library-stats snapshot for the sidebar popover (PLAN §6.4).
+    func libraryStats() async -> LibraryStats { await dataSource.libraryStats() }
 
     // MARK: Empty states
     var isEmptyLibrary: Bool { counts.all == 0 }

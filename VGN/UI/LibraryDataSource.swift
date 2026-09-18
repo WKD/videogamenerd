@@ -34,6 +34,24 @@ protocol LibraryDataSource: Sendable {
     /// Live full detail for one game — the inspector subscribes so it updates
     /// itself after any write to the shown game (PLAN §8/§9).
     func gameDetailStream(id: Int64) -> AsyncStream<GameDetail?>
+
+    /// The member game ids of a compilation product ("Show compilation" selects
+    /// them all — PLAN §8).
+    func compilationMemberIDs(productID: Int64) async -> [Int64]
+
+    /// Live derived-score line for one game (inspector — PLAN §7). Re-yields after
+    /// any duel / drag / divider move so "#4 overall" stays current.
+    func scoreLineStream(for gameID: Int64) -> AsyncStream<DerivedScoreLine?>
+
+    /// A cheap aggregate snapshot for the sidebar stats popover (PLAN §6.4).
+    func libraryStats() async -> LibraryStats
+}
+
+extension LibraryDataSource {
+    // Defaults so preview sources need not implement these explicitly.
+    func compilationMemberIDs(productID: Int64) async -> [Int64] { [] }
+    func scoreLineStream(for gameID: Int64) -> AsyncStream<DerivedScoreLine?> { onceStream(nil) }
+    func libraryStats() async -> LibraryStats { .empty }
 }
 
 /// Emits a single value then finishes — the shape a static/preview source uses.

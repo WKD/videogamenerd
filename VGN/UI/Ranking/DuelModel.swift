@@ -149,10 +149,17 @@ final class DuelModel {
         disputeTitles = titles
     }
 
-    /// "Settle" a dispute the closest the store allows: re-place its games so their
-    /// duels re-run (PLAN §7 — no force-a-pair API exists; see handoff wish).
+    /// "Settle" a dispute: enqueue the cycle's consecutive pairs so the Duel re-asks
+    /// exactly those comparisons (PLAN §7 follow-up — "duel exactly this pair"). The
+    /// fresh answers break the contradiction, in place, without re-placing the games.
     func settle(_ dispute: Consistency.Dispute) async {
-        for id in dispute.games { try? await backend.rePlace(id) }
+        let cycle = dispute.cycle
+        if cycle.count >= 2 {
+            for i in 0..<cycle.count {
+                let a = cycle[i], b = cycle[(i + 1) % cycle.count]
+                try? await backend.enqueuePair(a, b)
+            }
+        }
         await refresh()
     }
 

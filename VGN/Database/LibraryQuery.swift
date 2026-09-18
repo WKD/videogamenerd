@@ -23,7 +23,9 @@ enum LibraryQuery {
             SELECT pg.game_id AS game_id,
                    1                                AS owned,
                    MAX(p.kind = 'compilation')      AS is_comp,
-                   MAX(p.format = 'rom')            AS has_rom
+                   MAX(p.format = 'rom')            AS has_rom,
+                   MAX(CASE WHEN p.kind = 'compilation' THEN p.id END)    AS comp_id,
+                   MAX(CASE WHEN p.kind = 'compilation' THEN p.title END) AS comp_title
             FROM product_games pg JOIN products p ON p.id = pg.product_id
             GROUP BY pg.game_id
         ),
@@ -49,6 +51,8 @@ enum LibraryQuery {
             COALESCE(own.owned, 0)                           AS owned,
             COALESCE(own.is_comp, 0)                         AS is_comp,
             COALESCE(own.has_rom, 0)                         AS has_rom,
+            own.comp_id                                      AS comp_id,
+            own.comp_title                                   AS comp_title,
             plat.ids                                         AS platform_ids
         FROM games g
         LEFT JOIN tiers t ON t.id = g.tier_id
@@ -174,10 +178,37 @@ enum LibraryQuery {
                 """)
             args.append(contentsOf: gs.map { $0 as DatabaseValueConvertible })
         }
+        appendPlaytimeBuckets(filter.playtimes, into: &wheres, args: &args)
         if let match = ftsMatch(filter.searchText) {
             wheres.append("g.id IN (SELECT rowid FROM games_fts WHERE games_fts MATCH ?)")
             args.append(match)
         }
+    }
+
+    /// The seconds a game is bucketed on for the playtime filter: effective
+    /// playtime (manual over PSN), falling back to the IGDB main estimate for a
+    /// game with none (PLAN §6.4). Reused so the SQL and any test agree.
+    static let playtimeBucketExpr = "COALESCE(g.my_playtime_s, g.psn_playtime_s, g.ttb_normally_s)"
+
+    /// OR-within-kind band filter: a game matches if its bucket value falls in any
+    /// selected band. Games with no value at all are excluded.
+    private static func appendPlaytimeBuckets(
+        _ buckets: Set<PlaytimeBucket>,
+        into wheres: inout [String], args: inout [DatabaseValueConvertible]
+    ) {
+        guard !buckets.isEmpty else { return }
+        var ors: [String] = []
+        for bucket in buckets.sorted(by: { $0.rawValue < $1.rawValue }) {
+            var conds: [String] = ["\(playtimeBucketExpr) IS NOT NULL"]
+            if let lower = bucket.lowerSeconds {
+                conds.append("\(playtimeBucketExpr) >= ?"); args.append(lower)
+            }
+            if let upper = bucket.upperSeconds {
+                conds.append("\(playtimeBucketExpr) < ?"); args.append(upper)
+            }
+            ors.append("(" + conds.joined(separator: " AND ") + ")")
+        }
+        wheres.append("(" + ors.joined(separator: " OR ") + ")")
     }
 
     // MARK: - Ordering
@@ -251,6 +282,8 @@ enum LibraryQuery {
             played: row["played"],
             owned: row["owned"],
             isCompilationMember: row["is_comp"],
+            compilationTitle: row["comp_title"],
+            compilationProductID: row["comp_id"],
             platformIDs: platformIDs,
             status: statusRaw.flatMap(PlayStatus.init(rawValue:)),
             hasROM: row["has_rom"]

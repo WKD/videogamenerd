@@ -130,6 +130,15 @@ struct LibraryGridView: View {
         Button("Mark Played") { vm.setPlayed(true, for: ids) }
         Button("Mark Owned") { vm.setOwned(true, for: ids) }
         Divider()
+        // Compilations (PLAN §8).
+        if game.isCompilationMember, let productID = game.compilationProductID {
+            Button("Show Compilation") { vm.showCompilation(productID: productID) }
+            Button("Edit Compilation…") { vm.editCompilation(productID: productID) }
+        }
+        if ids.count > 1 {
+            Button("Group as Compilation…") { vm.onGroupAsCompilation(ids) }
+        }
+        Divider()
         Button("Show Inspector") {
             if !vm.selectedGameIDs.contains(game.id) { vm.selectOnly(game.id) }
             vm.showInspector()

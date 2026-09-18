@@ -58,3 +58,17 @@ struct CopyRemovalRequest: Identifiable {
         var compilationMembers: [String]
     }
 }
+
+/// A request to group several selected games into one compilation product
+/// (PLAN §8 — "Group as compilation…": title + platform + format → one product
+/// owning them; existing singles on that platform can be merged in).
+@MainActor
+struct GroupCompilationRequest: Identifiable {
+    let id = UUID()
+    /// The games to group, in selection order (each `(id, title)`).
+    var games: [(id: Int64, title: String)]
+    /// The platforms the group can target (the games' shared / union platforms).
+    var platforms: [PlatformInfo]
+    /// Confirm with a title, platform slug, format, and whether to merge singles.
+    var perform: (_ title: String, _ platformID: String, _ format: ProductFormat, _ mergeSingles: Bool) -> Void
+}

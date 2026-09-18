@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Lists preference cycles (A>B>C>A) found in the comparison log (PLAN §7 —
-/// "disputes to settle"). The store exposes no force-a-pair API, so "Settle"
-/// re-places the cycle's games (re-runs their duels) as the closest remedy.
+/// "disputes to settle"). "Settle" enqueues the cycle's exact pairs (via
+/// `RankingStore.enqueuePair`) so the Duel re-asks precisely those comparisons.
 struct DisputesSheet: View {
     let disputes: [Consistency.Dispute]
     let titles: [Int64: String]
@@ -35,7 +35,7 @@ struct DisputesSheet: View {
                                 Spacer()
                                 Button("Settle") { onSettle(dispute) }
                                     .buttonStyle(.borderless)
-                                    .help("Re-place these games so their duels re-run")
+                                    .help("Duel these exact pairs again to break the cycle")
                             }
                         }
                         .padding(.vertical, 4)

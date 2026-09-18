@@ -211,6 +211,40 @@ struct RankingStore: Sendable {
         }
     }
 
+    /// Apply several drag/drop moves as **one transaction and one undo step**
+    /// (PLAN §7 — a multi-select drop onto the Tier Board). Moves are resolved
+    /// **in order** against the evolving board (so `move(F[i], toTier, i)` settles a
+    /// block left-to-right), exactly as N separate ``move(gameID:toTier:atIndex:)``
+    /// calls would — but ⌘Z reverses the whole batch at once. Prior `(tier, key)`
+    /// state is captured lazily, before each id is first touched, so the single
+    /// history entry restores the pre-batch state faithfully even when a move
+    /// renumbers a tier.
+    func move(_ moves: [(gameID: Int64, toTier: Int64, atIndex: Int?)]) async throws {
+        guard !moves.isEmpty else { return }
+        try await dbWriter.write { db in
+            var state = try Self.loadDuelState(db)
+            var priorByID: [Int64: GameRankState] = [:]
+            for move in moves {
+                let snapshot = try Self.loadSnapshot(db)
+                guard let slice = snapshot.slice(for: move.toTier) else { continue }
+                let mutations: [RankMutation]
+                if let atIndex = move.atIndex {
+                    mutations = RankMoves.moveAcrossTiers(move.gameID, into: slice, insertIndex: atIndex)
+                } else {
+                    mutations = RankMoves.setTierUnplaced(move.gameID, tier: move.toTier)
+                }
+                for id in Self.touchedIDs(mutations) where priorByID[id] == nil {
+                    if let captured = try Self.captureStates([id], db).first { priorByID[id] = captured }
+                }
+                try Self.applyMutations(mutations, db)
+            }
+            Self.pushHistory(
+                CompletedAction(priorStates: Array(priorByID.values), comparisonIDs: [], kind: "batchMove"),
+                &state)
+            try Self.saveDuelState(state, db)
+        }
+    }
+
     // MARK: - Integrity
 
     /// Run `Consistency.checkInvariants` over the loaded snapshot (PLAN §7). Empty

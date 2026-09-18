@@ -17,14 +17,25 @@ protocol RankingBackend: Sendable {
     func acceptBorderSuggestion(_ suggestion: BorderSuggestion) async throws
     func dismissBorderSuggestion(_ suggestion: BorderSuggestion) async throws
     func rePlace(_ gameID: Int64) async throws
+    /// Enqueue an explicit pair to duel next ("duel exactly this pair" / Settle).
+    func enqueuePair(_ a: Int64, _ b: Int64) async throws
 
     // MARK: Tiering (Triage `S A B C D F`, `0` clears — PLAN §7)
     @discardableResult func setTier(_ gameIDs: [Int64], tierID: Int64?) async throws -> SetTierOutcome
+
+    // MARK: Triage-safe un-play (PLAN §7 follow-up — the `U` key)
+    /// Mark a game not played without an orphan/delete prompt: owned → Backlog
+    /// (`.becameBacklog`), not owned → no change (`.notOwned`, caller offers removal).
+    @discardableResult func markNotPlayed(_ gameID: Int64) async throws -> UnplayOutcome
+    /// Remove a game from the library entirely (Triage's explicit removal path).
+    func deleteGame(_ gameID: Int64) async throws
 
     // MARK: Drag / drop overrides (Tier Board + The Top — PLAN §7)
     /// Move a game to `toTier` at an exact position (0 = top). `atIndex == nil`
     /// drops it into the unplaced tail (tier set, key cleared, re-queued).
     func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws
+    /// Apply several moves as one transaction / one undo step (multi-select drop).
+    func moveBatch(_ moves: [RankMove]) async throws
     /// Clear a game's tier entirely (the `0` key on the board).
     func clearTier(_ gameID: Int64) async throws
     /// Move the boundary between two adjacent tiers by `k` placed games
@@ -55,4 +66,16 @@ protocol RankingBackend: Sendable {
 
     // MARK: Covers (PLAN §9 image pipeline seam)
     func thumbnail(for coverFile: String, pixelSize: CGSize) async -> CGImage?
+}
+
+extension RankingBackend {
+    /// Default: apply the moves sequentially (correct final state; N undo steps).
+    /// `LiveRankingBackend` overrides this with the store's single-transaction,
+    /// single-undo-step batch.
+    func moveBatch(_ moves: [RankMove]) async throws {
+        for m in moves { try await move(gameID: m.gameID, toTier: m.toTier, atIndex: m.atIndex) }
+    }
+
+    /// Default no-op so hand-rolled test fakes need not implement it.
+    func enqueuePair(_ a: Int64, _ b: Int64) async throws {}
 }

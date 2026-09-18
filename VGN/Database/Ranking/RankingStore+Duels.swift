@@ -60,19 +60,41 @@ extension RankingStore {
         /// Recently dismissed border pairs (bounded), so a dismissed border is not
         /// re-asked immediately even when it is the only refine candidate (PLAN §7).
         var dismissedBorders: [PairKey]
+        /// Explicitly requested pairs to duel next, before any refine candidate
+        /// (PLAN §7 follow-up — "duel exactly this pair" / Disputes → Settle).
+        var enqueuedPairs: [PairKey]
 
         init(session: PlacementSession? = nil, sessionLog: [Int64] = [],
              completionPriorStates: [GameRankState]? = nil, history: [CompletedAction] = [],
-             dismissedBorders: [PairKey] = []) {
+             dismissedBorders: [PairKey] = [], enqueuedPairs: [PairKey] = []) {
             self.session = session
             self.sessionLog = sessionLog
             self.completionPriorStates = completionPriorStates
             self.history = history
             self.dismissedBorders = dismissedBorders
+            self.enqueuedPairs = enqueuedPairs
+        }
+
+        // Decode-tolerant: every key is optional so an older persisted blob (from
+        // before a field existed) still loads, keeping the in-progress session
+        // rather than discarding it (`loadDuelState` falls back to a fresh state on
+        // a decode failure).
+        enum CodingKeys: String, CodingKey {
+            case session, sessionLog, completionPriorStates, history, dismissedBorders, enqueuedPairs
+        }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            session = try c.decodeIfPresent(PlacementSession.self, forKey: .session)
+            sessionLog = try c.decodeIfPresent([Int64].self, forKey: .sessionLog) ?? []
+            completionPriorStates = try c.decodeIfPresent([GameRankState].self, forKey: .completionPriorStates)
+            history = try c.decodeIfPresent([CompletedAction].self, forKey: .history) ?? []
+            dismissedBorders = try c.decodeIfPresent([PairKey].self, forKey: .dismissedBorders) ?? []
+            enqueuedPairs = try c.decodeIfPresent([PairKey].self, forKey: .enqueuedPairs) ?? []
         }
     }
 
     static let maxDismissedBorders = 32
+    static let maxEnqueuedPairs = 32
 
     static func loadDuelState(_ db: Database) throws -> DuelState {
         guard let row = try AppStateRecord.fetchOne(db, key: duelStateKey) else { return DuelState() }
@@ -132,11 +154,57 @@ extension RankingStore {
         case none
     }
 
-    /// The next unit of work: unplaced placements first, then the top-priority
-    /// refine/border pair that has not been recently dismissed (PLAN §7).
+    /// Enqueue an explicit pair to duel next (PLAN §7 follow-up). Served before any
+    /// refine candidate; the comparison it produces is logged as `refine`. Ignored
+    /// when the two ids are equal. Bounded + deduped.
+    func enqueuePair(_ a: Int64, _ b: Int64) async throws {
+        guard a != b else { return }
+        try await dbWriter.write { db in
+            var state = try Self.loadDuelState(db)
+            let key = PairKey(a, b)
+            state.enqueuedPairs.removeAll { $0 == key }
+            state.enqueuedPairs.append(key)
+            if state.enqueuedPairs.count > Self.maxEnqueuedPairs {
+                state.enqueuedPairs.removeFirst(state.enqueuedPairs.count - Self.maxEnqueuedPairs)
+            }
+            try Self.saveDuelState(state, db)
+        }
+    }
+
+    /// Turn an enqueued unordered pair into a concrete ``RefinePair`` against the
+    /// current snapshot, or `nil` when either game is no longer placed. Same tier →
+    /// a within-tier pair (upper = the one ranked higher); different tiers → a
+    /// border pair (upper = the higher tier).
+    static func enqueuedRefinePair(_ key: PairKey, _ snapshot: RankSnapshot) -> RefinePair? {
+        func locate(_ id: Int64) -> (tier: TierID, sort: Int, index: Int)? {
+            for slice in snapshot.orderedTiers {
+                if let i = slice.placed.firstIndex(where: { $0.id == id }) {
+                    return (slice.tier, slice.sort, i)
+                }
+            }
+            return nil
+        }
+        guard let la = locate(key.a), let lb = locate(key.b) else { return nil }
+        if la.tier == lb.tier {
+            let (upper, lower) = la.index <= lb.index ? (key.a, key.b) : (key.b, key.a)
+            return RefinePair(upper: upper, lower: lower, context: .withinTier(la.tier))
+        }
+        // Different tiers: the higher tier (smaller sort) is the upper.
+        if la.sort < lb.sort {
+            return RefinePair(upper: key.a, lower: key.b, context: .border(upper: la.tier, lower: lb.tier))
+        }
+        return RefinePair(upper: key.b, lower: key.a, context: .border(upper: lb.tier, lower: la.tier))
+    }
+
+    /// The next unit of work: unplaced placements first, then any explicitly
+    /// enqueued pair, then the top-priority refine/border pair not recently
+    /// dismissed (PLAN §7).
     static func nextItem(_ snapshot: RankSnapshot, log: [Comparison], _ state: DuelState) -> RankQueue.Item? {
         if let first = RankQueue.placements(snapshot).first {
             return .place(game: first.game, tier: first.tier)
+        }
+        for key in state.enqueuedPairs {
+            if let pair = enqueuedRefinePair(key, snapshot) { return .refine(pair) }
         }
         for pair in RefineMode.pairs(snapshot, log: log) {
             if case .border = pair.context, state.dismissedBorders.contains(PairKey(pair.upper, pair.lower)) {
@@ -328,6 +396,8 @@ extension RankingStore {
         }
         let loser = winner == pair.upper ? pair.lower : pair.upper
         let cid = try insertComparison(winner: winner, loser: loser, context: "refine", db)
+        // Consume an explicit enqueue for this pair, if any.
+        state.enqueuedPairs.removeAll { $0 == PairKey(pair.upper, pair.lower) }
         switch RefineMode.resolve(pair, winner: winner, in: snapshot) {
         case let .reorder(mutations):
             let prior = try captureStates(touchedIDs(mutations), db)
@@ -351,6 +421,8 @@ extension RankingStore {
         // A border duel is persisted as `refine` (PLAN §4 schema), which also
         // deprioritises the pair in the refine queue = "dismissal remembered".
         let cid = try insertComparison(winner: winner, loser: loser, context: "refine", db)
+        // Consume an explicit enqueue for this pair, if any.
+        state.enqueuedPairs.removeAll { $0 == PairKey(pair.upper, pair.lower) }
         pushHistory(CompletedAction(priorStates: [], comparisonIDs: [cid], kind: "border"), &state)
         try saveDuelState(state, db)
         if case let .suggestion(suggestion) = RefineMode.resolve(pair, winner: winner, in: snapshot) {

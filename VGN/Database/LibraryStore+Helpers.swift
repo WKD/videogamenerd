@@ -136,6 +136,7 @@ extension LibraryStore {
             VALUES (?, ?, ?)
             ON CONFLICT(product_id, game_id) DO UPDATE SET position = excluded.position
             """, arguments: [productID, gameID, member.position])
+        try promoteProductKindIfCompilation(productID, db)
 
         if isNew { return .created(gameID: gameID) }
         return .addedCopy(gameID: gameID)
@@ -199,6 +200,30 @@ extension LibraryStore {
             db, sql: "SELECT product_id FROM product_games WHERE game_id = ?", arguments: [gameID])
         try db.execute(sql: "DELETE FROM games WHERE id = ?", arguments: [gameID])
         for productID in productIDs { try purgeEmptyProduct(productID, db) }
+    }
+
+    /// Demote-or-promote `products.kind` to match the member count (PLAN §5.1 —
+    /// converting single ↔ compilation as members go from 1 to n). Used on the
+    /// *remove* path, where dropping to a single member should become a `single`.
+    static func normalizeProductKind(_ productID: Int64, _ db: Database) throws {
+        guard let count = try Int.fetchOne(
+            db, sql: "SELECT COUNT(*) FROM product_games WHERE product_id = ?", arguments: [productID]),
+              count > 0 else { return }
+        let kind: ProductKind = count > 1 ? .compilation : .single
+        try db.execute(sql: "UPDATE products SET kind = ?, updated_at = ? WHERE id = ?",
+                       arguments: [kind.rawValue, Date(), productID])
+    }
+
+    /// Promote-only: mark a product a `compilation` once it has more than one
+    /// member. Never demotes — used on the *add* path so a product explicitly
+    /// created as a compilation (even with a single member) keeps its kind, while a
+    /// `single` that gains a second member becomes a compilation (PLAN §5.1).
+    static func promoteProductKindIfCompilation(_ productID: Int64, _ db: Database) throws {
+        guard let count = try Int.fetchOne(
+            db, sql: "SELECT COUNT(*) FROM product_games WHERE product_id = ?", arguments: [productID]),
+              count > 1 else { return }
+        try db.execute(sql: "UPDATE products SET kind = 'compilation', updated_at = ? WHERE id = ?",
+                       arguments: [Date(), productID])
     }
 
     /// Delete a product if it now has zero member games.

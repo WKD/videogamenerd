@@ -24,6 +24,10 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
     var stats = RankingStats(perTier: [])
     var disputes: [Consistency.Dispute] = []
     var setTierResult: SetTierOutcome?
+    /// Scripted outcome for `markNotPlayed` (Triage `U`).
+    var unplayOutcome: UnplayOutcome = .becameBacklog
+    private(set) var unplayed: [Int64] = []
+    private(set) var deleted: [Int64] = []
     /// When true, `move` / `clearTier` mutate `board` in place (so a model's
     /// `tierBoardOnce()` reconcile sees the effect) using the same insertion
     /// semantics as `RankMoves`. Off by default so index-math tests inspect the
@@ -64,6 +68,13 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
         tierCalls.append((ids, tierID))
         return setTierResult ?? SetTierOutcome(applied: ids, skippedUnplayed: [])
     }
+
+    // MARK: Triage-safe un-play
+    func markNotPlayed(_ gameID: Int64) async throws -> UnplayOutcome {
+        unplayed.append(gameID)
+        return unplayOutcome
+    }
+    func deleteGame(_ gameID: Int64) async throws { deleted.append(gameID) }
 
     // MARK: Drag / drop overrides
     func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws {

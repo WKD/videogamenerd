@@ -104,4 +104,47 @@ struct RankingTriageModelTests {
         #expect(m.isDone)
         #expect(m.perTierCounts == [1: 2, 3: 1, 6: 1])
     }
+
+    // MARK: - Safe un-play (`U`)
+
+    @Test func unplayOwnedDropsWithoutPrompt() async {
+        let b = backend([10, 11, 12])
+        b.unplayOutcome = .becameBacklog
+        let m = TriageModel(backend: b)
+        await m.start()
+        #expect(await m.handle(character: "u"))
+        #expect(b.unplayed == [10])
+        #expect(m.removalPrompt == nil)
+        #expect(m.current?.id == 11)          // dropped from the queue
+        #expect(m.pending.count == 2)
+    }
+
+    @Test func unplayNotOwnedRaisesRemovalPrompt() async {
+        let b = backend([10, 11, 12])
+        b.unplayOutcome = .notOwned
+        let m = TriageModel(backend: b)
+        await m.start()
+        await m.unplayCurrent()
+        #expect(m.removalPrompt?.id == 10)    // explicit decision, no surprise delete
+        #expect(m.pending.count == 3)         // still in the queue until decided
+        #expect(b.deleted.isEmpty)
+
+        await m.confirmRemoval()
+        #expect(b.deleted == [10])
+        #expect(m.removalPrompt == nil)
+        #expect(m.pending.count == 2)
+        #expect(m.current?.id == 11)
+    }
+
+    @Test func cancelRemovalKeepsGame() async {
+        let b = backend([10, 11, 12])
+        b.unplayOutcome = .notOwned
+        let m = TriageModel(backend: b)
+        await m.start()
+        await m.unplayCurrent()
+        m.cancelRemoval()
+        #expect(m.removalPrompt == nil)
+        #expect(m.pending.count == 3)
+        #expect(b.deleted.isEmpty)
+    }
 }

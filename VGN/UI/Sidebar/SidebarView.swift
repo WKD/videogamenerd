@@ -60,8 +60,11 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .navigationTitle("VGN")
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let enrichment {
-                EnrichmentStatusFooter(model: enrichment)
+            VStack(spacing: 0) {
+                if let enrichment {
+                    EnrichmentStatusFooter(model: enrichment)
+                }
+                SidebarStatsBar(vm: vm)
             }
         }
     }
