@@ -1,0 +1,72 @@
+[
+  {
+    "confidence" : 0.30000001192092896,
+    "rect" : {
+      "height" : 217,
+      "width" : 935,
+      "x" : 102,
+      "y" : 125
+    },
+    "text" : "eB PS5."
+  },
+  {
+    "confidence" : 1,
+    "rect" : {
+      "height" : 1183,
+      "width" : 139,
+      "x" : 106,
+      "y" : 671
+    },
+    "text" : "BPS5."
+  },
+  {
+    "confidence" : 1,
+    "rect" : {
+      "height" : 292,
+      "width" : 43,
+      "x" : 337,
+      "y" : 646
+    },
+    "text" : "CLAIR"
+  },
+  {
+    "confidence" : 1,
+    "rect" : {
+      "height" : 306,
+      "width" : 43,
+      "x" : 339,
+      "y" : 312
+    },
+    "text" : "OBSCUR"
+  },
+  {
+    "confidence" : 1,
+    "rect" : {
+      "height" : 162,
+      "width" : 1136,
+      "x" : 416,
+      "y" : 558
+    },
+    "text" : "EXPEDITIO"
+  },
+  {
+    "confidence" : 1,
+    "rect" : {
+      "height" : 54,
+      "width" : 491,
+      "x" : 828,
+      "y" : 433
+    },
+    "text" : "CLAIR OBSCUR"
+  },
+  {
+    "confidence" : 0.30000001192092896,
+    "rect" : {
+      "height" : 1188,
+      "width" : 144,
+      "x" : 1307,
+      "y" : 150
+    },
+    "text" : "eB P55."
+  }
+]
