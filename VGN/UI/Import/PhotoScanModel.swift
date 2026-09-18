@@ -385,4 +385,43 @@ final class PhotoScanModel {
     func showInLibrary() {
         if let id = summary?.firstGameID { environment.onShowInLibrary(id) }
     }
+
+    // MARK: - Photo pane helpers
+
+    /// The source photo of the currently-selected row (drives the left photo pane).
+    var selectedPhotoName: String? { selectedRow?.item.sourcePhoto }
+
+    func photoURL(named name: String) -> URL? { jobs.first { $0.name == name }?.url }
+
+    /// Every review row whose spine was read on `photo` (for the pane's clickable
+    /// overlay regions).
+    func rows(onPhoto photo: String) -> [ScanReviewRow] {
+        reviewRows.filter { $0.item.sourcePhoto == photo }
+    }
 }
+
+#if DEBUG
+extension PhotoScanModel {
+    /// Seed a ready-to-review model from recorded results (previews only).
+    func previewSeedReview(_ results: [PhotoScanResult], photoURLs: [String: URL] = [:]) {
+        jobs = results.map { result in
+            var job = PhotoScanJob(url: photoURLs[result.photo] ?? URL(fileURLWithPath: "/tmp/\(result.photo).jpg"))
+            job.phase = .ready
+            job.result = result
+            job.tileTotal = result.tileCount
+            return job
+        }
+        reviewRows = PhotoScanReviewBuilder.rows(from: results)
+        selectedRowID = reviewRows.first?.id
+        presentation = .review
+    }
+
+    /// Seed a mid-run model (previews only).
+    func previewSeedRunning(_ jobs: [PhotoScanJob], engine: ActiveScanEngine, fallbackNote: String? = nil) {
+        self.jobs = jobs
+        self.activeEngine = engine
+        self.fallbackNote = fallbackNote
+        self.presentation = .running
+    }
+}
+#endif
