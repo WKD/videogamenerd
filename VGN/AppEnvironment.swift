@@ -28,6 +28,8 @@ final class AppEnvironment {
     let quickAdd: QuickAddModel?
     let quickAddController: QuickAddPanelController?
     let enrichment: EnrichmentStatusModel?
+    /// Stores + cover loader for the ranking destinations (Duel, Triage, Tier Board, The Top).
+    let ranking: RankingEnvironment?
 
     struct DatabaseOpenFailure: Sendable {
         var message: String
@@ -42,7 +44,8 @@ final class AppEnvironment {
         services: ServicesFactory.Graph? = nil,
         quickAdd: QuickAddModel? = nil,
         quickAddController: QuickAddPanelController? = nil,
-        enrichment: EnrichmentStatusModel? = nil
+        enrichment: EnrichmentStatusModel? = nil,
+        ranking: RankingEnvironment? = nil
     ) {
         self.settings = settings
         self.library = library
@@ -52,6 +55,7 @@ final class AppEnvironment {
         self.quickAdd = quickAdd
         self.quickAddController = quickAddController
         self.enrichment = enrichment
+        self.ranking = ranking
     }
 
     /// Build the environment. Never throws — a DB failure becomes `failure`.
@@ -94,7 +98,10 @@ final class AppEnvironment {
             return AppEnvironment(
                 settings: settings, library: vm, actions: actions, failure: nil,
                 services: built?.graph, quickAdd: wiring.quickAdd,
-                quickAddController: wiring.controller, enrichment: wiring.enrichment
+                quickAddController: wiring.controller, enrichment: wiring.enrichment,
+                ranking: RankingEnvironment(
+                    ranking: RankingStore(database), library: store, coverLoader: coverLoader
+                )
             )
         } catch {
             let path = (try? AppPaths.databaseURL().path) ?? "~/Library/Application Support/VGN/vgn.sqlite"

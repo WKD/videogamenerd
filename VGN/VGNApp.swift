@@ -25,6 +25,7 @@ struct VGNApp: App {
                     enrichment: env.enrichment
                 )
                 .frame(minWidth: 900, minHeight: 600)
+                .environment(\.rankingEnvironment, env.ranking)
             } else if let failure = env.failure {
                 DatabaseErrorView(failure: failure)
             } else {
