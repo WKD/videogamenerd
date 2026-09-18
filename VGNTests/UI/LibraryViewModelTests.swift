@@ -376,4 +376,36 @@ struct GameCellModelTests {
         #expect(box.summary.title == "B")
         #expect(box.id == 1)
     }
+
+    /// The per-cell box design (PLAN §9): re-yielding the games array reuses the
+    /// same box instances, and changing one row leaves every *other* cell's box
+    /// untouched (so a tick re-evaluates one cell, not the whole grid).
+    @MainActor
+    @Test func applyGamesReusesBoxesAndTouchesOnlyChangedCells() async {
+        let vm = await loadedVM(orderedGames(4))
+        let boxes = (1...4).map { vm.cellModel(for: Int64($0)) }
+        let summariesBefore = boxes.map(\.summary)
+
+        // Re-yield the identical rows → same instances, nothing mutated.
+        vm.applyGames(vm.games)
+        for (i, id) in (1...4).enumerated() {
+            #expect(vm.cellModel(for: Int64(id)) === boxes[i])
+            #expect(vm.cellModel(for: Int64(id)).summary == summariesBefore[i])
+        }
+
+        // Change only game 3's tier.
+        var rows = vm.games
+        let idx = rows.firstIndex { $0.id == 3 }!
+        rows[idx].tierLetter = "S"; rows[idx].tierID = 1
+        vm.applyGames(rows)
+
+        for (i, id) in (1...4).enumerated() {
+            #expect(vm.cellModel(for: Int64(id)) === boxes[i])          // never re-homed
+            if id == 3 {
+                #expect(vm.cellModel(for: 3).summary.tierLetter == "S") // the one changed cell
+            } else {
+                #expect(vm.cellModel(for: Int64(id)).summary == summariesBefore[i])  // untouched
+            }
+        }
+    }
 }

@@ -65,7 +65,7 @@ final class AppEnvironment {
 
         let mode = LaunchMode.current
         do {
-            let database = try mode == .sampleData
+            let database = try mode.usesInMemoryDB
                 ? AppDatabase.inMemory()
                 : AppDatabase.live()
             let store = LibraryStore(database)
@@ -149,9 +149,10 @@ final class AppEnvironment {
         switch mode {
         case .live:
             return (nil, nil, nil)
-        case .sampleData:
+        default:
+            // Sample / seeded perf → a fresh temp tree, never the real library.
             let base = FileManager.default.temporaryDirectory
-                .appendingPathComponent("VGN-sample-\(UUID().uuidString)", isDirectory: true)
+                .appendingPathComponent("VGN-scratch-\(UUID().uuidString)", isDirectory: true)
             return (
                 base.appendingPathComponent("covers", isDirectory: true),
                 base.appendingPathComponent("thumbs", isDirectory: true),
@@ -253,6 +254,14 @@ final class AppEnvironment {
             if mode == .sampleData {
                 await SampleLibrarySeeder.seed(into: store)
             }
+            #if DEBUG
+            if case .seededPerf(let n) = mode {
+                let clock = ContinuousClock()
+                let start = clock.now
+                await PerfSeeder.seed(into: store, count: n)
+                NSLog("VGN perf: seeded \(n) games in \(start.duration(to: clock.now))")
+            }
+            #endif
         }
         if mode == .live {
             Task.detached(priority: .utility) {
@@ -263,15 +272,28 @@ final class AppEnvironment {
     }
 }
 
-/// How the app was launched. `-VGNSampleData YES` (a process launch argument that
-/// `UserDefaults` exposes as the `VGNSampleData` bool) runs against a throwaway
-/// in-memory database seeded with the sample library — for demos and UI checks,
-/// never touching the real file. Default is the live on-disk database.
-enum LaunchMode: Sendable {
+/// How the app was launched.
+///
+/// - `-VGNSampleData YES` → a throwaway in-memory DB seeded with the sample
+///   library (demos / UI checks), never touching the real file or the network.
+/// - `-VGNSeedGames <n>` (DEBUG only) → a throwaway in-memory DB filled with `n`
+///   synthetic games for performance measurement, no network (PLAN §9/§10).
+/// - default → the live on-disk database.
+enum LaunchMode: Sendable, Equatable {
     case live
     case sampleData
+    #if DEBUG
+    case seededPerf(Int)
+    #endif
 
     static var current: LaunchMode {
-        UserDefaults.standard.bool(forKey: "VGNSampleData") ? .sampleData : .live
+        #if DEBUG
+        let seed = UserDefaults.standard.integer(forKey: "VGNSeedGames")
+        if seed > 0 { return .seededPerf(seed) }
+        #endif
+        return UserDefaults.standard.bool(forKey: "VGNSampleData") ? .sampleData : .live
     }
+
+    /// Non-live modes run against a throwaway in-memory database.
+    var usesInMemoryDB: Bool { self != .live }
 }
