@@ -152,7 +152,11 @@ struct DuelView: View {
     }
 
     private func headerAttributed(_ h: DuelPresentation.Header) -> AttributedString {
-        var text = AttributedString(h.text)
+        // The step ("3 of ~6") is rendered separately (monospaced, secondary), so
+        // drop its suffix from the title to avoid showing the count twice.
+        var display = h.text
+        if let step = h.stepText { display = display.replacingOccurrences(of: " · \(step)", with: "") }
+        var text = AttributedString(display)
         if !h.candidateName.isEmpty, let range = text.range(of: h.candidateName) {
             text[range].font = .title3.bold()
         }
