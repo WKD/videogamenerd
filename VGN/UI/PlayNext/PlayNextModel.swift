@@ -386,7 +386,7 @@ final class PlayNextModel {
     // MARK: - Persistence
 
     private func persist() {
-        var store = Prefs(defaults: defaults)
+        let store = Prefs(defaults: defaults)
         store.preset = bracketPreset
         store.usesCustom = usesCustom
         store.customHoursPerWeek = customHoursPerWeek
