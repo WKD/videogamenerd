@@ -166,6 +166,51 @@ struct LibraryViewModelCellCacheTests {
 
 @MainActor
 @Suite(.serialized)
+struct SearchKeyboardTests {
+
+    @Test func clearSearchClearsThenReportsEmpty() async {
+        let vm = await loadedVM(orderedGames(3))
+        vm.searchText = "foo"
+        #expect(vm.clearSearch() == true)          // cleared, stays focused
+        #expect(vm.searchText.isEmpty)
+        #expect(vm.clearSearch() == false)         // already empty → caller unfocuses
+    }
+
+    @Test func downArrowSelectsFirstAndFocusesGrid() async {
+        let vm = await loadedVM(orderedGames(3))
+        let before = vm.gridFocusRequests
+        vm.focusGridFromSearch()
+        #expect(vm.selectedGameIDs == [1])
+        #expect(vm.gridFocusRequests == before + 1)
+    }
+
+    @Test func returnOpensInspectorOnFirstResult() async {
+        let vm = await loadedVM(orderedGames(3))
+        vm.openFirstResult()
+        #expect(vm.selectedGameIDs == [1])
+        #expect(vm.inspectorPresented)
+    }
+
+    @Test func searchAllBroadensScopeKeepingQuery() async {
+        let vm = await loadedVM(orderedGames(3))
+        vm.select(.played)
+        var f = vm.filter; f.searchText = "gam"; vm.setFilter(f)
+        vm.searchAllScope()
+        #expect(vm.selection == .all)
+        #expect(vm.filter.searchText == "gam")     // query preserved across the escape
+    }
+
+    @Test func quickAddPrefillTrimmedAndConsumedOnce() async {
+        let vm = await loadedVM(orderedGames(1))
+        vm.requestQuickAdd(prefill: "  Bloodborne ")
+        #expect(vm.quickAddPresented)
+        #expect(vm.consumeQuickAddPrefill() == "Bloodborne")
+        #expect(vm.consumeQuickAddPrefill() == nil)
+    }
+}
+
+@MainActor
+@Suite(.serialized)
 struct SortPersistenceTests {
 
     @Test func setSortResetsDirectionToTheFieldDefault() {

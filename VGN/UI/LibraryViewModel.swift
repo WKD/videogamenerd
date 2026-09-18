@@ -66,6 +66,10 @@ final class LibraryViewModel {
     var quickAddPresented: Bool = false
     /// Bumped to ask the view to move keyboard focus into the search field (⌘F).
     private(set) var searchFocusRequests: Int = 0
+    /// Bumped to ask the grid to take keyboard focus (↓ from the search field).
+    private(set) var gridFocusRequests: Int = 0
+    /// A query to prefill Quick Add with (empty-result "Add … with Quick Add").
+    private var quickAddPrefill: String?
 
     // MARK: Seams
     let dataSource: any LibraryDataSource
@@ -484,6 +488,53 @@ final class LibraryViewModel {
     func showInspector() { inspectorPresented = true; onShowInspector() }
     func requestSearchFocus() { searchFocusRequests &+= 1 }
     func requestQuickAdd() { quickAddPresented = true; onQuickAdd() }
+
+    /// Open Quick Add prefilled with `prefill` (empty-result affordance, PLAN §8).
+    func requestQuickAdd(prefill: String?) {
+        quickAddPrefill = prefill?.trimmingCharacters(in: .whitespacesAndNewlines)
+        requestQuickAdd()
+    }
+
+    /// The pending Quick Add prefill, consumed once by the presenting view.
+    func consumeQuickAddPrefill() -> String? {
+        defer { quickAddPrefill = nil }
+        return (quickAddPrefill?.isEmpty == false) ? quickAddPrefill : nil
+    }
+
+    // MARK: Search keyboard flow (PLAN §8)
+
+    /// `esc` in the search field: clear a non-empty query (return true, stays
+    /// focused), else the caller unfocuses.
+    @discardableResult
+    func clearSearch() -> Bool {
+        guard !searchText.isEmpty else { return false }
+        searchText = ""
+        return true
+    }
+
+    /// The first row in the current ordering (for ↩ / ↓ from the search field).
+    var firstResult: GameSummary? { games.first }
+
+    /// ↓ from the search field: move keyboard focus into the grid, selecting the
+    /// first result.
+    func focusGridFromSearch() {
+        if let first = firstResult { selectOnly(first.id) }
+        gridFocusRequests &+= 1
+    }
+
+    /// ↩ in the search field: open the inspector on the single/first result.
+    func openFirstResult() {
+        guard let first = firstResult else { return }
+        selectOnly(first.id)
+        showInspector()
+    }
+
+    /// "Search all" escape: broaden a scoped search to the whole library, keeping
+    /// the query and other facets (PLAN §8).
+    func searchAllScope() {
+        guard selection != .all else { return }
+        select(.all)
+    }
 
     /// Inspector "Refresh metadata" — re-fetch everything for one game (PLAN §6.1).
     func refreshMetadata(gameID: Int64) { onRefreshMetadata(gameID) }

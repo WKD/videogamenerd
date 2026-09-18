@@ -99,6 +99,8 @@ struct RootView: View {
             ownedPlatforms: Set(vm.platforms.map(\.id)),
             tiers: vm.tiers
         )
+        // Prefill from the empty-result "Add … with Quick Add" affordance (PLAN §8).
+        if let prefill = vm.consumeQuickAddPrefill() { quickAdd.query = prefill }
         quickAddController.show()
     }
 
@@ -111,7 +113,14 @@ struct RootView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 160, idealWidth: 220)
                 .focused($searchFocused)
-                .help("Search titles (⌘F)")
+                .help("Search titles (⌘F). ↓ into results · ↩ open first · esc clear")
+                .onKeyPress(.downArrow) { vm.focusGridFromSearch(); return .handled }
+                .onKeyPress(.escape) {
+                    if vm.clearSearch() { return .handled }
+                    searchFocused = false
+                    return .handled
+                }
+                .onSubmit { vm.openFirstResult() }
         }
 
         ToolbarItemGroup(placement: .automatic) {

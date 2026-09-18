@@ -20,6 +20,14 @@ struct FilterChipsBar: View {
                         .font(.caption)
                         .padding(.leading, 4)
                         .help("Remove every active filter")
+                    // One-click escape from a scoped search to the whole library.
+                    if vm.selection != .all,
+                       !vm.filter.searchText.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Button("Search all") { vm.searchAllScope() }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            .help("Search the whole library, not just this list")
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 6)

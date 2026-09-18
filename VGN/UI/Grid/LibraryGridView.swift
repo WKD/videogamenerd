@@ -69,6 +69,10 @@ struct LibraryGridView: View {
             .focusEffectDisabled()
             .focused($gridFocused)
             .onAppear { gridFocused = true }
+            .onChange(of: vm.gridFocusRequests) { _, _ in
+                gridFocused = true
+                if let id = vm.selectedGameIDs.first { proxy.scrollTo(id, anchor: .center) }
+            }
             .onKeyPress(.leftArrow) { scroll(proxy, vm.moveSelection(by: -1)); return .handled }
             .onKeyPress(.rightArrow) { scroll(proxy, vm.moveSelection(by: 1)); return .handled }
             .onKeyPress(.upArrow) { scroll(proxy, vm.moveSelection(by: -columnCount)); return .handled }
@@ -142,16 +146,28 @@ struct LibraryGridView: View {
     }
 
     private var emptyResultState: some View {
-        ContentUnavailableView {
+        let query = vm.filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ContentUnavailableView {
             Label("No matches", systemImage: "magnifyingglass")
         } description: {
             Text(vm.filter.hasActiveFacets
                  ? "No games match the current search and filters."
                  : "Nothing in this list yet.")
         } actions: {
-            if vm.filter.hasActiveFacets {
-                Button("Clear filters") {
-                    vm.setFilter(LibraryFilter(scope: vm.selection))
+            VStack(spacing: 8) {
+                if !query.isEmpty {
+                    Button {
+                        vm.requestQuickAdd(prefill: query)
+                    } label: {
+                        Label("Add “\(query)” with Quick Add (⌘N)", systemImage: "plus")
+                    }
+                }
+                // One-click escape from a scoped search to the whole library.
+                if vm.selection != .all, !query.isEmpty {
+                    Button("Search all games") { vm.searchAllScope() }
+                }
+                if vm.filter.hasActiveFacets {
+                    Button("Clear filters") { vm.clearAllFilters() }
                 }
             }
         }
