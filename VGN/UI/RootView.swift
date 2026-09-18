@@ -71,7 +71,10 @@ struct RootView: View {
                             goToDuel: { vm.select(.duel) },
                             inspect: { id in vm.selectOnly(id); vm.showInspector() }))
                 } else if vm.isPlayNextSelection {
-                    PlayNextPlaceholderView()
+                    PlayNextView()
+                        .environment(\.rankingActions, RankingViewActions(
+                            goToDuel: { vm.select(.duel) },
+                            inspect: { id in vm.selectOnly(id); vm.showInspector() }))
                 } else {
                     LibraryGridView(vm: vm)
                 }

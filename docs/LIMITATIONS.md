@@ -18,8 +18,8 @@ Agents cannot operate the app's windows. Every screen was built from model-level
 
 - **M3 Compilations UI** — the data layer is complete (products with n games, all-or-nothing ownership, Quick Add adds IGDB bundles as compilations), but there is **no compilation editor** (add/remove/reorder members, rename), and the copy-removal warning shows the compilation title + game count, **not the list of member titles** PLAN §8 asks for (`GameDetail.Copy` doesn't carry sibling titles). [follow-up]
 - **M5 Playtime polish** — manual playtime field, status picker and a minimal me-vs-average bar exist; sort/filter by playtime exists; the polished bar, the stats touches and **the inspector's derived-score line ("9.6 · #4 overall")** are not done (helper `RankingStore.derivedScore(for:)` is merged). [follow-up]
-- **M5b Play Next view + "Ask Claude"** — engine, store, schema and CLI runner merged; the view is being built (`w5/b-playnext-ui`). Sidebar entry currently shows a placeholder.
-- **M6 Photo-scan UI** — engine merged and measured; review sheet, photo input, Settings tab being built (`w5/a-scan-ui`). Until it lands there is no way to scan from the app.
+- ~~M5b Play Next view + "Ask Claude"~~ — merged 2026-09-19. Known gaps: "Start playing" has no Undo (the store has none for it); the first Ask Claude call in an hour costs ≈ $0.70 notional because the CLI caches its own ~35 k-token system prompt; `--max-turns 1` still reports 2 turns.
+- ~~M6 Photo-scan UI~~ — merged 2026-09-19 (`m6`). Known gaps: 1–2-character spine fragments ("DA", "L") still show up in the *no match* bucket (unchecked by default); complete titles sharing a prefix are never merged (deliberate); Continuity Camera is untestable without the owner's iPhone; the scan draft carries no cover id (covers arrive via enrichment, like Quick Add).
 - **Final hardening pass** — whole-app review, concurrency audit, real-cover perf check, CLAUDE.md refresh. Not started.
 - Milestone tags: `m0 m1 m2 m4` pushed (m4 before m3 because ranking finished first). `m3`, `m5`, `m5b`, `m6` pending.
 

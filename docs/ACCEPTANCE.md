@@ -32,6 +32,13 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 - [ ] **Derived scores** ("#4 · 9.6"): do the bands feel right? S 9.0–10 · A 8.0–8.9 · B 7.0–7.9 · C 5.5–6.9 · D 3.0–5.4 · F 1.0–2.9 (one constant file: `VGN/Ranking/DerivedScore.swift`).
 - Console note "type com.videogamenerd.ranking-item is not declared" during drags is benign (fix = declare an exported type in Info.plist, milestone 9 polish).
 
+### M5b — Play Next + Ask Claude, M6 — Photo scan (code merged 2026-09-19)
+- [ ] **Play Next** (sidebar): `1–4` brackets, `R` re-roll, `↩` start playing, arrows between cards, `⌫` not this one, `space`/`⌘I` inspect. Do the picks and the *reason sentences* read naturally on your real library? (Needs ≥ 15 ranked games to be more than crowd-prior.)
+- [ ] **Ask Claude**: the disclosure line, latency (~10 s), Cancel, the two-column Engine | Claude layout at narrow widths, the failure path when the CLI is logged out. First call in an hour costs ≈ $0.70 *notional* of subscription usage (the CLI's own system prompt gets cached; later calls are cheaper).
+- [ ] **Scan Photos…** (File menu, `⇧⌘O`, or drop images on the window): progress rows per tile, the review sheet (photo pane zoom/pan, region highlight alignment on a full-size photo, include/played toggles, alternatives, "seen in 3 photos" collapse, greyed duplicates), one "Add n games" commit, summary.
+- [ ] **Continuity Camera** "Take Photo" from the scan sheet — needs your iPhone nearby; cannot be tested any other way.
+- [ ] Settings ▸ Photo Scan: detected `claude` path + version, **Check** button, model and parallelism settings persist.
+
 ## Known issues / watch list
 - **Title normaliser over-strips budget labels**: the `.articleless` level strips trailing "Platinum / Essentials / Greatest Hits / Player's Choice", so *Pokémon Platinum* collapses to "pokemon". Exact `.canonical` matching protects precision; only bites if two real titles collapse to the same form. Fix if seen: gate budget-label stripping behind a flag in `TitleNormalizer`.
 - **Fuzzy thresholds** (`FuzzyMatch.confidentThreshold = 0.90`, `plausibleThreshold = 0.74`) were tuned on a hand-made table; re-check against real IGDB / libretro names once covers and photo scan run on the real library.
