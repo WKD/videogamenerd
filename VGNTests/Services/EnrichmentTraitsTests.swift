@@ -51,7 +51,7 @@ struct EnrichmentTraitsTests {
 
         // A forced refresh must NOT replace the user's cover…
         await harness.coordinator.refresh(gameID: id)
-        var game = try #require(try await harness.game(id))
+        let game = try #require(try await harness.game(id))
         #expect(game.coverFile == "hand-picked.jpg")
 
         // …but traits (untouched) are still present after the refresh.
