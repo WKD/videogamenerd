@@ -17,6 +17,8 @@ protocol RankingBackend: Sendable {
     func acceptBorderSuggestion(_ suggestion: BorderSuggestion) async throws
     func dismissBorderSuggestion(_ suggestion: BorderSuggestion) async throws
     func rePlace(_ gameID: Int64) async throws
+    /// Enqueue an explicit pair to duel next ("duel exactly this pair" / Settle).
+    func enqueuePair(_ a: Int64, _ b: Int64) async throws
 
     // MARK: Tiering (Triage `S A B C D F`, `0` clears — PLAN §7)
     @discardableResult func setTier(_ gameIDs: [Int64], tierID: Int64?) async throws -> SetTierOutcome
@@ -66,4 +68,7 @@ extension RankingBackend {
     func moveBatch(_ moves: [RankMove]) async throws {
         for m in moves { try await move(gameID: m.gameID, toTier: m.toTier, atIndex: m.atIndex) }
     }
+
+    /// Default no-op so hand-rolled test fakes need not implement it.
+    func enqueuePair(_ a: Int64, _ b: Int64) async throws {}
 }

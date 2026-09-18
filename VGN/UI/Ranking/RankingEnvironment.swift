@@ -75,6 +75,7 @@ struct LiveRankingBackend: RankingBackend {
     func acceptBorderSuggestion(_ s: BorderSuggestion) async throws { try await ranking.acceptBorderSuggestion(s) }
     func dismissBorderSuggestion(_ s: BorderSuggestion) async throws { try await ranking.dismissBorderSuggestion(s) }
     func rePlace(_ gameID: Int64) async throws { try await ranking.rePlace(gameID) }
+    func enqueuePair(_ a: Int64, _ b: Int64) async throws { try await ranking.enqueuePair(a, b) }
 
     // Tiering
     func setTier(_ ids: [Int64], tierID: Int64?) async throws -> SetTierOutcome {
