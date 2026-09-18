@@ -92,7 +92,7 @@ table: `docs/EXECUTION.md`. The essentials:
 - **Merge & push per feature**, not per wave: `merge --no-ff` into `main` → build + test
   on main → push. Never force-push. Milestones are tagged `m0`…`m6` and the tags pushed.
   Merged worktrees/branches are removed.
-- Human-only acceptance checks are collected in `docs/ACCEPTANCE.md`.
+- Human-only acceptance checks are collected in `docs/ACCEPTANCE.md`; known limitations, shortcuts and postponed work in `docs/LIMITATIONS.md` — update it whenever a hand-off report flags one.
 
 App support dir at runtime: `~/Library/Application Support/VGN/`
 (`vgn.sqlite`, `covers/`, `thumbs/`, `backups/`). Tests use in-memory / temp-dir
