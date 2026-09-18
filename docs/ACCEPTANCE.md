@@ -5,7 +5,9 @@ Things machines can't judge (or that need the owner's data/eyes). Updated by the
 ## To verify by hand
 
 ### Wave 0 / M0
-- [ ] `docs/shelf-truth-draft.json` — correct the draft list of games per sample photo (177 entries). It becomes the answer key for the M6 accuracy run. Known doubts: two adjacent "ELDEN RING" spines (duplicate vs Shadow of the Erdtree?), the white Konami MGS V box edition, exact editions generally. Two music DVDs at the right of IMG_3685 were excluded on purpose.
+- [ ] `docs/shelf-truth-draft.json` — correct the draft list of games per sample photo. It becomes the answer key for the M6 accuracy run. Two music DVDs at the right of IMG_3685 were excluded on purpose.
+  - Owner feedback 2026-09-18: the second "ELDEN RING" spine was an empty sleeve (box now back inside) → one Elden Ring; the white Konami MGS V box is a special vendor SteelBook collector's edition (which MGS V game — Phantom Pain or Ground Zeroes — still to confirm).
+  - **Sample set changed 2026-09-18**: `IMG_3681` and `IMG_3682` were deleted, `IMG_3687` (5699×3452) added → samples are now 3683, 3684, 3685, 3686, 3687 (5 photos, not 6). Pending: refresh `VGNTests/Fixtures/shelf/` (drop the 3681/3682 JPEGs and tiles 1–3 cut from them, add 3687 + new tiles), `docs/fixtures.md` and the truth draft. Queued for the next free agent slot.
 - [ ] `VGN/Resources/platforms.json` — skim the 61 platforms: slugs are forever (DB primary keys), sidebar `group` assignments, anything you own that is missing.
 
 ## Known issues / watch list
