@@ -69,7 +69,7 @@ final class AppEnvironment {
 
         let mode = LaunchMode.current
         do {
-            let database = try mode == .sampleData
+            let database = try mode.usesInMemoryDB
                 ? AppDatabase.inMemory()
                 : AppDatabase.live()
             let store = LibraryStore(database)
@@ -156,9 +156,10 @@ final class AppEnvironment {
         switch mode {
         case .live:
             return (nil, nil, nil)
-        case .sampleData:
+        default:
+            // Sample / seeded perf → a fresh temp tree, never the real library.
             let base = FileManager.default.temporaryDirectory
-                .appendingPathComponent("VGN-sample-\(UUID().uuidString)", isDirectory: true)
+                .appendingPathComponent("VGN-scratch-\(UUID().uuidString)", isDirectory: true)
             return (
                 base.appendingPathComponent("covers", isDirectory: true),
                 base.appendingPathComponent("thumbs", isDirectory: true),
@@ -181,13 +182,7 @@ final class AppEnvironment {
         // Quick Add catalogue searcher: live IGDB only in live mode with a graph.
         let searcher: any CatalogSearching
         if mode == .live, let bundle = built {
-            let autocomplete = IGDBAutocomplete(
-                credentials: bundle.graph.credentials,
-                catalog: bundle.platformCatalog,
-                cache: bundle.graph.catalogCache
-            )
             searcher = LiveCatalogSearcher(
-                autocomplete: autocomplete,
                 client: bundle.graph.igdbClient,
                 credentials: bundle.graph.credentials
             )
@@ -197,6 +192,7 @@ final class AppEnvironment {
 
         let quickAdd = QuickAddModel(
             catalog: searcher,
+            catalogCache: built?.graph.catalogCache,   // instant/offline cached rows
             library: LiveLibraryAdder(store: store),
             platforms: PlatformLabels.all
         )
@@ -222,19 +218,31 @@ final class AppEnvironment {
         settings.connectionTester = built?.graph.connectionTester
 
         // Manual cover from a dropped image (both modes; sample writes to temp).
+        // A hand-picked cover is sacred: `setUserCover` marks the `cover` field
+        // user-edited so background enrichment (even an explicit refresh) never
+        // clobbers it (PLAN §5.2 point 4 / §7b).
         if let graph = built?.graph {
             let coverStore = graph.coverStore
             vm.onImportCover = { [weak vm] gameID, url in
                 Task {
                     do {
                         let stored = try await coverStore.importCover(from: url, gameID: gameID)
-                        // TODO(merge): once the data lane ships a `user_edited` flag,
-                        // set it here so a later "Refresh metadata" won't clobber a
-                        // hand-picked cover. Today the coordinator only fills an empty
-                        // cover_file, so a manual cover already survives normal enrichment.
-                        try await store.updateMetadata(gameID: gameID, MetadataPatch(coverFile: stored.coverFile))
+                        try await store.setUserCover(gameID: gameID, coverFile: stored.coverFile)
                     } catch {
                         vm?.showBanner("Couldn't set the cover.", kind: .error)
+                    }
+                }
+            }
+            // "Remove custom cover": clear the file + marker, then let enrichment
+            // fetch one again (live mode only — sample never touches the network).
+            let coordinator = built?.graph.coordinator
+            vm.onRemoveCover = { [weak vm] gameID in
+                Task {
+                    do {
+                        try await store.clearUserCover(gameID: gameID)
+                        if mode == .live { await coordinator?.refresh(gameID: gameID) }
+                    } catch {
+                        vm?.showBanner("Couldn't remove the cover.", kind: .error)
                     }
                 }
             }
@@ -253,6 +261,14 @@ final class AppEnvironment {
             if mode == .sampleData {
                 await SampleLibrarySeeder.seed(into: store)
             }
+            #if DEBUG
+            if case .seededPerf(let n) = mode {
+                let clock = ContinuousClock()
+                let start = clock.now
+                await PerfSeeder.seed(into: store, count: n)
+                NSLog("VGN perf: seeded \(n) games in \(start.duration(to: clock.now))")
+            }
+            #endif
         }
         if mode == .live {
             Task.detached(priority: .utility) {
@@ -263,15 +279,28 @@ final class AppEnvironment {
     }
 }
 
-/// How the app was launched. `-VGNSampleData YES` (a process launch argument that
-/// `UserDefaults` exposes as the `VGNSampleData` bool) runs against a throwaway
-/// in-memory database seeded with the sample library — for demos and UI checks,
-/// never touching the real file. Default is the live on-disk database.
-enum LaunchMode: Sendable {
+/// How the app was launched.
+///
+/// - `-VGNSampleData YES` → a throwaway in-memory DB seeded with the sample
+///   library (demos / UI checks), never touching the real file or the network.
+/// - `-VGNSeedGames <n>` (DEBUG only) → a throwaway in-memory DB filled with `n`
+///   synthetic games for performance measurement, no network (PLAN §9/§10).
+/// - default → the live on-disk database.
+enum LaunchMode: Sendable, Equatable {
     case live
     case sampleData
+    #if DEBUG
+    case seededPerf(Int)
+    #endif
 
     static var current: LaunchMode {
-        UserDefaults.standard.bool(forKey: "VGNSampleData") ? .sampleData : .live
+        #if DEBUG
+        let seed = UserDefaults.standard.integer(forKey: "VGNSeedGames")
+        if seed > 0 { return .seededPerf(seed) }
+        #endif
+        return UserDefaults.standard.bool(forKey: "VGNSampleData") ? .sampleData : .live
     }
+
+    /// Non-live modes run against a throwaway in-memory database.
+    var usesInMemoryDB: Bool { self != .live }
 }

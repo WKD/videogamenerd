@@ -29,6 +29,10 @@ struct GameDetail: Sendable, Hashable, Identifiable {
 
     var coverFile: String?
     var igdbCoverImageID: String?
+    /// True when the user set this cover by hand (drop / choose). Background
+    /// enrichment never replaces it, and the inspector offers "Remove custom
+    /// cover" (PLAN §5.2 point 4 / §7b `user_edited`).
+    var userEditedCover: Bool = false
 
     var genres: [String]
     var platformIDs: [String]

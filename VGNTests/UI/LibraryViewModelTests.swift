@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import VGN
 
@@ -164,6 +165,184 @@ struct LibraryViewModelCellCacheTests {
     }
 }
 
+/// A controllable clock for the type-to-select window.
+@MainActor private final class ClockBox { var now = Date(timeIntervalSince1970: 1_000) }
+
+@MainActor
+@Suite(.serialized)
+struct MultiSelectAndTypeSelectTests {
+
+    private func typeSelectGames() -> [GameSummary] {
+        // Sorted-by-title order: Mega Man, Metroid, Sonic, Zelda.
+        [GameSummary(id: 1, title: "Mega Man", played: true, owned: true, platformIDs: ["nes"]),
+         GameSummary(id: 2, title: "Metroid", played: true, owned: true, platformIDs: ["nes"]),
+         GameSummary(id: 3, title: "Sonic", played: true, owned: true, platformIDs: ["genesis"]),
+         GameSummary(id: 4, title: "Zelda", played: true, owned: true, platformIDs: ["nes"])]
+    }
+
+    private func makeVM(_ games: [GameSummary], _ clock: ClockBox) async -> LibraryViewModel {
+        let vm = LibraryViewModel(dataSource: PreviewLibraryDataSource(games: games), now: { clock.now })
+        vm.start()
+        for _ in 0..<200 where vm.games.isEmpty { await Task.yield() }
+        return vm
+    }
+
+    @Test func shiftArrowExtendsAndContractsRange() async {
+        let vm = await loadedVM(orderedGames(5))
+        vm.selectOnly(2)
+        vm.extendSelection(by: 1)
+        #expect(vm.selectedGameIDs == [2, 3])
+        vm.extendSelection(by: 1)
+        #expect(vm.selectedGameIDs == [2, 3, 4])
+        vm.extendSelection(by: -3)              // cursor 4 → 1, pivot on anchor 2
+        #expect(vm.selectedGameIDs == [1, 2])
+    }
+
+    @Test func typeToSelectJumpsOnNonTierLetter() async {
+        let clock = ClockBox()
+        let vm = await makeVM(typeSelectGames(), clock)
+        var tierCalls = 0
+        vm.onSetTier = { _, _ in tierCalls += 1 }
+        vm.selectOnly(4)                        // Zelda selected
+
+        // "m" is not a tier key → type-to-select jumps to the first "m" title.
+        #expect(vm.handleGridCharacter("m") == 1)   // Mega Man
+        #expect(vm.selectedGameIDs == [1])
+        // Continue the buffer: "e" → "me" still Mega Man; "t" → "met" → Metroid.
+        _ = vm.handleGridCharacter("e")
+        #expect(vm.handleGridCharacter("t") == 2)   // Metroid
+        #expect(tierCalls == 0)                     // never tiered
+    }
+
+    @Test func tierKeyFiresOnFirstKeystrokeWithSelection() async {
+        let clock = ClockBox()
+        let vm = await makeVM(typeSelectGames(), clock)
+        var lastTier: (Set<Int64>, String?)?
+        vm.onSetTier = { ids, letter in lastTier = (ids, letter) }
+        vm.selectOnly(2)                        // Metroid selected, buffer inactive
+
+        // "s" is a tier key + a selection exists + buffer inactive → tiers, no jump.
+        #expect(vm.handleGridCharacter("s") == nil)
+        #expect(lastTier?.0 == [2])
+        #expect(lastTier?.1 == "S")
+        #expect(vm.selectedGameIDs == [2])      // selection unchanged (no jump)
+    }
+
+    @Test func tierLetterTypesToSelectWhenNothingSelected() async {
+        let clock = ClockBox()
+        let vm = await makeVM(typeSelectGames(), clock)
+        var tierCalls = 0
+        vm.onSetTier = { _, _ in tierCalls += 1 }
+        vm.clearSelection()                     // nothing selected
+
+        // With no selection, even a tier letter starts type-to-select → Sonic.
+        #expect(vm.handleGridCharacter("s") == 3)
+        #expect(vm.selectedGameIDs == [3])
+        #expect(tierCalls == 0)
+    }
+
+    @Test func activeBufferSuppressesTierKeysUntilWindowExpires() async {
+        let clock = ClockBox()
+        let vm = await makeVM(typeSelectGames(), clock)
+        var tierCalls = 0
+        vm.onSetTier = { _, _ in tierCalls += 1 }
+        vm.selectOnly(1)
+
+        // Start a buffer with a non-tier letter → active.
+        _ = vm.handleGridCharacter("m")
+        #expect(vm.isTypeBufferActive())
+        // A tier letter within the window extends the buffer (no tiering).
+        #expect(vm.handleGridCharacter("s") == nil)   // "ms" matches nothing
+        #expect(tierCalls == 0)
+
+        // Past the ~1 s window the buffer expires → a tier letter tiers again.
+        clock.now = clock.now.addingTimeInterval(2)
+        #expect(!vm.isTypeBufferActive())
+        _ = vm.handleGridCharacter("s")
+        #expect(tierCalls == 1)
+    }
+}
+
+@MainActor
+@Suite(.serialized)
+struct SearchKeyboardTests {
+
+    @Test func clearSearchClearsThenReportsEmpty() async {
+        let vm = await loadedVM(orderedGames(3))
+        vm.searchText = "foo"
+        #expect(vm.clearSearch() == true)          // cleared, stays focused
+        #expect(vm.searchText.isEmpty)
+        #expect(vm.clearSearch() == false)         // already empty → caller unfocuses
+    }
+
+    @Test func downArrowSelectsFirstAndFocusesGrid() async {
+        let vm = await loadedVM(orderedGames(3))
+        let before = vm.gridFocusRequests
+        vm.focusGridFromSearch()
+        #expect(vm.selectedGameIDs == [1])
+        #expect(vm.gridFocusRequests == before + 1)
+    }
+
+    @Test func returnOpensInspectorOnFirstResult() async {
+        let vm = await loadedVM(orderedGames(3))
+        vm.openFirstResult()
+        #expect(vm.selectedGameIDs == [1])
+        #expect(vm.inspectorPresented)
+    }
+
+    @Test func searchAllBroadensScopeKeepingQuery() async {
+        let vm = await loadedVM(orderedGames(3))
+        vm.select(.played)
+        var f = vm.filter; f.searchText = "gam"; vm.setFilter(f)
+        vm.searchAllScope()
+        #expect(vm.selection == .all)
+        #expect(vm.filter.searchText == "gam")     // query preserved across the escape
+    }
+
+    @Test func quickAddPrefillTrimmedAndConsumedOnce() async {
+        let vm = await loadedVM(orderedGames(1))
+        vm.requestQuickAdd(prefill: "  Bloodborne ")
+        #expect(vm.quickAddPresented)
+        #expect(vm.consumeQuickAddPrefill() == "Bloodborne")
+        #expect(vm.consumeQuickAddPrefill() == nil)
+    }
+}
+
+@MainActor
+@Suite(.serialized)
+struct SortPersistenceTests {
+
+    @Test func setSortResetsDirectionToTheFieldDefault() {
+        let vm = LibraryViewModel(dataSource: PreviewLibraryDataSource.empty,
+                                  sortPreferences: InMemorySortPreferences())
+        vm.setSort(.playtime)
+        #expect(vm.filter.sort == .playtime)
+        #expect(vm.filter.ascending == false)          // most-played first
+        vm.setSort(.title)
+        #expect(vm.filter.ascending == true)           // A→Z
+    }
+
+    @Test func sortPersistsPerSelectionAndSurvivesRelaunch() {
+        let prefs = InMemorySortPreferences()
+        let vm = LibraryViewModel(dataSource: PreviewLibraryDataSource.empty, sortPreferences: prefs)
+
+        vm.setSort(.year)                               // All → year
+        vm.select(.owned)
+        #expect(vm.filter.sort == .title)               // a fresh selection defaults to title
+        vm.setSort(.playtime)                           // Owned → playtime desc
+
+        vm.select(.all)
+        #expect(vm.filter.sort == .year)                // restored
+        vm.select(.owned)
+        #expect(vm.filter.sort == .playtime)
+        #expect(vm.filter.ascending == false)
+
+        // A new model over the same store restores the last "All" sort at launch.
+        let relaunched = LibraryViewModel(dataSource: PreviewLibraryDataSource.empty, sortPreferences: prefs)
+        #expect(relaunched.filter.sort == .year)
+    }
+}
+
 @MainActor
 struct SidebarCountsTests {
 
@@ -196,5 +375,37 @@ struct GameCellModelTests {
         box.update(g2)
         #expect(box.summary.title == "B")
         #expect(box.id == 1)
+    }
+
+    /// The per-cell box design (PLAN §9): re-yielding the games array reuses the
+    /// same box instances, and changing one row leaves every *other* cell's box
+    /// untouched (so a tick re-evaluates one cell, not the whole grid).
+    @MainActor
+    @Test func applyGamesReusesBoxesAndTouchesOnlyChangedCells() async {
+        let vm = await loadedVM(orderedGames(4))
+        let boxes = (1...4).map { vm.cellModel(for: Int64($0)) }
+        let summariesBefore = boxes.map(\.summary)
+
+        // Re-yield the identical rows → same instances, nothing mutated.
+        vm.applyGames(vm.games)
+        for (i, id) in (1...4).enumerated() {
+            #expect(vm.cellModel(for: Int64(id)) === boxes[i])
+            #expect(vm.cellModel(for: Int64(id)).summary == summariesBefore[i])
+        }
+
+        // Change only game 3's tier.
+        var rows = vm.games
+        let idx = rows.firstIndex { $0.id == 3 }!
+        rows[idx].tierLetter = "S"; rows[idx].tierID = 1
+        vm.applyGames(rows)
+
+        for (i, id) in (1...4).enumerated() {
+            #expect(vm.cellModel(for: Int64(id)) === boxes[i])          // never re-homed
+            if id == 3 {
+                #expect(vm.cellModel(for: 3).summary.tierLetter == "S") // the one changed cell
+            } else {
+                #expect(vm.cellModel(for: Int64(id)).summary == summariesBefore[i])  // untouched
+            }
+        }
     }
 }

@@ -69,18 +69,11 @@ struct LibraryGridView: View {
             .focusEffectDisabled()
             .focused($gridFocused)
             .onAppear { gridFocused = true }
-            .onKeyPress(.leftArrow) { scroll(proxy, vm.moveSelection(by: -1)); return .handled }
-            .onKeyPress(.rightArrow) { scroll(proxy, vm.moveSelection(by: 1)); return .handled }
-            .onKeyPress(.upArrow) { scroll(proxy, vm.moveSelection(by: -columnCount)); return .handled }
-            .onKeyPress(.downArrow) { scroll(proxy, vm.moveSelection(by: columnCount)); return .handled }
-            .onKeyPress(.return) { vm.showInspector(); return .handled }
-            .onKeyPress(.space) { vm.showInspector(); return .handled }
-            .onKeyPress(.delete) {
-                guard !vm.selectedGameIDs.isEmpty else { return .ignored }
-                vm.actions?.requestDelete(ids: vm.selectedGameIDs)
-                return .handled
+            .onChange(of: vm.gridFocusRequests) { _, _ in
+                gridFocused = true
+                if let id = vm.selectedGameIDs.first { proxy.scrollTo(id, anchor: .center) }
             }
-            .onKeyPress(action: handleCharacter)
+            .onKeyPress(action: { handleKeyPress($0, proxy: proxy) })
         }
     }
 
@@ -89,15 +82,37 @@ struct LibraryGridView: View {
         withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id, anchor: .center) }
     }
 
-    private func handleCharacter(_ press: KeyPress) -> KeyPress.Result {
+    /// One handler for the grid: arrows (⇧ extends the selection), ↩/space open the
+    /// inspector, ⌫ deletes the selection, ⌘A selects all, and any printable
+    /// character routes to type-to-select vs the tier/ownership keys.
+    private func handleKeyPress(_ press: KeyPress, proxy: ScrollViewProxy) -> KeyPress.Result {
+        let shift = press.modifiers.contains(.shift)
+        switch press.key {
+        case .leftArrow:
+            scroll(proxy, shift ? vm.extendSelection(by: -1) : vm.moveSelection(by: -1)); return .handled
+        case .rightArrow:
+            scroll(proxy, shift ? vm.extendSelection(by: 1) : vm.moveSelection(by: 1)); return .handled
+        case .upArrow:
+            scroll(proxy, shift ? vm.extendSelection(by: -columnCount) : vm.moveSelection(by: -columnCount)); return .handled
+        case .downArrow:
+            scroll(proxy, shift ? vm.extendSelection(by: columnCount) : vm.moveSelection(by: columnCount)); return .handled
+        case .return:
+            vm.showInspector(); return .handled
+        case .space:
+            vm.showInspector(); return .handled
+        case .delete:
+            guard !vm.selectedGameIDs.isEmpty else { return .ignored }
+            vm.actions?.requestDelete(ids: vm.selectedGameIDs); return .handled
+        default:
+            break
+        }
         if press.modifiers.contains(.command) {
             if press.characters.lowercased() == "a" { vm.selectAll(); return .handled }
             return .ignored
         }
-        guard let ch = press.characters.first, let key = LibraryKey(character: ch) else {
-            return .ignored
-        }
-        return vm.handleKey(key) ? .handled : .ignored
+        guard let ch = press.characters.first, ch.isLetter || ch.isNumber else { return .ignored }
+        if let scrollID = vm.handleGridCharacter(ch) { scroll(proxy, scrollID) }
+        return .handled
     }
 
     // MARK: Context menu skeleton (closures wired next wave)
@@ -142,16 +157,28 @@ struct LibraryGridView: View {
     }
 
     private var emptyResultState: some View {
-        ContentUnavailableView {
+        let query = vm.filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ContentUnavailableView {
             Label("No matches", systemImage: "magnifyingglass")
         } description: {
             Text(vm.filter.hasActiveFacets
                  ? "No games match the current search and filters."
                  : "Nothing in this list yet.")
         } actions: {
-            if vm.filter.hasActiveFacets {
-                Button("Clear filters") {
-                    vm.setFilter(LibraryFilter(scope: vm.selection))
+            VStack(spacing: 8) {
+                if !query.isEmpty {
+                    Button {
+                        vm.requestQuickAdd(prefill: query)
+                    } label: {
+                        Label("Add “\(query)” with Quick Add (⌘N)", systemImage: "plus")
+                    }
+                }
+                // One-click escape from a scoped search to the whole library.
+                if vm.selection != .all, !query.isEmpty {
+                    Button("Search all games") { vm.searchAllScope() }
+                }
+                if vm.filter.hasActiveFacets {
+                    Button("Clear filters") { vm.clearAllFilters() }
                 }
             }
         }

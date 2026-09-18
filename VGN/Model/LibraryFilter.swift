@@ -50,7 +50,14 @@ struct LibraryFilter: Hashable, Sendable {
     var formats: Set<ProductFormat>
 
     /// A single explicit platform facet (slug), independent of the scope.
+    /// (Legacy single facet; the multi-select facet below is `platforms`.)
     var platform: String?
+
+    /// Explicit platform multi-select facet (slugs), usable from any scope
+    /// including "All" (PLAN §8). Empty = no constraint; a game matches if it is on
+    /// **any** of these platforms (OR within the kind). The sidebar platform
+    /// selection stays the primary way to scope; this is the toolbar filter.
+    var platforms: Set<String>
 
     /// The smart-list / platform scope selected in the sidebar.
     var scope: SidebarSelection
@@ -66,6 +73,7 @@ struct LibraryFilter: Hashable, Sendable {
         statuses: Set<PlayStatus> = [],
         formats: Set<ProductFormat> = [],
         platform: String? = nil,
+        platforms: Set<String> = [],
         scope: SidebarSelection = .all,
         sort: LibrarySort = .title,
         ascending: Bool = true
@@ -77,6 +85,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.statuses = statuses
         self.formats = formats
         self.platform = platform
+        self.platforms = platforms
         self.scope = scope
         self.sort = sort
         self.ascending = ascending
@@ -86,6 +95,7 @@ struct LibraryFilter: Hashable, Sendable {
     /// whether to show "clear filters", empty-state copy, etc.).
     var hasActiveFacets: Bool {
         !searchText.isEmpty || !genres.isEmpty || !decades.isEmpty
-            || !tierIDs.isEmpty || !statuses.isEmpty || !formats.isEmpty || platform != nil
+            || !tierIDs.isEmpty || !statuses.isEmpty || !formats.isEmpty
+            || platform != nil || !platforms.isEmpty
     }
 }

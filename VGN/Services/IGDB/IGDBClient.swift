@@ -55,13 +55,14 @@ actor IGDBClient {
         platformIGDBIDs: [Int]? = nil,
         limit: Int = 12
     ) async throws -> [IGDBSearchResult] {
-        var query = IGDBQuery()
-            .search(text)
-            .fields(IGDBFields.search)
-            .limit(limit)
-        if let platformIGDBIDs, !platformIGDBIDs.isEmpty {
-            query = query.filter("platforms = \(IGDBQuery.idSet(platformIGDBIDs))")
-        }
+        try await runGamesSearch(IGDBAutocomplete.searchQuery(text, platformIGDBIDs: platformIGDBIDs, limit: limit))
+    }
+
+    /// Run a `/v4/games` query that yields search-result DTOs, populating the
+    /// catalogue cache. The single entry point shared by ``searchGames`` and the
+    /// Quick Add autocomplete (`IGDBClient+Autocomplete.swift`), so every path uses
+    /// the one pipeline — token, rate-limit, retry and the 401 refresh.
+    func runGamesSearch(_ query: IGDBQuery) async throws -> [IGDBSearchResult] {
         let data = try await requestData(endpoint: "games", body: query.build())
         await populateCache(from: data)
         let dtos = try decode([IGDBGameDTO].self, from: data)

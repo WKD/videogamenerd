@@ -44,6 +44,15 @@ final class LibraryViewModel {
     }
     /// The row shift-selection extends from.
     private(set) var selectionAnchor: Int64?
+    /// The moving end of a shift-arrow / shift-click range (pivots on the anchor).
+    private var selectionCursor: Int64?
+
+    // Type-to-select state (PLAN §8). See `handleGridCharacter`.
+    private var typeBuffer: String = ""
+    private var lastTypeAt: Date?
+    /// How long after a type-to-select keystroke further letters keep extending the
+    /// buffer (and tier keys stay suppressed). ~1 s.
+    let typeSelectWindow: TimeInterval = 1.0
 
     /// Minimum grid cell width in points, driven by the toolbar size slider.
     var gridCellWidth: Double = 150
@@ -66,10 +75,16 @@ final class LibraryViewModel {
     var quickAddPresented: Bool = false
     /// Bumped to ask the view to move keyboard focus into the search field (⌘F).
     private(set) var searchFocusRequests: Int = 0
+    /// Bumped to ask the grid to take keyboard focus (↓ from the search field).
+    private(set) var gridFocusRequests: Int = 0
+    /// A query to prefill Quick Add with (empty-result "Add … with Quick Add").
+    private var quickAddPrefill: String?
 
     // MARK: Seams
     let dataSource: any LibraryDataSource
     let coverLoader: any CoverLoading
+    /// Per-sidebar-selection sort persistence (PLAN §8).
+    private let sortPreferences: any SortPreferenceStoring
 
     /// The write-orchestration object (tier/owned/played/status/playtime/delete,
     /// banners, confirmations, undo). Nil in previews/tests that drive the
@@ -90,6 +105,9 @@ final class LibraryViewModel {
     var onRefreshMetadata: (Int64) -> Void = { _ in }
     /// Drop-an-image-to-set-cover (wired by the app to the cover store + store write).
     var onImportCover: (Int64, URL) -> Void = { _, _ in }
+    /// Inspector "Remove custom cover" — clears the hand-picked cover + marker and
+    /// re-enqueues the cover job (wired by the app).
+    var onRemoveCover: (Int64) -> Void = { _ in }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
@@ -126,15 +144,27 @@ final class LibraryViewModel {
     /// when the same single game stays selected).
     private var observedDetailID: Int64?
 
+    /// Clock for the type-to-select window (injectable so tests can control it).
+    private let now: () -> Date
+
     init(
         dataSource: any LibraryDataSource,
         coverLoader: any CoverLoading = NoopCoverLoader(),
-        selection: SidebarSelection = .all
+        selection: SidebarSelection = .all,
+        sortPreferences: any SortPreferenceStoring = UserDefaultsSortPreferences(),
+        now: @escaping () -> Date = { Date() }
     ) {
         self.dataSource = dataSource
         self.coverLoader = coverLoader
+        self.sortPreferences = sortPreferences
+        self.now = now
         self.selection = selection
-        self.filter = LibraryFilter(scope: selection)
+        let initialSort = sortPreferences.sortSetting(for: selection.id)
+        self.filter = LibraryFilter(
+            scope: selection,
+            sort: initialSort?.sort ?? .title,
+            ascending: initialSort?.ascending ?? LibrarySort.title.defaultAscending
+        )
         // Default intent hooks log so the keyboard/context-menu wiring is
         // observable in DEBUG without any DB. Replaced by the app next wave.
         self.onSetTier = { ids, letter in
@@ -269,8 +299,11 @@ final class LibraryViewModel {
         selection = newValue
         var f = filter
         f.scope = newValue
-        // Scope change clears the independent platform facet and text so the
-        // new list starts clean (matches romlord's behaviour).
+        // Restore this selection's persisted sort (PLAN §8: "sort … persisted per
+        // sidebar selection"); fall back to title / its default direction.
+        let setting = sortPreferences.sortSetting(for: newValue.id)
+        f.sort = setting?.sort ?? .title
+        f.ascending = setting?.ascending ?? (setting?.sort ?? .title).defaultAscending
         filter = f
         selectedGameIDs.removeAll()
         selectionAnchor = nil
@@ -286,11 +319,21 @@ final class LibraryViewModel {
         }
     }
 
+    /// True when the sidebar has Play Next selected (grid is replaced by the
+    /// recommendation view — a placeholder until a later wave, PLAN §7b).
+    var isPlayNextSelection: Bool { selection == .playNext }
+
     // MARK: Filter
 
     func setFilter(_ new: LibraryFilter) {
         guard new != filter else { return }
+        let sortChanged = new.sort != filter.sort || new.ascending != filter.ascending
         filter = new
+        // Persist the sort choice for the current selection (PLAN §8).
+        if sortChanged {
+            sortPreferences.setSortSetting(
+                SortSetting(sort: new.sort, ascending: new.ascending), for: selection.id)
+        }
         // Keep the search field in sync when the filter's text is set
         // programmatically (e.g. "Clear filters"). The guard in the didSet
         // prevents a commit loop (text already equals the filter).
@@ -313,6 +356,39 @@ final class LibraryViewModel {
         }
     }
 
+    // MARK: Filter chips (PLAN §8)
+
+    /// The active-filter chips shown under the toolbar, grouped by kind.
+    var filterChips: [FilterChip] {
+        LibraryFilterChips.chips(for: filter, tiers: tiers, platformShort: PlatformLabels.short)
+    }
+
+    /// Remove one chip's value from the filter (re-runs the query).
+    func removeFilterChip(_ chip: FilterChip) {
+        setFilter(LibraryFilterChips.removing(chip, from: filter))
+    }
+
+    /// Clear every active facet (search included), keeping scope + sort.
+    func clearAllFilters() {
+        setFilter(LibraryFilterChips.cleared(filter))
+    }
+
+    /// Choose the sort field. Changing the field resets the direction to that
+    /// field's natural default (e.g. Playtime → most-played first); the direction
+    /// toggle then overrides it. Both persist per selection.
+    func setSort(_ sort: LibrarySort) {
+        guard sort != filter.sort else { return }
+        var f = filter
+        f.sort = sort
+        f.ascending = sort.defaultAscending
+        setFilter(f)
+    }
+
+    /// Binding for the sort Picker (resets direction to the field's default).
+    var sortBinding: Binding<LibrarySort> {
+        Binding(get: { self.filter.sort }, set: { self.setSort($0) })
+    }
+
     /// A binding to one field of the filter that re-runs the query on change.
     func filterBinding<T>(_ keyPath: WritableKeyPath<LibraryFilter, T>) -> Binding<T> {
         Binding(
@@ -332,6 +408,7 @@ final class LibraryViewModel {
     func selectOnly(_ id: Int64) {
         selectedGameIDs = [id]
         selectionAnchor = id
+        selectionCursor = id
     }
 
     /// ⌘-click: toggle one row's membership.
@@ -353,7 +430,24 @@ final class LibraryViewModel {
         }
         let range = a <= b ? a...b : b...a
         selectedGameIDs = Set(games[range].map(\.id))
+        selectionCursor = id
         // Anchor stays put so further shift-clicks pivot around it.
+    }
+
+    /// ⇧-arrow: extend the selection by `delta` rows from the moving cursor,
+    /// pivoting on the anchor. Returns the new cursor id (for scroll-to).
+    @discardableResult
+    func extendSelection(by delta: Int) -> Int64? {
+        guard !games.isEmpty else { return nil }
+        let anchorIdx = selectionAnchor.flatMap(index(of:)) ?? 0
+        let cursorIdx = (selectionCursor ?? selectionAnchor).flatMap(index(of:)) ?? anchorIdx
+        let nextIdx = min(max(cursorIdx + delta, 0), games.count - 1)
+        let cursorID = games[nextIdx].id
+        selectionCursor = cursorID
+        let lo = min(anchorIdx, nextIdx), hi = max(anchorIdx, nextIdx)
+        selectedGameIDs = Set(games[lo...hi].map(\.id))
+        if selectionAnchor == nil { selectionAnchor = games[anchorIdx].id }
+        return cursorID
     }
 
     /// Arrow-key move by `delta` rows in the current ordering; returns the newly
@@ -382,6 +476,71 @@ final class LibraryViewModel {
     func clearSelection() {
         selectedGameIDs.removeAll()
         selectionAnchor = nil
+        selectionCursor = nil
+    }
+
+    // MARK: Type-to-select vs tier keys (PLAN §8)
+
+    /// Handle a printable character pressed over the grid. Returns an id to
+    /// scroll to (a type-to-select jump) or nil (a tier/ownership action, or
+    /// nothing). Documented rule for the S/A/B/C/D/F/O/P/0 collision:
+    ///
+    /// - While a **type-to-select buffer is active** (a letter was typed within
+    ///   `typeSelectWindow`), every further character — *including* the tier
+    ///   letters — extends the buffer and jumps. So "ze" always finds *Zelda*.
+    /// - When the buffer is **inactive** and the character is a **tier/ownership
+    ///   key** *and a selection exists*, it performs that action (PLAN §7/§8:
+    ///   "select game(s) → press S…F"). It does **not** start a buffer.
+    /// - Otherwise (buffer inactive, and either not a tier key or nothing is
+    ///   selected) it **starts** a type-to-select buffer and jumps — so with no
+    ///   selection you can still jump to "Sonic" by typing.
+    ///
+    /// Trade-off (documented): to type-to-select a title that starts with a tier
+    /// letter while a selection is active, deselect first (Esc / click empty).
+    @discardableResult
+    func handleGridCharacter(_ character: Character) -> Int64? {
+        guard !searchFieldFocused else { return nil }
+        guard character.isLetter || character.isNumber else { return nil }
+
+        if isTypeBufferActive() {
+            return appendTypeSelect(character)
+        }
+        // Buffer inactive: a tier/ownership key with a selection wins.
+        if !selectedGameIDs.isEmpty, let key = LibraryKey(character: character) {
+            _ = handleKey(key)
+            return nil
+        }
+        return startTypeSelect(character)
+    }
+
+    /// Test/inspection: whether a type-to-select buffer is currently active.
+    func isTypeBufferActive() -> Bool {
+        guard let last = lastTypeAt else { return false }
+        return now().timeIntervalSince(last) < typeSelectWindow
+    }
+
+    private func startTypeSelect(_ ch: Character) -> Int64? {
+        typeBuffer = String(ch)
+        lastTypeAt = now()
+        return jumpToBuffer()
+    }
+
+    private func appendTypeSelect(_ ch: Character) -> Int64? {
+        typeBuffer.append(ch)
+        lastTypeAt = now()
+        return jumpToBuffer()
+    }
+
+    /// Select the first game whose title matches the buffer prefix (accent- and
+    /// case-insensitive), returning its id for scroll-to.
+    private func jumpToBuffer() -> Int64? {
+        let needle = TitleNormalizer.normalize(typeBuffer, level: .fold)
+        guard !needle.isEmpty else { return nil }
+        guard let match = games.first(where: {
+            TitleNormalizer.normalize($0.title, level: .fold).hasPrefix(needle)
+        }) else { return nil }
+        selectOnly(match.id)
+        return match.id
     }
 
     /// The single selected game, or nil when zero or many are selected.
@@ -427,11 +586,61 @@ final class LibraryViewModel {
     func requestSearchFocus() { searchFocusRequests &+= 1 }
     func requestQuickAdd() { quickAddPresented = true; onQuickAdd() }
 
+    /// Open Quick Add prefilled with `prefill` (empty-result affordance, PLAN §8).
+    func requestQuickAdd(prefill: String?) {
+        quickAddPrefill = prefill?.trimmingCharacters(in: .whitespacesAndNewlines)
+        requestQuickAdd()
+    }
+
+    /// The pending Quick Add prefill, consumed once by the presenting view.
+    func consumeQuickAddPrefill() -> String? {
+        defer { quickAddPrefill = nil }
+        return (quickAddPrefill?.isEmpty == false) ? quickAddPrefill : nil
+    }
+
+    // MARK: Search keyboard flow (PLAN §8)
+
+    /// `esc` in the search field: clear a non-empty query (return true, stays
+    /// focused), else the caller unfocuses.
+    @discardableResult
+    func clearSearch() -> Bool {
+        guard !searchText.isEmpty else { return false }
+        searchText = ""
+        return true
+    }
+
+    /// The first row in the current ordering (for ↩ / ↓ from the search field).
+    var firstResult: GameSummary? { games.first }
+
+    /// ↓ from the search field: move keyboard focus into the grid, selecting the
+    /// first result.
+    func focusGridFromSearch() {
+        if let first = firstResult { selectOnly(first.id) }
+        gridFocusRequests &+= 1
+    }
+
+    /// ↩ in the search field: open the inspector on the single/first result.
+    func openFirstResult() {
+        guard let first = firstResult else { return }
+        selectOnly(first.id)
+        showInspector()
+    }
+
+    /// "Search all" escape: broaden a scoped search to the whole library, keeping
+    /// the query and other facets (PLAN §8).
+    func searchAllScope() {
+        guard selection != .all else { return }
+        select(.all)
+    }
+
     /// Inspector "Refresh metadata" — re-fetch everything for one game (PLAN §6.1).
     func refreshMetadata(gameID: Int64) { onRefreshMetadata(gameID) }
 
     /// Manual cover from a dropped/chosen image file (PLAN §5.2 point 4).
     func importCover(gameID: Int64, from url: URL) { onImportCover(gameID, url) }
+
+    /// Remove a hand-picked cover and let enrichment fetch one again (PLAN §5.2).
+    func removeCustomCover(gameID: Int64) { onRemoveCover(gameID) }
 
     // MARK: Empty states
     var isEmptyLibrary: Bool { counts.all == 0 }

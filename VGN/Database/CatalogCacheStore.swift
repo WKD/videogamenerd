@@ -10,7 +10,7 @@ import GRDB
 /// `staleAfter`, 30 days by default) so a stale row transparently forces a refetch;
 /// ``rawEntry(forID:)`` ignores staleness for callers that want whatever is cached
 /// (e.g. offline autocomplete). `Sendable` — GRDB owns the synchronisation.
-struct CatalogCacheStore: CatalogCaching {
+struct CatalogCacheStore: CatalogCaching, CatalogTitleSearching {
     let database: AppDatabase
     var dbWriter: any DatabaseWriter { database.dbWriter }
     var dbReader: any DatabaseReader { database.dbWriter }
@@ -19,14 +19,21 @@ struct CatalogCacheStore: CatalogCaching {
     let staleAfter: TimeInterval
     let now: @Sendable () -> Date
 
+    /// The in-process title index (shared reference) that powers instant/offline
+    /// Quick Add title search (PLAN §6.1). `nil` disables title search (tests that
+    /// don't need it); writes still keep a present index warm.
+    let titleIndex: CatalogTitleIndex?
+
     init(
         _ database: AppDatabase,
         staleAfter: TimeInterval = 30 * 24 * 60 * 60,
-        now: @Sendable @escaping () -> Date = { Date() }
+        now: @Sendable @escaping () -> Date = { Date() },
+        titleIndex: CatalogTitleIndex? = nil
     ) {
         self.database = database
         self.staleAfter = staleAfter
         self.now = now
+        self.titleIndex = titleIndex
     }
 
     // MARK: - CatalogCaching
@@ -39,6 +46,7 @@ struct CatalogCacheStore: CatalogCaching {
 
     func store(_ entry: CatalogCacheEntry) async {
         try? await dbWriter.write { db in try Self.upsert(entry, db) }
+        await titleIndex?.upsert([entry])
     }
 
     func store(_ entries: [CatalogCacheEntry]) async {
@@ -46,6 +54,15 @@ struct CatalogCacheStore: CatalogCaching {
         try? await dbWriter.write { db in
             for entry in entries { try Self.upsert(entry, db) }
         }
+        await titleIndex?.upsert(entries)
+    }
+
+    // MARK: - CatalogTitleSearching (instant/offline Quick Add title search)
+
+    func searchTitles(_ text: String, limit: Int) async -> [IGDBSearchResult] {
+        guard let titleIndex else { return [] }
+        await titleIndex.loadIfNeeded(reader: dbReader)
+        return await titleIndex.search(text, limit: limit)
     }
 
     // MARK: - Extras (enrichment / search)

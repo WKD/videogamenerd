@@ -339,6 +339,22 @@ struct LibraryStore: Sendable {
         }
     }
 
+    /// Remove a hand-picked cover (inspector "Remove custom cover"): clears
+    /// `cover_file` and drops the `cover` user-edited marker, so background
+    /// enrichment is free to fetch one again from the provider chain (PLAN §5.2).
+    func clearUserCover(gameID: Int64) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: "UPDATE games SET cover_file = NULL, updated_at = ? WHERE id = ?",
+                           arguments: [Date(), gameID])
+            let current = try Self.userEditedFields(gameID, db)
+            let updated = current.removing(.cover)
+            if updated != current {
+                try db.execute(sql: "UPDATE games SET user_edited = ? WHERE id = ?",
+                               arguments: [updated.raw, gameID])
+            }
+        }
+    }
+
     /// Edit a game's title by hand — updates `title` + `sort_title` and marks the
     /// `title` field user-edited (protected from enrichment).
     func editTitle(gameID: Int64, _ title: String) async throws {

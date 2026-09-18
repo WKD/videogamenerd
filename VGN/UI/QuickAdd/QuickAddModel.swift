@@ -142,6 +142,9 @@ struct QuickAddConfirmation: Sendable, Equatable {
 final class QuickAddModel {
     // Seams
     private let catalog: any CatalogSearching
+    /// Instant/offline catalogue-cache title search (PLAN §6.1). Optional — nil
+    /// disables the cached rows (tests / no services).
+    private let catalogCache: (any CatalogTitleSearching)?
     private let library: any LibraryAdding
     private let preferences: any QuickAddPreferenceStoring
     private let allPlatforms: [PlatformInfo]
@@ -179,16 +182,24 @@ final class QuickAddModel {
 
     // Internal search state
     private var catalogResults: [IGDBSearchResult] = []
+    /// Instant catalogue-cache hits shown before the debounced live results.
+    private var cachedResults: [IGDBSearchResult] = []
+    /// True once a live IGDB response (with credentials) has arrived for the
+    /// current query — then the live results become the source of truth and
+    /// replace the cached rows for shared ids (PLAN §6.1).
+    private var liveArrived = false
     private var localMatches: [QuickAddLibraryMatch] = []
     /// Bumped on every query change; `applyRemote`/`applyLocal` drop a response
     /// carrying an older generation (stale-drop). `internal` read for tests.
     private(set) var searchGeneration = 0
     private var localTask: Task<Void, Never>?
+    private var cacheTask: Task<Void, Never>?
     private var remoteTask: Task<Void, Never>?
     private var commitTask: Task<Void, Never>?
 
     init(
         catalog: any CatalogSearching,
+        catalogCache: (any CatalogTitleSearching)? = nil,
         library: any LibraryAdding,
         preferences: any QuickAddPreferenceStoring = UserDefaultsQuickAddPreferences(),
         platforms: [PlatformInfo] = PlatformLabels.all,
@@ -198,6 +209,7 @@ final class QuickAddModel {
         platformGeneration: @escaping @Sendable (String) -> Int? = { PlatformLabels.info($0)?.generation }
     ) {
         self.catalog = catalog
+        self.catalogCache = catalogCache
         self.library = library
         self.preferences = preferences
         self.allPlatforms = platforms
@@ -221,11 +233,13 @@ final class QuickAddModel {
     }
 
     private func reset() {
-        localTask?.cancel(); remoteTask?.cancel(); commitTask?.cancel()
+        localTask?.cancel(); cacheTask?.cancel(); remoteTask?.cancel(); commitTask?.cancel()
         searchGeneration &+= 1
         query = ""
         results = []
         catalogResults = []
+        cachedResults = []
+        liveArrived = false
         localMatches = []
         selectedIndex = 0
         platformOverride = nil
@@ -244,6 +258,7 @@ final class QuickAddModel {
         let text = query
         selectedIndex = 0
         platformOverride = nil
+        liveArrived = false
 
         // Local library: instant (PLAN §6.1 "local library … instantly").
         localTask?.cancel()
@@ -255,13 +270,26 @@ final class QuickAddModel {
 
         // Remote: debounced, previous cancelled, ≥ 3 chars.
         remoteTask?.cancel()
+        cacheTask?.cancel()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 3 else {
             catalogResults = []
+            cachedResults = []
             isSearchingRemote = false
             rebuildResults()
             return
         }
+
+        // Catalogue cache: instant, offline (PLAN §6.1 "catalog cache instantly").
+        // Shown before the debounced live results; live replaces it per id later.
+        if let catalogCache {
+            cacheTask = Task { [weak self] in
+                guard let self else { return }
+                let hits = await catalogCache.searchTitles(text, limit: 12)
+                self.applyCached(hits, generation: generation)
+            }
+        }
+
         isSearchingRemote = true
         remoteTask = Task { [weak self] in
             guard let self else { return }
@@ -293,8 +321,18 @@ final class QuickAddModel {
     func applyRemote(_ results: [IGDBSearchResult], generation: Int, credentials: Bool) {
         guard generation == searchGeneration else { return }
         catalogResults = results
+        // A live response (with credentials) arrived → it now owns the catalog rows.
+        // Without credentials (offline/not configured) the cached rows stay.
+        liveArrived = credentials
         credentialsAvailable = credentials
         isSearchingRemote = false
+        rebuildResults()
+    }
+
+    /// Guarded apply of instant catalogue-cache hits.
+    func applyCached(_ results: [IGDBSearchResult], generation: Int) {
+        guard generation == searchGeneration else { return }
+        cachedResults = results
         rebuildResults()
     }
 
@@ -306,11 +344,31 @@ final class QuickAddModel {
     }
 
     private func rebuildResults() {
-        results = Self.buildResults(catalog: catalogResults, local: localMatches)
+        let catalog = Self.mergeCatalog(
+            cached: cachedResults, live: catalogResults, liveArrived: liveArrived, limit: 12)
+        results = Self.buildResults(catalog: catalog, local: localMatches)
         if selectedIndex >= results.count { selectedIndex = max(0, results.count - 1) }
         if let sel = selectedResult, let ov = platformOverride, !sel.platformSlugs.contains(ov) {
             platformOverride = nil
         }
+    }
+
+    /// Merge instant cached hits with the (later) live hits (pure, unit-tested).
+    /// Before the live response arrives, the cached rows are shown as-is. Once it
+    /// arrives, the live results are authoritative and lead — replacing a cached
+    /// row for the same id (no duplicate, no jump) — and any cached-only ids are
+    /// kept appended after, capped to `limit`.
+    static func mergeCatalog(
+        cached: [IGDBSearchResult], live: [IGDBSearchResult], liveArrived: Bool, limit: Int
+    ) -> [IGDBSearchResult] {
+        guard liveArrived else { return Array(cached.prefix(limit)) }
+        var seen = Set(live.map(\.id))
+        var out = live
+        for c in cached where !seen.contains(c.id) {
+            seen.insert(c.id)
+            out.append(c)
+        }
+        return Array(out.prefix(limit))
     }
 
     /// Merge catalogue hits with local matches (pure, unit-tested). Catalogue rows

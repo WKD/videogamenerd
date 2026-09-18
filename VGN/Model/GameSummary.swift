@@ -88,7 +88,7 @@ extension GameSummary {
             id: 3, title: "Metal Gear Solid 3: Snake Eater", year: 2004,
             tierID: 2, tierLetter: "A", tierColorHex: "#FF9500", rankKey: 1500,
             played: true, owned: true, isCompilationMember: true,
-            platformIDs: ["ps2"], status: .finished
+            platformIDs: ["ps2"], status: .finished, hasROM: true
         ),
         GameSummary(
             id: 4, title: "Broken Sword", year: 1996,

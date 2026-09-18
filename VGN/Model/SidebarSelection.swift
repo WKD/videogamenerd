@@ -15,6 +15,9 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     case backlog
     case unranked
 
+    // Play Next recommendation (PLAN §7b) — LIBRARY section, after Unranked.
+    case playNext
+
     // Ranking views (PLAN §7)
     case tierBoard
     case theTop
@@ -31,6 +34,7 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
         case .played: return "played"
         case .backlog: return "backlog"
         case .unranked: return "unranked"
+        case .playNext: return "playNext"
         case .tierBoard: return "tierBoard"
         case .theTop: return "theTop"
         case .duel: return "duel"
@@ -39,7 +43,7 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     }
 
     /// The smart lists that appear under the "Library" header, in order.
-    static let smartLists: [SidebarSelection] = [.all, .owned, .played, .backlog, .unranked]
+    static let smartLists: [SidebarSelection] = [.all, .owned, .played, .backlog, .unranked, .playNext]
 
     /// The ranking destinations under the "Rankings" header, in order.
     static let rankingViews: [SidebarSelection] = [.tierBoard, .theTop, .duel]

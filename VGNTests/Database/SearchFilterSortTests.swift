@@ -121,6 +121,45 @@ import GRDB
 
     // MARK: - FTS
 
+    @Test func platformMultiFilterORsFromAnyScope() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        // From "All", platform ∈ {pc, snes} → Broken Sword (pc) + Chrono Trigger (snes).
+        #expect(try await titles(store, LibraryFilter(platforms: ["pc", "snes"]))
+            == ["Broken Sword", "Chrono Trigger"])
+        // A single-slug set narrows like the legacy platform facet.
+        #expect(try await titles(store, LibraryFilter(platforms: ["snes"])) == ["Chrono Trigger"])
+        // AND across kinds: platform ∈ {ps4} AND tier S.
+        #expect(try await titles(store, LibraryFilter(tierIDs: [1], platforms: ["ps4"])) == ["Bloodborne"])
+    }
+
+    @Test func formatFilterMatchesOwnedProductsByFormat() async throws {
+        let store = try await TestDB.makeStore()
+        let ids = try await buildLibrary(store)       // all physical single products
+        _ = try await store.addCopy(gameID: ids["Chrono Trigger"]!, platformID: "snes", format: .rom)
+        _ = try await store.addCopy(gameID: ids["Journey"]!, platformID: "ps4", format: .digital)
+        #expect(try await titles(store, LibraryFilter(formats: [.rom])) == ["Chrono Trigger"])
+        #expect(try await titles(store, LibraryFilter(formats: [.digital])) == ["Journey"])
+        // OR within kind.
+        #expect(try await titles(store, LibraryFilter(formats: [.rom, .digital]))
+            == ["Chrono Trigger", "Journey"])
+    }
+
+    @Test func sortIsStableOnEqualKeys() async throws {
+        let store = try await TestDB.makeStore()
+        // Two games with identical sort keys → the id tiebreak keeps a stable order.
+        let a = try await store.addGame(GameDraft(
+            title: "Twin", igdbID: 1, year: 2000, platformIDs: ["ps4"], owned: true)).gameID
+        let b = try await store.addGame(GameDraft(
+            title: "Twin", igdbID: 2, year: 2000, platformIDs: ["ps4"], owned: true)).gameID
+        let byYear = try await store.gamesOnce(filter: LibraryFilter(sort: .year)).map(\.id)
+        #expect(byYear == [a, b])                                       // ascending id tiebreak
+        // Re-fetching yields the identical order (never jitters between emissions).
+        #expect(try await store.gamesOnce(filter: LibraryFilter(sort: .year)).map(\.id) == byYear)
+        // Same for title (equal titles → id order).
+        #expect(try await store.gamesOnce(filter: LibraryFilter(sort: .title)).map(\.id) == [a, b])
+    }
+
     @Test func ftsFindsByTitlePrefixAndAltTitle() async throws {
         let store = try await TestDB.makeStore()
         _ = try await buildLibrary(store)
