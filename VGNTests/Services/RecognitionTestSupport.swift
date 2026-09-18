@@ -96,4 +96,78 @@ enum RecognitionFixtures {
         let data = try! JSONEncoder().encode(TileRecognitionResult(items: items))
         return String(decoding: data, as: UTF8.self)
     }
+
+    /// An anchored detection at a given source position (for merge tests).
+    static func anchored(
+        id: Int,
+        title: String,
+        platform: String?,
+        confidence: Double,
+        x: Int,
+        width: Int = 100,
+        tileID: Int = 0,
+        normalized: String? = nil,
+        serial: SpineSerialCode? = nil
+    ) -> AnchoredDetection {
+        AnchoredDetection(
+            id: id,
+            detection: SpineDetection(printedTitle: title, normalizedTitle: normalized, platform: platform, confidence: confidence),
+            tileID: tileID,
+            row: 0,
+            sourceRect: SourceRect(x: x, y: 0, width: width, height: 1200),
+            serialCode: serial
+        )
+    }
+
+    /// Build an `IGDBSearchResult` value for match tests.
+    static func igdb(
+        id: Int64,
+        name: String,
+        year: Int? = nil,
+        cover: String? = nil,
+        platformSlugs: [String] = [],
+        alternativeNames: [String] = [],
+        gameType: IGDBGameType = .mainGame
+    ) -> IGDBSearchResult {
+        IGDBSearchResult(
+            id: id, name: name, releaseYear: year, coverImageID: cover,
+            platformIGDBIDs: [], platformAbbreviations: [], platformSlugs: platformSlugs,
+            genres: [], alternativeNames: alternativeNames, gameType: gameType
+        )
+    }
+}
+
+// MARK: - Stubs for the pipeline
+
+/// A `ShelfRecognizer` that returns fixed anchored detections regardless of tiles.
+struct StubShelfRecognizer: ShelfRecognizer {
+    let detections: [AnchoredDetection]
+    func recognize(
+        tiles: [ShelfTile],
+        onEvent: @escaping @Sendable (ShelfRecognitionEvent) -> Void
+    ) async -> [AnchoredDetection] {
+        for tile in tiles { onEvent(.queued(tileID: tile.id, total: tiles.count)) }
+        onEvent(.running(tileID: tiles.first?.id ?? 0))
+        onEvent(.done(tileID: tiles.first?.id ?? 0, items: detections.count))
+        return detections
+    }
+}
+
+/// An `IGDBGameSearching` stub: returns canned results, recording queries and whether
+/// each was platform-constrained.
+final class StubIGDBSearcher: IGDBGameSearching, @unchecked Sendable {
+    private let lock = NSLock()
+    private let responder: @Sendable (String, [Int]?) -> [IGDBSearchResult]
+    private var _queries: [(text: String, constrained: Bool)] = []
+
+    init(responder: @escaping @Sendable (String, [Int]?) -> [IGDBSearchResult]) {
+        self.responder = responder
+    }
+
+    var queries: [(text: String, constrained: Bool)] { lock.withLock { _queries } }
+
+    func searchGames(_ text: String, platformIGDBIDs: [Int]?, limit: Int) async throws -> [IGDBSearchResult] {
+        lock.withLock { _queries.append((text, platformIGDBIDs != nil)) }
+        return responder(text, platformIGDBIDs)
+    }
 }
