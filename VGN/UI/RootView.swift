@@ -62,6 +62,10 @@ struct RootView: View {
         ZStack(alignment: .bottom) {
             if vm.isRankingSelection {
                 RankingPlaceholderView(selection: vm.selection)
+                    .environment(\.rankingLibraryFilter, vm.filter)
+                    .environment(\.rankingActions, RankingViewActions(
+                        goToDuel: { vm.select(.duel) },
+                        inspect: { id in vm.selectOnly(id); vm.showInspector() }))
             } else {
                 LibraryGridView(vm: vm)
             }
