@@ -86,7 +86,8 @@ private struct SingleGameInspector: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 InspectorCover(coverFile: detail.coverFile, title: detail.title,
-                               platformID: detail.platformIDs.first, loader: vm.coverLoader)
+                               platformID: detail.platformIDs.first, loader: vm.coverLoader,
+                               onDropCover: { url in vm.importCover(gameID: detail.id, from: url) })
                     .frame(maxWidth: .infinity)
                     .frame(height: 240)
 
@@ -96,6 +97,14 @@ private struct SingleGameInspector: View {
                         Text(String(year)).foregroundStyle(.secondary)
                     }
                 }
+
+                Button {
+                    vm.refreshMetadata(gameID: detail.id)
+                } label: {
+                    Label("Refresh metadata", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Re-fetch metadata, cover and completion times from IGDB.")
 
                 if !detail.genres.isEmpty {
                     Text(detail.genres.joined(separator: " · "))
@@ -402,7 +411,9 @@ private struct InspectorCover: View {
     let title: String
     let platformID: String?
     let loader: any CoverLoading
+    var onDropCover: (URL) -> Void = { _ in }
     @State private var image: CGImage?
+    @State private var isDropTargeted = false
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
@@ -418,6 +429,15 @@ private struct InspectorCover: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(isDropTargeted ? Color.accentColor : .clear, lineWidth: 2)
+        )
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first(where: { $0.isFileURL }) else { return false }
+            onDropCover(url)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
         .task(id: "\(coverFile ?? "")") {
             guard let coverFile else { image = nil; return }
             let px = CGSize(width: 240 * displayScale, height: 320 * displayScale)

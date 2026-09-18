@@ -86,6 +86,10 @@ final class LibraryViewModel {
     var onSetPlayed: (Set<Int64>, Bool) -> Void
     var onShowInspector: () -> Void
     var onQuickAdd: () -> Void
+    /// Inspector "Refresh metadata" (wired by the app to the enrichment coordinator).
+    var onRefreshMetadata: (Int64) -> Void = { _ in }
+    /// Drop-an-image-to-set-cover (wired by the app to the cover store + store write).
+    var onImportCover: (Int64, URL) -> Void = { _, _ in }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
@@ -422,6 +426,12 @@ final class LibraryViewModel {
     func showInspector() { inspectorPresented = true; onShowInspector() }
     func requestSearchFocus() { searchFocusRequests &+= 1 }
     func requestQuickAdd() { quickAddPresented = true; onQuickAdd() }
+
+    /// Inspector "Refresh metadata" — re-fetch everything for one game (PLAN §6.1).
+    func refreshMetadata(gameID: Int64) { onRefreshMetadata(gameID) }
+
+    /// Manual cover from a dropped/chosen image file (PLAN §5.2 point 4).
+    func importCover(gameID: Int64, from url: URL) { onImportCover(gameID, url) }
 
     // MARK: Empty states
     var isEmptyLibrary: Bool { counts.all == 0 }

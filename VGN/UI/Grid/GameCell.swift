@@ -14,8 +14,11 @@ struct GameCell: View {
     var onTap: () -> Void = {}
     var onCommandTap: () -> Void = {}
     var onShiftTap: () -> Void = {}
+    /// Dropping an image file onto the cell sets a manual cover (PLAN §5.2 pt 4).
+    var onDropCover: (URL) -> Void = { _ in }
 
     @Environment(\.displayScale) private var displayScale
+    @State private var isDropTargeted = false
 
     private var game: GameSummary { model.summary }
 
@@ -50,6 +53,15 @@ struct GameCell: View {
         .onTapGesture(perform: onTap)
         .gesture(TapGesture().modifiers(.command).onEnded(onCommandTap))
         .gesture(TapGesture().modifiers(.shift).onEnded(onShiftTap))
+        .dropDestination(for: URL.self) { urls, _ in
+            guard let url = urls.first(where: { $0.isFileURL }) else { return false }
+            onDropCover(url)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isDropTargeted ? Color.accentColor : .clear, lineWidth: 2)
+        )
         .task(id: coverTaskID) { await loadCover() }
         .help(game.title)
     }

@@ -5,12 +5,16 @@ import SwiftUI
 /// "Done differently".
 struct RootView: View {
     @Bindable var vm: LibraryViewModel
+    /// The Quick Add palette (PLAN §6.1); nil in previews.
+    var quickAdd: QuickAddModel?
+    var quickAddController: QuickAddPanelController?
+    var enrichment: EnrichmentStatusModel?
     @FocusState private var searchFocused: Bool
     @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(vm: vm)
+            SidebarView(vm: vm, enrichment: enrichment)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
         } detail: {
             content
@@ -22,10 +26,13 @@ struct RootView: View {
                 .toolbar { toolbarContent }
         }
         .task { vm.start() }
+        .task { enrichment?.start() }
         .onAppear { vm.undoManager = undoManager }
         .onChange(of: vm.searchFocusRequests) { _, _ in searchFocused = true }
         .onChange(of: searchFocused) { _, focused in vm.searchFieldFocused = focused }
-        .sheet(isPresented: $vm.quickAddPresented) { manualAddSheet }
+        .onChange(of: vm.quickAddPresented) { _, presented in
+            if presented { presentQuickAdd() } else { quickAddController?.hide() }
+        }
         .sheet(item: $vm.ownershipRequest) { request in
             OwnershipPickerSheet(request: request) { vm.ownershipRequest = nil }
         }
@@ -72,6 +79,20 @@ struct RootView: View {
             get: { vm.pendingConfirmation != nil },
             set: { if !$0 { vm.pendingConfirmation = nil } }
         )
+    }
+
+    // MARK: Quick Add (PLAN §6.1)
+
+    /// Prime the palette from the current sidebar scope / library platforms, then
+    /// float the panel.
+    private func presentQuickAdd() {
+        guard let quickAdd, let quickAddController else { return }
+        quickAdd.prepare(
+            sidebarPlatform: vm.selection.platformSlug,
+            ownedPlatforms: Set(vm.platforms.map(\.id)),
+            tiers: vm.tiers
+        )
+        quickAddController.show()
     }
 
     // MARK: Toolbar (PLAN §8)
@@ -214,19 +235,6 @@ struct RootView: View {
         var f = vm.filter
         f[keyPath: keyPath].removeAll()
         vm.setFilter(f)
-    }
-
-    // MARK: Manual add (stop-gap until the Quick Add palette lands)
-
-    private var manualAddSheet: some View {
-        ManualAddSheet(
-            model: ManualAddModel(defaultPlatform: vm.selection.platformSlug),
-            onAdd: { draft in
-                vm.quickAddPresented = false
-                Task { await vm.actions?.addManualGame(draft) }
-            },
-            onCancel: { vm.quickAddPresented = false }
-        )
     }
 }
 

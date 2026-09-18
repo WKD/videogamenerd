@@ -17,6 +17,15 @@ final class SettingsModel {
     private(set) var secretSaved = false
     private(set) var statusMessage: String?
 
+    /// The services lane's connection probe, injected by the app once services are
+    /// built. Nil in the test host / DB-failure path (the button stays disabled).
+    var connectionTester: IGDBConnectionTester?
+    /// Called after credentials are saved or cleared so the enrichment coordinator
+    /// can resume / idle (`coordinator.credentialsDidChange()`).
+    var onCredentialsChanged: () -> Void = {}
+    private(set) var isTesting = false
+    private(set) var testResult: String?
+
     init(secretStore: any SecretStoring) {
         self.secretStore = secretStore
         // Intentionally no Keychain read here — the Accounts tab reloads on
@@ -39,6 +48,8 @@ final class SettingsModel {
             }
             reload()
             statusMessage = "Saved to Keychain."
+            testResult = nil
+            onCredentialsChanged()
         } catch {
             // Never include the secret in the message.
             statusMessage = "Could not save to Keychain."
@@ -51,9 +62,44 @@ final class SettingsModel {
         igdbClientSecretInput = ""
         reload()
         statusMessage = "Cleared."
+        testResult = nil
+        onCredentialsChanged()
     }
 
     var hasCredentials: Bool { clientIDSaved && secretSaved }
+
+    /// The credentials to probe: the typed values, falling back to the saved secret
+    /// when the (write-only) secret field is empty.
+    private func currentCredentials() -> IGDBCredentials? {
+        let id = igdbClientID.trimmingCharacters(in: .whitespaces)
+        guard !id.isEmpty else { return nil }
+        let typed = igdbClientSecretInput.trimmingCharacters(in: .whitespaces)
+        let secret = typed.isEmpty ? ((try? secretStore.string(for: .igdbClientSecret)) ?? "") : typed
+        guard !secret.isEmpty else { return nil }
+        return IGDBCredentials(clientID: id, secret: secret)
+    }
+
+    /// Run the "Test connection" probe (PLAN §5.1) and show a human-readable result.
+    func testConnection() {
+        guard let tester = connectionTester else { return }
+        guard let credentials = currentCredentials() else {
+            testResult = "Enter a Client ID and Secret (or save them) first."
+            return
+        }
+        isTesting = true
+        testResult = nil
+        Task {
+            let result = await tester.test(credentials: credentials)
+            isTesting = false
+            switch result {
+            case .success(let success):
+                let n = success.sampleCount
+                testResult = "\(success.message) Probe returned \(n) result\(n == 1 ? "" : "s")."
+            case .failure(let failure):
+                testResult = failure.message
+            }
+        }
+    }
 }
 
 /// The Settings scene: Accounts (IGDB, Keychain-backed), Photo Scan and General
@@ -104,13 +150,18 @@ private struct AccountsTab: View {
                     Button("Clear", role: .destructive) { model.clearIGDB() }
                         .disabled(!model.clientIDSaved && !model.secretSaved)
                     Spacer()
-                    // The IGDB client is built concurrently by the services lane.
-                    Button("Test connection") {}
-                        .disabled(true)
-                        .help("TODO: enabled once the IGDB client lands (services lane).")
+                    if model.isTesting { ProgressView().controlSize(.small) }
+                    Button("Test connection") { model.testConnection() }
+                        .disabled(model.connectionTester == nil || model.isTesting)
+                        .help(model.connectionTester == nil
+                              ? "Available once the app finishes launching."
+                              : "Fetch a token and run one IGDB query.")
                 }
                 if let message = model.statusMessage {
                     Text(message).font(.caption).foregroundStyle(.secondary)
+                }
+                if let result = model.testResult {
+                    Text(result).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

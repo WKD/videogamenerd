@@ -18,8 +18,13 @@ struct VGNApp: App {
             if VGNApp.isRunningUnitTests {
                 Color.clear
             } else if let library = env.library {
-                RootView(vm: library)
-                    .frame(minWidth: 900, minHeight: 600)
+                RootView(
+                    vm: library,
+                    quickAdd: env.quickAdd,
+                    quickAddController: env.quickAddController,
+                    enrichment: env.enrichment
+                )
+                .frame(minWidth: 900, minHeight: 600)
             } else if let failure = env.failure {
                 DatabaseErrorView(failure: failure)
             } else {

@@ -234,6 +234,7 @@ final class LibraryActions {
             do { _ = try await store.addCopy(gameID: id, platformID: platform); added += 1 }
             catch { vm.showBanner("Couldn't add a copy.", kind: .error); return }
         }
+        if added > 0 { notifyLibraryChanged() }
         if added == 0 && skipped > 0 {
             vm.showBanner("Already owned.", kind: .info)
         }
@@ -259,7 +260,10 @@ final class LibraryActions {
             allPlatforms: all.isEmpty ? PlatformLabels.all : all,
             perform: { [weak self] platformID, format in
                 Task {
-                    do { _ = try await self?.store.addCopy(gameID: gameID, platformID: platformID, format: format) }
+                    do {
+                        _ = try await self?.store.addCopy(gameID: gameID, platformID: platformID, format: format)
+                        self?.notifyLibraryChanged()
+                    }
                     catch { self?.vm?.showBanner("Couldn't add a copy.", kind: .error) }
                 }
             }
@@ -365,6 +369,7 @@ final class LibraryActions {
     func addManualGame(_ draft: GameDraft) async -> Bool {
         do {
             _ = try await store.addGame(draft)
+            notifyLibraryChanged()
             return true
         } catch {
             vm?.showBanner("Couldn't add the game.", kind: .error)

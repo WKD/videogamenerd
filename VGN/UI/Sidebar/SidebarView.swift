@@ -9,6 +9,8 @@ import SwiftUI
 /// `.tag(SidebarSelection)` call so the type can never drift.
 struct SidebarView: View {
     @Bindable var vm: LibraryViewModel
+    /// The background-enrichment status footer (PLAN §9); nil in previews.
+    var enrichment: EnrichmentStatusModel?
 
     private var platformGroups: [SidebarPlatformGrouping.Group] {
         SidebarPlatformGrouping.groups(platforms: vm.platforms, counts: vm.counts)
@@ -57,6 +59,11 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("VGN")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let enrichment {
+                EnrichmentStatusFooter(model: enrichment)
+            }
+        }
     }
 
     /// The single choke point where a row is tagged. The tag is always exactly
