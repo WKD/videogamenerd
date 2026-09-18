@@ -26,7 +26,7 @@ Agents cannot operate the app's windows. Every screen was built from model-level
 ## 2. Out of scope for this run (PLAN milestones 7–9 and optional items) [later]
 
 - **PSN import** (M7), **GOG import** (M8) — only the `import_titles` staging table exists.
-- **Polish** (M9): Liquid Glass touches under `#available(macOS 26)`, stats view, Top export as image, app icon (asset catalog is an empty placeholder; icon direction still being chosen from `prototypes/app-icon/`), richer empty states.
+- **Polish** (M9): Liquid Glass touches under `#available(macOS 26)`, stats view, Top export as image, app icon **Dark/Tinted appearances** (the "Console Grey" icon shipped 2026-09-19 as a single-appearance `AppIcon` set; SVG masters incl. dark and tinted variants are in `design/app-icon/`; the macOS 26 layered `.icon` file via Icon Composer is still to do), richer empty states.
 - **HowLongToBeat provider** — skipped by decision; only the "open on HLTB" idea remains, and even that link is not in the inspector yet.
 - **TheGamesDB cover provider** — not built (PLAN marks it optional).
 - **"Choose cover…" sheet** — `CoverStore` returns every candidate from every provider, but there is no UI to browse them; today you get the first good hit or drop your own image.
