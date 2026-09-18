@@ -5,25 +5,29 @@ import SwiftUI
 ///
 /// - opens ``AppDatabase`` (the live on-disk DB, or an in-memory one seeded with
 ///   the sample library when launched with `-VGNSampleData YES`),
-/// - seeds platforms from the bundle and (live only) writes a launch snapshot
-///   **off the main actor**, errors logged not fatal,
-/// - builds the ``LibraryStore``, the ``GRDBLibraryDataSource``, the
-///   ``LibraryViewModel`` and ``LibraryActions``, and the Keychain-backed
-///   ``SettingsModel``.
+/// - builds the merged services graph (``ServicesFactory``): IGDB client, cover
+///   store, catalogue cache, the persisted enrichment queue + coordinator, and the
+///   Settings connection tester,
+/// - injects `graph.coverStore` as the grid's `CoverLoading`, starts the enrichment
+///   coordinator, and wires every library write back to `notifyLibraryChanged()`,
+/// - builds the Quick Add palette (``QuickAddModel`` + ``QuickAddPanelController``)
+///   and the enrichment-status indicator.
 ///
-/// If the database can't be opened the window shows ``DatabaseErrorView`` instead
-/// of crashing. Under the XCTest host nothing is opened (the real file is never
-/// touched — tests build their own in-memory stores).
+/// **Modes.** *Live* uses the real Application Support directories and starts the
+/// coordinator. *Sample* (`-VGNSampleData YES`) uses a throwaway in-memory DB, temp
+/// directories, and **never touches the network**: the coordinator is not started,
+/// writes are not forwarded to it, and Quick Add's catalogue searcher is the offline
+/// one (local + manual only). The *XCTest host* builds nothing.
 @MainActor
 final class AppEnvironment {
     let settings: SettingsModel
-    /// The wired-up library view model, or nil when the DB failed to open (or in
-    /// the test host).
     let library: LibraryViewModel?
-    /// Strong owner of the write-orchestration object (the VM holds it weakly).
     let actions: LibraryActions?
-    /// Set when the database could not be opened.
     let failure: DatabaseOpenFailure?
+    let services: ServicesFactory.Graph?
+    let quickAdd: QuickAddModel?
+    let quickAddController: QuickAddPanelController?
+    let enrichment: EnrichmentStatusModel?
 
     struct DatabaseOpenFailure: Sendable {
         var message: String
@@ -34,12 +38,20 @@ final class AppEnvironment {
         settings: SettingsModel,
         library: LibraryViewModel?,
         actions: LibraryActions?,
-        failure: DatabaseOpenFailure?
+        failure: DatabaseOpenFailure?,
+        services: ServicesFactory.Graph? = nil,
+        quickAdd: QuickAddModel? = nil,
+        quickAddController: QuickAddPanelController? = nil,
+        enrichment: EnrichmentStatusModel? = nil
     ) {
         self.settings = settings
         self.library = library
         self.actions = actions
         self.failure = failure
+        self.services = services
+        self.quickAdd = quickAdd
+        self.quickAddController = quickAddController
+        self.enrichment = enrichment
     }
 
     /// Build the environment. Never throws — a DB failure becomes `failure`.
@@ -57,14 +69,33 @@ final class AppEnvironment {
                 ? AppDatabase.inMemory()
                 : AppDatabase.live()
             let store = LibraryStore(database)
+
+            // Merged services (nil ⇒ degrade gracefully to no covers / offline).
+            let built = buildServices(mode: mode, database: database, secrets: settings.secretStore)
+            let coverLoader: any CoverLoading = built?.graph.coverStore ?? NoopCoverLoader()
+
             let dataSource = GRDBLibraryDataSource(store: store)
-            let vm = LibraryViewModel(dataSource: dataSource, coverLoader: NoopCoverLoader())
+            let vm = LibraryViewModel(dataSource: dataSource, coverLoader: coverLoader)
             let actions = LibraryActions(store: store, vm: vm)
             actions.install()
 
+            let wiring = wireServices(
+                mode: mode, built: built, store: store, vm: vm, actions: actions,
+                settings: settings, coverLoader: coverLoader
+            )
+
             bootstrap(store: store, database: database, mode: mode)
 
-            return AppEnvironment(settings: settings, library: vm, actions: actions, failure: nil)
+            // Live: start the enrichment coordinator once the app is up.
+            if mode == .live, let graph = built?.graph {
+                Task { await graph.coordinator.startup() }
+            }
+
+            return AppEnvironment(
+                settings: settings, library: vm, actions: actions, failure: nil,
+                services: built?.graph, quickAdd: wiring.quickAdd,
+                quickAddController: wiring.controller, enrichment: wiring.enrichment
+            )
         } catch {
             let path = (try? AppPaths.databaseURL().path) ?? "~/Library/Application Support/VGN/vgn.sqlite"
             NSLog("VGN: could not open the database: \(error)")
@@ -76,6 +107,133 @@ final class AppEnvironment {
                 )
             )
         }
+    }
+
+    // MARK: - Services build (testable)
+
+    /// The built services plus the platform catalogue the Quick Add autocomplete
+    /// needs. Nil when the graph could not be built (missing bundle resources).
+    struct ServicesBundle {
+        var graph: ServicesFactory.Graph
+        var platformCatalog: PlatformCatalog
+    }
+
+    /// Build the services graph for `mode`. Live uses the real Application Support
+    /// directories; sample uses throwaway temp directories so it never writes to the
+    /// real library. Returns nil (logged) rather than failing the launch.
+    static func buildServices(
+        mode: LaunchMode, database: AppDatabase, secrets: any SecretStoring
+    ) -> ServicesBundle? {
+        do {
+            let dirs = serviceDirectories(for: mode)
+            let graph = try ServicesFactory.make(
+                database: database, secrets: secrets,
+                coversDirectory: dirs.covers,
+                thumbsDirectory: dirs.thumbs,
+                libretroIndexDirectory: dirs.libretro
+            )
+            let catalog = try PlatformCatalog.loadFromBundle()
+            return ServicesBundle(graph: graph, platformCatalog: catalog)
+        } catch {
+            NSLog("VGN: services unavailable, continuing without them: \(error)")
+            return nil
+        }
+    }
+
+    /// Cover/thumb/libretro directories. Live ⇒ the real app-support dirs (nil lets
+    /// `ServicesFactory` resolve them). Sample ⇒ a fresh temp tree — never the real
+    /// library.
+    static func serviceDirectories(
+        for mode: LaunchMode
+    ) -> (covers: URL?, thumbs: URL?, libretro: URL?) {
+        switch mode {
+        case .live:
+            return (nil, nil, nil)
+        case .sampleData:
+            let base = FileManager.default.temporaryDirectory
+                .appendingPathComponent("VGN-sample-\(UUID().uuidString)", isDirectory: true)
+            return (
+                base.appendingPathComponent("covers", isDirectory: true),
+                base.appendingPathComponent("thumbs", isDirectory: true),
+                base.appendingPathComponent("libretro", isDirectory: true)
+            )
+        }
+    }
+
+    private struct Wiring {
+        var quickAdd: QuickAddModel
+        var controller: QuickAddPanelController
+        var enrichment: EnrichmentStatusModel?
+    }
+
+    private static func wireServices(
+        mode: LaunchMode, built: ServicesBundle?, store: LibraryStore,
+        vm: LibraryViewModel, actions: LibraryActions, settings: SettingsModel,
+        coverLoader: any CoverLoading
+    ) -> Wiring {
+        // Quick Add catalogue searcher: live IGDB only in live mode with a graph.
+        let searcher: any CatalogSearching
+        if mode == .live, let bundle = built {
+            let autocomplete = IGDBAutocomplete(
+                credentials: bundle.graph.credentials,
+                catalog: bundle.platformCatalog,
+                cache: bundle.graph.catalogCache
+            )
+            searcher = LiveCatalogSearcher(
+                autocomplete: autocomplete,
+                client: bundle.graph.igdbClient,
+                credentials: bundle.graph.credentials
+            )
+        } else {
+            searcher = OfflineCatalogSearcher()
+        }
+
+        let quickAdd = QuickAddModel(
+            catalog: searcher,
+            library: LiveLibraryAdder(store: store),
+            platforms: PlatformLabels.all
+        )
+        quickAdd.onOpenInspector = { [weak vm] id in
+            vm?.selectOnly(id)
+            vm?.showInspector()
+        }
+        let controller = QuickAddPanelController(model: quickAdd, coverLoader: coverLoader)
+        controller.onClose = { [weak vm] in vm?.quickAddPresented = false }
+
+        // Live enrichment wiring (sample mode leaves these as no-ops → no network).
+        var enrichment: EnrichmentStatusModel?
+        if mode == .live, let graph = built?.graph {
+            let coordinator = graph.coordinator
+            actions.onLibraryChanged = { Task { await coordinator.notifyLibraryChanged() } }
+            quickAdd.onLibraryChanged = { Task { await coordinator.notifyLibraryChanged() } }
+            vm.onRefreshMetadata = { id in Task { await coordinator.refresh(gameID: id) } }
+            settings.onCredentialsChanged = { Task { await coordinator.credentialsDidChange() } }
+            enrichment = EnrichmentStatusModel(coordinator: coordinator, jobStore: graph.jobStore)
+        }
+
+        // Test connection is available whenever a graph exists (user-initiated).
+        settings.connectionTester = built?.graph.connectionTester
+
+        // Manual cover from a dropped image (both modes; sample writes to temp).
+        if let graph = built?.graph {
+            let coverStore = graph.coverStore
+            vm.onImportCover = { [weak vm] gameID, url in
+                Task {
+                    do {
+                        let stored = try await coverStore.importCover(from: url, gameID: gameID)
+                        // TODO(merge): once the data lane ships a `user_edited` flag,
+                        // set it here so a later "Refresh metadata" won't clobber a
+                        // hand-picked cover. Today the coordinator only fills an empty
+                        // cover_file, so a manual cover already survives normal enrichment.
+                        try await store.updateMetadata(gameID: gameID, MetadataPatch(coverFile: stored.coverFile))
+                    } catch {
+                        vm?.showBanner("Couldn't set the cover.", kind: .error)
+                    }
+                }
+            }
+        }
+
+        return Wiring(quickAdd: quickAdd, controller: controller, enrichment: enrichment)
     }
 
     /// Off-launch-path work: seed platforms, (sample mode) seed the sample

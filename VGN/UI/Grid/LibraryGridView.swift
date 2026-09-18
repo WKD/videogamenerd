@@ -56,7 +56,8 @@ struct LibraryGridView: View {
                             cellWidth: CGFloat(vm.gridCellWidth),
                             onTap: { vm.selectOnly(game.id); gridFocused = true },
                             onCommandTap: { vm.toggle(game.id); gridFocused = true },
-                            onShiftTap: { vm.extendSelection(to: game.id); gridFocused = true }
+                            onShiftTap: { vm.extendSelection(to: game.id); gridFocused = true },
+                            onDropCover: { url in vm.importCover(gameID: game.id, from: url) }
                         )
                         .id(game.id)
                         .contextMenu { contextMenu(for: game) }
