@@ -74,7 +74,7 @@ struct ScannedItem: Sendable, Identifiable, Equatable {
 
 /// The result of scanning one photo: the items plus a little run metadata for the
 /// progress UI / accuracy report.
-struct PhotoScanResult: Sendable {
+struct PhotoScanResult: Sendable, Equatable {
     var photo: String
     var items: [ScannedItem]
     var tileCount: Int

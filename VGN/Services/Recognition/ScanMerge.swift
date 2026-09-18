@@ -114,12 +114,95 @@ enum ScanMerge {
         let names_b = [b.printedTitle] + [b.detection.normalizedTitle].compactMap { $0 }
         var best = 0.0
         for na in names_a { best = max(best, FuzzyMatch.bestScore(query: na, names: names_b)) }
-        return best >= titleThreshold
+        if best >= titleThreshold { return true }
+        // Prefix-aware merge (PLAN §6.2 / docs/recognition-accuracy.md): a spine sitting
+        // on a tile boundary is read in full in one tile and as a truncated edge-cut
+        // fragment ("God of W…", "…IE TWICE") in the neighbour. Those fragments score
+        // below the fuzzy threshold, so merge them into the complete read here. The
+        // geometry guard above already establishes "same spine", which is what keeps
+        // genuinely different sequels apart ("Final Fantasy X" / "Final Fantasy X-2").
+        return isTruncation(of: a.printedTitle, fragment: b.printedTitle)
+            || isTruncation(of: b.printedTitle, fragment: a.printedTitle)
     }
 
     static func platformsCompatible(_ a: String?, _ b: String?) -> Bool {
         guard let a, let b else { return true }   // an unknown platform is compatible
         return a == b
+    }
+
+    // MARK: - Truncation (edge-cut spine fragments)
+
+    /// Minimum length of a fragment's core (marker-stripped) text for it to be trusted
+    /// as a truncation of a fuller title (PLAN §6.2: "≥ 3 characters"). Below this a
+    /// stub like "DA…" is too ambiguous to fold in.
+    static let minFragmentCore = 3
+
+    /// Whether `fragment` is an edge-cut truncation of `whole` — the same spine read
+    /// only partially in a neighbouring tile.
+    ///
+    /// Three signals, most specific first:
+    ///  1. A trailing ellipsis (`…` / `...`) whose core is a prefix of `whole`
+    ///     ("God of W…" → "God of War III").
+    ///  2. A leading ellipsis whose core is a suffix of `whole`
+    ///     ("…IE TWICE" → "Sekiro: Shadows Die Twice").
+    ///  3. No marker, but the fragment is a strict prefix/suffix of `whole` that cuts
+    ///     **through the middle of a word** — the continuing character in `whole` is a
+    ///     letter or digit ("God of Wa|r"). A cut at a token boundary is *not* a
+    ///     truncation, so "Final Fantasy X" (+"-2") and "Yakuza Kiwami" (+" 2") are
+    ///     refused: those are complete titles that merely share a prefix.
+    static func isTruncation(of whole: String, fragment: String) -> Bool {
+        let w = normalizedForTruncation(whole)
+        guard !w.isEmpty else { return false }
+
+        let rawFragment = fragment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasTrailing = hasTrailingEllipsis(rawFragment)
+        let hasLeading = hasLeadingEllipsis(rawFragment)
+        let core = normalizedForTruncation(strippingEllipsis(rawFragment))
+        guard core.count >= minFragmentCore else { return false }
+
+        if hasTrailing { return w.hasPrefix(core) && core != w }
+        if hasLeading { return w.hasSuffix(core) && core != w }
+
+        // Marker-less: only a mid-word cut counts as a truncation.
+        guard core.count < w.count else { return false }
+        if w.hasPrefix(core) {
+            let next = w[w.index(w.startIndex, offsetBy: core.count)]
+            return next.isLetter || next.isNumber
+        }
+        if w.hasSuffix(core) {
+            let prev = w[w.index(w.endIndex, offsetBy: -core.count - 1)]
+            return prev.isLetter || prev.isNumber
+        }
+        return false
+    }
+
+    /// True if `title` carries an ellipsis truncation marker at either end.
+    static func hasEllipsisMarker(_ title: String) -> Bool {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return hasTrailingEllipsis(t) || hasLeadingEllipsis(t)
+    }
+
+    private static func hasTrailingEllipsis(_ s: String) -> Bool {
+        s.hasSuffix("…") || s.hasSuffix("...")
+    }
+
+    private static func hasLeadingEllipsis(_ s: String) -> Bool {
+        s.hasPrefix("…") || s.hasPrefix("...")
+    }
+
+    private static func strippingEllipsis(_ s: String) -> String {
+        var out = s
+        while out.hasSuffix("…") { out.removeLast() }
+        while out.hasPrefix("…") { out.removeFirst() }
+        while out.hasSuffix("...") { out.removeLast(3) }
+        while out.hasPrefix("...") { out.removeFirst(3) }
+        return out
+    }
+
+    /// Lowercased, whitespace-collapsed form for prefix/suffix comparison. Punctuation
+    /// is preserved so the mid-word check can see the character that continues a word.
+    private static func normalizedForTruncation(_ s: String) -> String {
+        s.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     // MARK: - Representative
@@ -129,7 +212,18 @@ enum ScanMerge {
         let ordered = members.sorted { $0.detection.confidence != $1.detection.confidence
             ? $0.detection.confidence > $1.detection.confidence
             : $0.id < $1.id }
-        let rep = ordered[0]
+        // The complete read must win the title, even if an edge-cut fragment scored
+        // higher: a member that carries an ellipsis marker or is a prefix/suffix of a
+        // sibling is a truncation. Pick the representative from the complete members
+        // (highest-confidence among them); fall back to `ordered` if all are truncated.
+        func isTruncated(_ member: AnchoredDetection) -> Bool {
+            if hasEllipsisMarker(member.printedTitle) { return true }
+            return members.contains { other in
+                other.id != member.id && isTruncation(of: other.printedTitle, fragment: member.printedTitle)
+            }
+        }
+        let complete = ordered.filter { !isTruncated($0) }
+        let rep = complete.first ?? ordered[0]
         // Prefer a non-nil platform (serial-derived preferred), union edition hints.
         let platform = ordered.compactMap { $0.platform }.first
         let serial = ordered.compactMap { $0.serialCode }.first

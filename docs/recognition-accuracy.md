@@ -56,6 +56,18 @@ over the owner-verified answer key `docs/shelf-truth-draft.json`.
 - **Missed (0):** none
 - **False positives (4):** Tomb Raider; God of W…; God of W…; DA…
 
+> **Post-fix single-photo re-run (2026-09-18, prefix-aware merge).** After the
+> prefix-aware `ScanMerge` fix, one live re-run of **IMG_3684 only** (8 tile calls,
+> 83 s, $3.61, CLI default): recall 100 % (20/20), precision 83 %, FP 4 —
+> `Tomb Raider; DA; L; DEAD`. The **two `God of W…` edge-cut duplicates disappeared**
+> (they merged into the complete "God of War III" read). The remaining FPs this run
+> are two sub-3-character stubs (`DA`, `L` — below the ≥3-char merge floor, kept
+> deliberately) and `DEAD`, a word-boundary read the merge refuses so it can never
+> fold a complete title into a longer one. Aggregate precision is unchanged for this
+> run because model non-determinism produced different fragments than the original
+> 5-photo run above; the targeted `God of War` duplicates are gone. Not a full
+> harness re-run (that costs ~$20); the 5-photo numbers above are the original run.
+
 ### IMG_3685
 
 - **Missed (0):** none
@@ -80,10 +92,13 @@ over the owner-verified answer key `docs/shelf-truth-draft.json`.
   The fragment's title scores below the overlap-merge threshold against the full
   read, so it survives as an extra unmatched detection. In the app these land in
   the review sheet bucketed **none** (no IGDB match) and are one keystroke to
-  uncheck. Precision would improve by (a) merging when one detection's title is a
-  prefix of another at the same source position, (b) widening the tile overlap, or
+  uncheck. **(a) is now implemented**: `ScanMerge` folds a truncated prefix/suffix
+  fragment (`God of W…`, `…IE TWICE`, mid-word `God of Wa`) into the complete read at
+  the same source position, while refusing complete sequels that merely share a prefix
+  (`Final Fantasy X` / `X-2`). A ≥3-character floor keeps 1–2-char stubs (`DA`, `L`)
+  out. Further precision could still come from (b) widening the tile overlap or
   (c) dropping unmatched very-short / trailing-`…` fragments — none of which cost
-  recall.
+  recall. See the labelled IMG_3684 re-run above.
 - **Recall misses** are faint or hard spines (e.g. *Goodbye Deponia* — a dark spine
   the owner noted is "barely legible", *Death Stranding 2*, *Final Fantasy XIII-2*,
   *Resident Evil 6*): the model honestly declined rather than guessing, which is the
