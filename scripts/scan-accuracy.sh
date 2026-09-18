@@ -20,6 +20,13 @@ set -e
 WT="$(cd "$(dirname "$0")/.." && pwd)"
 SENTINEL="$WT/.build/vgn-live-scan"
 mkdir -p "$WT/.build"
+
+# Build first (no sentinel present, so a stray build never runs the live harness).
+echo "Building test bundle…"
+xcodebuild -project "$WT/VGN.xcodeproj" -scheme VGN -destination 'platform=macOS' \
+  -derivedDataPath "$WT/.build/dd" build-for-testing 2>&1 | grep -E "error:|TEST BUILD (SUCCEEDED|FAILED)" || true
+
+# Drop the sentinel only around the live test run, then remove it.
 {
   if [ "$#" -gt 0 ]; then printf 'photos:%s\n' "$(echo "$@" | tr ' ' ',')"; fi
   if [ -n "$VGN_SCAN_MODEL" ]; then printf 'model:%s\n' "$VGN_SCAN_MODEL"; fi
@@ -30,6 +37,6 @@ trap 'rm -f "$SENTINEL"' EXIT INT TERM
 echo "Running live accuracy harness (this spends Claude usage)…"
 xcodebuild -project "$WT/VGN.xcodeproj" -scheme VGN -destination 'platform=macOS' \
   -derivedDataPath "$WT/.build/dd" \
-  test -only-testing:VGNTests/RecognitionAccuracyHarness/run 2>&1 | \
+  test-without-building -only-testing:VGNTests/RecognitionAccuracyHarness 2>&1 | \
   grep -E "Wrote |error:|Test .* (passed|failed)|Issue" || true
 echo "Done. See docs/recognition-accuracy.md"
