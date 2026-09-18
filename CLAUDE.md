@@ -73,6 +73,27 @@ Requires `xcode-select -s /Applications/Xcode.app`.
 └── worktrees/<name>/          one git worktree + branch per agent task
 ```
 
+## Parallel development (how this repo is built)
+
+Work is done by an **orchestrator** session (started in the container folder) plus up
+to **3 parallel subagents on Opus**, each in its own worktree. Full rules and the wave
+table: `docs/EXECUTION.md`. The essentials:
+
+- **Lanes** keep files from colliding: A = data & logic (`Database`, `Model`, `Ranking`,
+  `Matching`; sole owner of migrations), B = services then feature verticals
+  (`Services/**`, later its own `UI/<Feature>/`), C = UI (shell, sidebar, grid,
+  inspector, feature folders). Every brief lists **owned paths**; hot files
+  (`VGNApp.swift`, migrations, `SidebarSelection`, `project.pbxproj`, `CLAUDE.md`,
+  `.gitignore`) have one owner per wave.
+- **Worktrees** are created by the orchestrator:
+  `git -C main worktree add ../worktrees/w<wave>-<lane>-<topic> -b w<wave>/<lane>-<topic>`.
+  Agents work only inside theirs, build with `-derivedDataPath <worktree>/.build/dd`,
+  commit feature-sized commits (each green), and **never push, rebase, or touch `main/`**.
+- **Merge & push per feature**, not per wave: `merge --no-ff` into `main` → build + test
+  on main → push. Never force-push. Milestones are tagged `m0`…`m6` and the tags pushed.
+  Merged worktrees/branches are removed.
+- Human-only acceptance checks are collected in `docs/ACCEPTANCE.md`.
+
 App support dir at runtime: `~/Library/Application Support/VGN/`
 (`vgn.sqlite`, `covers/`, `thumbs/`, `backups/`). Tests use in-memory / temp-dir
 DBs, never the real one.
