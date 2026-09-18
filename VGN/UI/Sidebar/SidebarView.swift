@@ -75,7 +75,13 @@ struct SidebarView: View {
         _ selection: SidebarSelection,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        content().tag(selection)
+        content()
+            .tag(selection)
+            // Stable identifier for the UI smoke suite, e.g. `sidebar.row.all`,
+            // `sidebar.row.duel`, `sidebar.row.platform.ps4` (docs/uitests.md).
+            .accessibilityIdentifier(
+                A11yID.sidebarRow(selection.id.replacingOccurrences(of: ":", with: "."))
+            )
     }
 
     /// Badge `Text` for a row, or nil to show no badge (Tier Board / The Top).

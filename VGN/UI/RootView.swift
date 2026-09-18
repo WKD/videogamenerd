@@ -63,6 +63,17 @@ struct RootView: View {
         }
         // Expose the view model to the scene's Commands (⌘I / ⌘F / View menu).
         .focusedSceneValue(\.library, vm)
+        // On-demand UI smoke suite: `-VGNDisableAnimations YES` steadies focus /
+        // label assertions by suppressing implicit animations (harmless in the app;
+        // the flag is only ever passed by the test runner).
+        .transaction { txn in
+            if RootView.animationsDisabled { txn.disablesAnimations = true }
+        }
+    }
+
+    /// Honours the `-VGNDisableAnimations` launch hook (UI smoke suite only).
+    static var animationsDisabled: Bool {
+        UserDefaults.standard.bool(forKey: "VGNDisableAnimations")
     }
 
     @ViewBuilder
@@ -135,6 +146,7 @@ struct RootView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 160, idealWidth: 220)
                 .focused($searchFocused)
+                .accessibilityIdentifier(A11yID.toolbarSearch)
                 .help("Search titles (⌘F). ↓ into results · ↩ open first · esc clear")
                 .onKeyPress(.downArrow) { vm.focusGridFromSearch(); return .handled }
                 .onKeyPress(.escape) {
@@ -165,6 +177,7 @@ struct RootView: View {
             } label: {
                 Label("Inspector", systemImage: "sidebar.right")
             }
+            .accessibilityIdentifier(A11yID.toolbarInspector)
             .help("Toggle inspector (⌘I)")
 
             Button {
@@ -172,6 +185,7 @@ struct RootView: View {
             } label: {
                 Label("Add Game", systemImage: "plus")
             }
+            .accessibilityIdentifier(A11yID.toolbarAdd)
             .help("Quick Add (⌘N)")
         }
     }
@@ -229,6 +243,7 @@ struct RootView: View {
             Label("Tier", systemImage: "chart.bar")
                 .symbolVariant(vm.filter.tierIDs.isEmpty ? .none : .fill)
         }
+        .accessibilityIdentifier(A11yID.toolbarFilterTier)
     }
 
     private var statusMenu: some View {
@@ -244,6 +259,7 @@ struct RootView: View {
             Label("Status", systemImage: "flag")
                 .symbolVariant(vm.filter.statuses.isEmpty ? .none : .fill)
         }
+        .accessibilityIdentifier(A11yID.toolbarFilterStatus)
     }
 
     // Ownership format (physical / digital / ROM), driven by ProductFormat.

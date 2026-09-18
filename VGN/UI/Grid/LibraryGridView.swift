@@ -60,11 +60,13 @@ struct LibraryGridView: View {
                             onDropCover: { url in vm.importCover(gameID: game.id, from: url) }
                         )
                         .id(game.id)
+                        .accessibilityIdentifier(A11yID.gridCell(game.id))
                         .contextMenu { contextMenu(for: game) }
                     }
                 }
                 .padding(outerPadding)
             }
+            .accessibilityIdentifier(A11yID.grid)
             .focusable()
             .focusEffectDisabled()
             .focused($gridFocused)

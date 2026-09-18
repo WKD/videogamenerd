@@ -31,6 +31,7 @@ struct TheTopView: View {
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier(A11yID.theTop)
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
@@ -65,6 +66,7 @@ struct TheTopView: View {
             } label: {
                 Label("Export CSV", systemImage: "square.and.arrow.up")
             }
+            .accessibilityIdentifier(A11yID.topExport)
             .help("Export this chart as CSV (⌘E)")
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
@@ -116,6 +118,7 @@ struct TheTopView: View {
                             TopDividerView(divider: divider, model: model)
                         case .game(let row):
                             TopRowView(row: row, model: model, loader: loader)
+                                .accessibilityIdentifier(A11yID.topRow(row.id))
                         }
                     }
                 }

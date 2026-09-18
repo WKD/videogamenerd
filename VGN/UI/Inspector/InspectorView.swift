@@ -27,6 +27,7 @@ struct InspectorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .accessibilityIdentifier(A11yID.inspector)
     }
 
     // MARK: Empty
@@ -167,6 +168,7 @@ private struct SingleGameInspector: View {
                 get: { detail.played },
                 set: { vm.setPlayed($0, for: ids) }
             ))
+            .accessibilityIdentifier(A11yID.inspectorPlayedToggle)
             if detail.played {
                 StatusPickerRow(current: detail.status) { status in
                     Task { await vm.actions?.setStatus(ids: ids, status: status) }
@@ -182,6 +184,8 @@ private struct SingleGameInspector: View {
             TierPickerRow(tiers: vm.tiers, current: detail.tierLetter) { letter in
                 vm.setTier(letter, for: ids)
             }
+            .accessibilityIdentifier(A11yID.inspectorTierChip)
+            .accessibilityValue(detail.tierLetter ?? "Unranked")
             scoreLineView
         }
     }
@@ -450,6 +454,8 @@ private struct StatusPickerRow: View {
                 }
             }
             .fixedSize()
+            .accessibilityIdentifier(A11yID.inspectorStatus)
+            .accessibilityValue(current?.label ?? "None")
         }
     }
 }
@@ -472,6 +478,8 @@ private struct PlaytimeEditor: View {
                 .focused($focused)
                 .onSubmit(commit)
                 .foregroundStyle(invalid ? Color.red : Color.primary)
+                .accessibilityIdentifier(A11yID.inspectorPlaytimeField)
+                .accessibilityValue(invalid ? "Invalid" : text)
             if !text.isEmpty {
                 Button {
                     text = ""

@@ -74,6 +74,8 @@ struct TriageView: View {
                 Text(model.progressText)
                     .font(.headline.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier(A11yID.triageProgress)
+                    .accessibilityValue(model.progressText)
                 Spacer()
                 Button {
                     model.skip()
@@ -88,6 +90,8 @@ struct TriageView: View {
                              platformID: game.platformIDs.first, loader: loader)
                 .frame(width: 300, height: 400)
                 .id(game.id)
+                .accessibilityIdentifier(A11yID.triageCover)
+                .accessibilityLabel(game.title)
                 .transition(.opacity)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: game.id)
 
@@ -116,6 +120,7 @@ struct TriageView: View {
             Image(systemName: "tray.and.arrow.down.fill")
                 .font(.system(size: 42)).foregroundStyle(.green)
             Text("Triage complete").font(.title2.weight(.semibold))
+                .accessibilityIdentifier(A11yID.triageEmpty)
             Text("^[\(model.tieredCount) game](inflect: true) tiered.")
                 .font(.callout).foregroundStyle(.secondary)
             HStack(spacing: 14) {

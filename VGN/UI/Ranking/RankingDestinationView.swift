@@ -60,6 +60,10 @@ private struct DuelDestinationView: View {
         self.env = env
         _duelModel = State(initialValue: DuelModel(backend: env.backend))
         _triageModel = State(initialValue: TriageModel(backend: env.backend))
+        // `-VGNOpen triage` deep-links the UI smoke suite straight to the Triage
+        // tab (still the Duel destination); otherwise open on Duel.
+        let opensTriage = UserDefaults.standard.string(forKey: "VGNOpen")?.lowercased() == "triage"
+        _mode = State(initialValue: opensTriage ? .triage : .duel)
     }
 
     var body: some View {
@@ -70,6 +74,7 @@ private struct DuelDestinationView: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 260)
             .padding(.vertical, 8)
+            .accessibilityIdentifier(A11yID.duelModePicker)
 
             Divider()
 

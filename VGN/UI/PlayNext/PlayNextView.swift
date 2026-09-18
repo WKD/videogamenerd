@@ -122,6 +122,7 @@ struct PlayNextBody: View {
                         onNot: { act { await model.notThisOne(hero) } },
                         onNever: { act { await model.never(hero) } },
                         onInspect: { inspect?(hero.id) })
+                        .accessibilityIdentifier(A11yID.playNextHero)
                 }
                 alternatives(result)
                 unknownLane(result)
@@ -226,6 +227,7 @@ struct PlayNextBody: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: 320)
+        .accessibilityIdentifier(A11yID.playNextEmpty)
     }
 
     @ViewBuilder
@@ -242,6 +244,7 @@ struct PlayNextBody: View {
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 320)
+            .accessibilityIdentifier(A11yID.playNextEmpty)
         } else {
             ContentUnavailableView {
                 Label("Nothing to play here yet", systemImage: "tray")
@@ -249,6 +252,7 @@ struct PlayNextBody: View {
                 Text("No owned, unfinished games to suggest. Add some to your library, or include abandoned games from the options menu.")
             }
             .frame(maxWidth: .infinity, minHeight: 320)
+            .accessibilityIdentifier(A11yID.playNextEmpty)
         }
     }
 

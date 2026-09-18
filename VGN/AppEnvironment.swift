@@ -88,7 +88,10 @@ final class AppEnvironment {
 
             let rankingStore = RankingStore(database)
             let dataSource = GRDBLibraryDataSource(store: store, ranking: rankingStore)
-            let vm = LibraryViewModel(dataSource: dataSource, coverLoader: coverLoader)
+            let vm = LibraryViewModel(
+                dataSource: dataSource, coverLoader: coverLoader,
+                selection: initialSelection()
+            )
             let actions = LibraryActions(store: store, vm: vm)
             actions.install()
 
@@ -128,6 +131,33 @@ final class AppEnvironment {
                     path: path
                 )
             )
+        }
+    }
+
+    /// The sidebar selection the window should open on. Honours the `-VGNOpen`
+    /// launch hook used by the on-demand UI smoke suite (e.g. `-VGNOpen duel`,
+    /// `-VGNOpen tierBoard`, `-VGNOpen platform:ps4`) so a flow can deep-link to a
+    /// screen instead of clicking through the sidebar. Defaults to `.all`.
+    static func initialSelection() -> SidebarSelection {
+        guard let token = UserDefaults.standard.string(forKey: "VGNOpen")?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty
+        else { return .all }
+        if token.hasPrefix("platform:") {
+            let slug = String(token.dropFirst("platform:".count))
+            return slug.isEmpty ? .all : .platform(slug)
+        }
+        switch token.lowercased() {
+        case "all": return .all
+        case "owned": return .owned
+        case "played": return .played
+        case "backlog": return .backlog
+        case "unranked": return .unranked
+        case "playnext": return .playNext
+        case "tierboard": return .tierBoard
+        case "thetop": return .theTop
+        case "duel": return .duel
+        case "triage": return .duel   // Duel destination, opened on its Triage tab.
+        default: return .all
         }
     }
 
