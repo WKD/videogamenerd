@@ -124,9 +124,19 @@ actor IGDBClient {
         }
     }
 
+    // MARK: - Cache decode (enrichment cache-hit path)
+
+    /// Decode one cached `/v4/games` JSON object into public metadata, so the
+    /// enrichment metadata job can serve a fresh catalogue-cache hit without a
+    /// network call (PLAN §4/§9). Nonisolated: reads only the immutable catalogue.
+    nonisolated func metadata(fromCachedGameJSON data: Data) -> IGDBGameMetadata? {
+        guard let dto = try? JSONDecoder().decode(IGDBGameDTO.self, from: data) else { return nil }
+        return metadata(from: dto)
+    }
+
     // MARK: - DTO → public mapping
 
-    private func searchResult(from dto: IGDBGameDTO) -> IGDBSearchResult {
+    private nonisolated func searchResult(from dto: IGDBGameDTO) -> IGDBSearchResult {
         let igdbIDs = (dto.platforms ?? []).map(\.id)
         return IGDBSearchResult(
             id: dto.id,
@@ -142,7 +152,7 @@ actor IGDBClient {
         )
     }
 
-    private func metadata(from dto: IGDBGameDTO) -> IGDBGameMetadata {
+    private nonisolated func metadata(from dto: IGDBGameDTO) -> IGDBGameMetadata {
         let igdbIDs = (dto.platforms ?? []).map(\.id)
         return IGDBGameMetadata(
             id: dto.id,
