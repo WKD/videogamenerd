@@ -174,13 +174,7 @@ final class AppEnvironment {
         // Quick Add catalogue searcher: live IGDB only in live mode with a graph.
         let searcher: any CatalogSearching
         if mode == .live, let bundle = built {
-            let autocomplete = IGDBAutocomplete(
-                credentials: bundle.graph.credentials,
-                catalog: bundle.platformCatalog,
-                cache: bundle.graph.catalogCache
-            )
             searcher = LiveCatalogSearcher(
-                autocomplete: autocomplete,
                 client: bundle.graph.igdbClient,
                 credentials: bundle.graph.credentials
             )

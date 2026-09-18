@@ -6,15 +6,15 @@ import Foundation
 
 // MARK: - Catalogue search (IGDB)
 
-/// The live catalogue searcher: ``IGDBAutocomplete`` for autocomplete (with the
-/// name-prefix / alt-name fallback) and ``IGDBClient`` for bundle members.
+/// The live catalogue searcher: ``IGDBClient/autocomplete(_:platformIGDBIDs:limit:fallbackThreshold:)``
+/// (search + name-prefix / alt-name fallbacks, on the client's own pipeline) and
+/// ``IGDBClient`` for bundle members.
 struct LiveCatalogSearcher: CatalogSearching {
-    let autocomplete: IGDBAutocomplete
     let client: IGDBClient
     let credentials: @Sendable () async -> IGDBCredentials?
 
     func search(_ text: String, platformIGDBIDs: [Int]?, limit: Int) async throws -> [IGDBSearchResult] {
-        try await autocomplete.autocomplete(text, platformIGDBIDs: platformIGDBIDs, limit: limit)
+        try await client.autocomplete(text, platformIGDBIDs: platformIGDBIDs, limit: limit)
     }
 
     func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] {
