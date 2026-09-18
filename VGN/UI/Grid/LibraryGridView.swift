@@ -74,6 +74,11 @@ struct LibraryGridView: View {
             .onKeyPress(.downArrow) { scroll(proxy, vm.moveSelection(by: columnCount)); return .handled }
             .onKeyPress(.return) { vm.showInspector(); return .handled }
             .onKeyPress(.space) { vm.showInspector(); return .handled }
+            .onKeyPress(.delete) {
+                guard !vm.selectedGameIDs.isEmpty else { return .ignored }
+                vm.actions?.requestDelete(ids: vm.selectedGameIDs)
+                return .handled
+            }
             .onKeyPress(action: handleCharacter)
         }
     }
@@ -113,6 +118,8 @@ struct LibraryGridView: View {
             if !vm.selectedGameIDs.contains(game.id) { vm.selectOnly(game.id) }
             vm.showInspector()
         }
+        Divider()
+        Button("Delete…", role: .destructive) { vm.actions?.requestDelete(ids: ids) }
     }
 
     /// Act on the whole selection when the right-clicked game is part of it,
