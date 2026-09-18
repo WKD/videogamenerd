@@ -42,7 +42,7 @@
         {
           "title": "Final Fantasy VII Remake",
           "platform": "ps5",
-          "notes": "spine reads 'FINAL FANTASY VII REMAKE' (PS5) — presence owner-confirmed 2026-09-18; Intergrade or not still open",
+          "notes": "PS5 copy of Final Fantasy VII Remake — not the Intergrade edition (owner-confirmed 2026-09-18)",
           "confidence": "high"
         },
         {
@@ -790,7 +790,7 @@
         {
           "title": "Final Fantasy VII Remake",
           "platform": "ps5",
-          "notes": "spine reads 'FINAL FANTASY VII REMAKE' (PS5) — presence owner-confirmed 2026-09-18; Intergrade or not still open",
+          "notes": "PS5 copy of Final Fantasy VII Remake — not the Intergrade edition (owner-confirmed 2026-09-18)",
           "confidence": "high"
         },
         {
@@ -1199,10 +1199,11 @@
     }
   ],
   "illegibleAreas": [
-    "IMG_3687 upper shelf: a slim all-black spine sits between Death Stranding 2 (PS5) and Terminator 2D: No Fate — it carries no title (possibly a SteelBook slipcase); not identified and not listed as a game.",
-    "IMG_3687 upper PS4 row: a plain dark-grey spine sits between the Metal Gear Solid V SteelBook and Detroit: Become Human with no legible text — possibly the MGS SteelBook's outer slipcase; not listed as a separate game.",
     "IMG_3685 far right: two music DVDs (appear to read 'MY DYING BRIDE - For Darkest Eyes' and a Sopor Aeternus-style black case) — NOT video games; excluded.",
     "Many spines in IMG_3684/3685/3687 have legible serial codes (BLES/BCES/CUSA/PPSA) that were not transcribed but could disambiguate regional editions.",
     "IMG_3686 background shelves are out of focus and mostly unreadable."
+  ],
+  "skip": [
+    "IMG_3687 upper shelf: two unlabelled spines (a slim all-black one next to Terminator 2D: No Fate, a plain dark-grey one between the MGS V SteelBook and Detroit: Become Human) carry no readable title. Owner decision 2026-09-18: they are NOT part of the answer key — a recogniser must neither be credited nor penalised for them, and must not invent a title for them."
   ]
 }
