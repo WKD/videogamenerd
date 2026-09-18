@@ -15,7 +15,8 @@ struct PhotoScanView: View {
         Group {
             switch model.presentation {
             case .input:
-                PhotoScanInputView(model: model, showingFileImporter: $showingFileImporter)
+                PhotoScanInputView(model: model, showingFileImporter: $showingFileImporter,
+                                   onClose: onClose)
             case .running:
                 PhotoScanProgressView(model: model)
             case .review:
@@ -25,6 +26,7 @@ struct PhotoScanView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 520)
+        .accessibilityIdentifier(A11yID.scanSheet)
         .dropDestination(for: URL.self) { urls, _ in
             model.enqueue(urls)
             return model.presentation == .input
@@ -44,6 +46,10 @@ struct PhotoScanView: View {
 private struct PhotoScanInputView: View {
     @Bindable var model: PhotoScanModel
     @Binding var showingFileImporter: Bool
+    /// Dismiss the whole sheet. Previously the input state had no working close
+    /// control (a hidden Cancel with an empty action), so it could not be
+    /// dismissed before queuing a photo — found by the UI smoke suite (flow k).
+    var onClose: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -55,6 +61,7 @@ private struct PhotoScanInputView: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityIdentifier(A11yID.scanUsageNotice)
 
             dropZone
 
@@ -65,9 +72,9 @@ private struct PhotoScanInputView: View {
             Spacer()
 
             HStack {
-                Button("Cancel", role: .cancel) {}
-                    .keyboardShortcut(.cancelAction)
-                    .hidden()                       // host owns dismissal
+                Button("Cancel", role: .cancel) { onClose() }
+                    .keyboardShortcut(.cancelAction)   // esc now actually dismisses
+                    .accessibilityIdentifier(A11yID.scanClose)
                 Spacer()
                 Text(model.jobs.isEmpty ? "" : "\(model.jobs.count) photo\(model.jobs.count == 1 ? "" : "s") queued")
                     .foregroundStyle(.secondary)
