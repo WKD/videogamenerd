@@ -57,7 +57,7 @@ actor CoverStore {
     /// Decoded, downsampled thumbnail for a stored cover file at (roughly) `pixelSize`.
     /// Returns `nil` if the cover file is missing or unreadable. De-dups concurrent
     /// identical requests and caches the decoded image.
-    func thumbnail(for coverFile: String, pixelSize: CGSize) async -> CGImage? {
+    func thumbnail(for coverFile: String, pixelSize: CGSize) async -> sending CGImage? {
         let bucket = Self.bucket(for: pixelSize)
         let key = "\(coverFile)@\(bucket)" as NSString
 
