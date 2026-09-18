@@ -8,7 +8,7 @@ Legend: **[decide]** needs an owner decision · **[follow-up]** small, scheduled
 
 ## 0. The big caveat: nobody has driven the GUI
 
-Agents cannot operate the app's windows. Every screen was built from model-level tests (537 of them), SwiftUI previews that compile, and "process stays alive, console clean" launch checks in sample-data mode. **Layout, focus/keyboard routing, drag feel, animation, and anything visual are unverified.** The per-milestone checklists in `docs/ACCEPTANCE.md` are the real acceptance tests. Highest-risk items, in order:
+Agents cannot operate the app's windows. Every screen was built from model-level tests (537 of them), SwiftUI previews that compile, and "process stays alive, console clean" launch checks in sample-data mode. **Layout, focus/keyboard routing, drag feel, animation, and anything visual are unverified.** The per-milestone checklists in `docs/ACCEPTANCE.md` are the real acceptance tests. **Mitigation decided 2026-09-18 (hardening pass):** off-screen snapshot rendering of every screen inside the unit tests (agents get eyes on layout) and an on-demand XCUITest smoke suite with window-only screenshots (keyboard/focus flows); drag feel, animation and taste remain human-only. Highest-risk items, in order:
 1. Quick Add's floating `NSPanel` owning the keyboard on macOS 15 (Tab/arrows/⌘-combos while the text field keeps focus).
 2. Duel/Triage key focus — keys must not leak into the search field or re-tier the grid selection behind it.
 3. Tier Board drag & drop (insertion position, multi-select drags) and the divider drag in The Top.

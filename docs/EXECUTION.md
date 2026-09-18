@@ -53,6 +53,12 @@ IGDB credentials for fixture recording / live smoke tests: `~/.config/vgn/igdb.e
 
 **Milestone 5b — Play Next + ROM format** (added 2026-09-18, PLAN §7b) is woven into the waves: ROM format → data lane now (migration + `ProductFormat.rom` + format filter), Quick Add `⌘D` and the ROM badge with the Quick Add / M2 UI work; `VGN/Recommendation/` pure engine + backtest → data lane once `RankingStore` is merged (it only needs plain values); `game_traits` / IGDB rating / `rec_feedback` schema + enrichment fields → with the enrichment queue; Play Next view → wave 4–5 UI. Tag `m5b`. "Ask Claude" second opinion: confirmed by the owner 2026-09-18 — built with the Play Next view, reusing the photo-scan CLI runner (wave 4 builds that runner; Play Next consumes it).
 
+**Hardening pass — scope decided 2026-09-18** (starts when the three wave-5 UI branches are merged, because accessibility identifiers touch most views):
+1. **Snapshot rendering in the unit tests** — every screen rendered off-screen (sample data; light + dark; two sizes) to PNGs under a git-ignored output folder, plus committed reference images for diffing. No permissions, no session takeover; agents review the PNGs. Covers layout/appearance only.
+2. **XCUITest smoke suite** — a `VGNUITests` target (one deliberate `project.pbxproj` edit, owned by the hardening agent) with ~10 flows: Quick Add keyboard path, Duel/Triage keys not leaking, search keyboard flow, tier keys vs typing, sidebar navigation, inspector edits, filter chips, Play Next bracket switch, scan sheet opening, Settings. **Window-only screenshots** as attachments (never the full screen). Runs on demand (`xcodebuild test -only-testing:VGNUITests`) — it takes over keyboard and mouse in the live session and needs a one-time macOS permission grant by the owner, so it is NOT part of agents' normal gates; the orchestrator runs it at milestones when the owner is away from the Mac.
+3. The original hardening items: concurrency audit, real-cover scroll check, dead-code removal, whole-app review, CLAUDE.md refresh.
+Drag feel, animation and taste stay on the owner's checklist (`docs/ACCEPTANCE.md`).
+
 HLTB optional provider: skipped in this run.
 
 The table is a plan, not a contract: the orchestrator re-sequences as lanes free up (a lane never idles waiting for a wave boundary), keeping at most 3 agents running and the owned-paths rule intact.
