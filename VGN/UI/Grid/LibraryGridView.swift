@@ -119,16 +119,20 @@ struct LibraryGridView: View {
 
     @ViewBuilder
     private func contextMenu(for game: GameSummary) -> some View {
+        // NOTE: this builder runs during view updates (SwiftUI builds every cell's
+        // menu eagerly), so it must be PURE. Mutating the selection here caused an
+        // endless invalidate → rebuild loop (100 % CPU). Selection changes happen
+        // only inside the action closures, via `act(on:)`.
         let ids = targetIDs(for: game)
         Menu("Set Tier") {
             ForEach(["S", "A", "B", "C", "D", "F"], id: \.self) { letter in
-                Button(letter) { vm.setTier(letter, for: ids) }
+                Button(letter) { act(on: game) { vm.setTier(letter, for: $0) } }
             }
             Divider()
-            Button("Clear") { vm.setTier(nil, for: ids) }
+            Button("Clear") { act(on: game) { vm.setTier(nil, for: $0) } }
         }
-        Button("Mark Played") { vm.setPlayed(true, for: ids) }
-        Button("Mark Owned") { vm.setOwned(true, for: ids) }
+        Button("Mark Played") { act(on: game) { vm.setPlayed(true, for: $0) } }
+        Button("Mark Owned") { act(on: game) { vm.setOwned(true, for: $0) } }
         Divider()
         // Compilations (PLAN §8).
         if game.isCompilationMember, let productID = game.compilationProductID {
@@ -136,7 +140,7 @@ struct LibraryGridView: View {
             Button("Edit Compilation…") { vm.editCompilation(productID: productID) }
         }
         if ids.count > 1 {
-            Button("Group as Compilation…") { vm.onGroupAsCompilation(ids) }
+            Button("Group as Compilation…") { act(on: game) { vm.onGroupAsCompilation($0) } }
         }
         Divider()
         Button("Show Inspector") {
@@ -144,15 +148,22 @@ struct LibraryGridView: View {
             vm.showInspector()
         }
         Divider()
-        Button("Delete…", role: .destructive) { vm.actions?.requestDelete(ids: ids) }
+        Button("Delete…", role: .destructive) { act(on: game) { vm.actions?.requestDelete(ids: $0) } }
     }
 
-    /// Act on the whole selection when the right-clicked game is part of it,
-    /// otherwise just that game (and make it the selection).
+    /// The games a context-menu action applies to: the whole selection when the
+    /// right-clicked game is part of it, otherwise just that game. PURE — it is
+    /// called while the menu is being built (i.e. during view updates).
     private func targetIDs(for game: GameSummary) -> Set<Int64> {
-        if vm.selectedGameIDs.contains(game.id) { return vm.selectedGameIDs }
-        vm.selectOnly(game.id)
-        return [game.id]
+        vm.selectedGameIDs.contains(game.id) ? vm.selectedGameIDs : [game.id]
+    }
+
+    /// Runs a context-menu action: resolves the targets at click time and, Finder-style,
+    /// makes the right-clicked game the selection when it was not part of it.
+    private func act(on game: GameSummary, _ action: (Set<Int64>) -> Void) {
+        let ids = targetIDs(for: game)
+        if !vm.selectedGameIDs.contains(game.id) { vm.selectOnly(game.id) }
+        action(ids)
     }
 
     // MARK: Empty states
