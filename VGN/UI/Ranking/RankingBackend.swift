@@ -23,6 +23,13 @@ protocol RankingBackend: Sendable {
     // MARK: Tiering (Triage `S A B C D F`, `0` clears — PLAN §7)
     @discardableResult func setTier(_ gameIDs: [Int64], tierID: Int64?) async throws -> SetTierOutcome
 
+    // MARK: Triage-safe un-play (PLAN §7 follow-up — the `U` key)
+    /// Mark a game not played without an orphan/delete prompt: owned → Backlog
+    /// (`.becameBacklog`), not owned → no change (`.notOwned`, caller offers removal).
+    @discardableResult func markNotPlayed(_ gameID: Int64) async throws -> UnplayOutcome
+    /// Remove a game from the library entirely (Triage's explicit removal path).
+    func deleteGame(_ gameID: Int64) async throws
+
     // MARK: Drag / drop overrides (Tier Board + The Top — PLAN §7)
     /// Move a game to `toTier` at an exact position (0 = top). `atIndex == nil`
     /// drops it into the unplaced tail (tier set, key cleared, re-queued).

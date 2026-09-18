@@ -22,7 +22,8 @@ struct TriageView: View {
         .onKeyPress(.space) { model.skip(); return .handled }
         .onKeyPress { press in
             guard let ch = press.characters.first, press.modifiers.isEmpty else { return .ignored }
-            if ch == "0" || (ch.isLetter && "sabcdf".contains(Character(ch.lowercased()))) {
+            // `U` = "not actually played" (safe un-play), plus the tier letters + 0.
+            if ch == "0" || (ch.isLetter && "sabcdfu".contains(Character(ch.lowercased()))) {
                 Task { await model.handle(character: ch) }
                 return .handled
             }
@@ -33,6 +34,17 @@ struct TriageView: View {
             focused = true
         }
         .onChange(of: model.current) { focused = true }
+        .alert("Remove from library?", isPresented: removalPresented, presenting: model.removalPrompt) { _ in
+            Button("Remove", role: .destructive) { Task { await model.confirmRemoval() } }
+            Button("Cancel", role: .cancel) { model.cancelRemoval() }
+        } message: { game in
+            Text("\u{201C}\(game.title)\u{201D} isn't owned, so marking it not-played would "
+                 + "leave nothing to keep it. Remove it from the library?")
+        }
+    }
+
+    private var removalPresented: Binding<Bool> {
+        Binding(get: { model.removalPrompt != nil }, set: { if !$0 { model.cancelRemoval() } })
     }
 
     // MARK: Content
@@ -139,7 +151,7 @@ struct TriageView: View {
                     Task { await model.tierCurrent(tier.id) }
                 }
                 .padding(.vertical, 8)
-                Text("Press a letter to tier · 0 / space to skip · ← back")
+                Text("Press a letter to tier · 0 / space to skip · U not played · ← back")
                     .font(.caption2).foregroundStyle(.tertiary)
                     .padding(.bottom, 8)
             }

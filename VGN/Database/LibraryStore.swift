@@ -255,6 +255,31 @@ struct LibraryStore: Sendable {
         }
     }
 
+    /// Mark a single game **not played** without ever showing the orphan/delete
+    /// prompt (PLAN §7 follow-up — Triage's safe "not actually played"):
+    ///
+    /// - **owned** → clears played + tier + rank + status; the game becomes
+    ///   Backlog. Returns `.becameBacklog`.
+    /// - **not owned** → makes **no** change and returns `.notOwned`, so the caller
+    ///   (Triage) can offer an explicit "Remove from library" rather than a
+    ///   surprise modal.
+    ///
+    /// Contrast with ``setPlayed(_:_:confirmOrphanDelete:)``, whose un-play path
+    /// deletes an unowned game (after confirmation).
+    @discardableResult
+    func markNotPlayed(_ gameID: Int64) async throws -> UnplayOutcome {
+        try await dbWriter.write { db in
+            guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM games WHERE id = ?)",
+                                    arguments: [gameID]) ?? false else { return .notFound }
+            guard try Self.isOwned(gameID, db) else { return .notOwned }
+            try db.execute(sql: """
+                UPDATE games SET played = 0, tier_id = NULL, rank_key = NULL,
+                                 status = NULL, updated_at = ? WHERE id = ?
+                """, arguments: [Date(), gameID])
+            return .becameBacklog
+        }
+    }
+
     /// Set (or clear, with `nil`) the tier for played games. Unplayed games are
     /// skipped and reported. A genuine tier *change* clears the fine-rank key
     /// (→ unplaced); re-setting the tier a game already has is a no-op that keeps

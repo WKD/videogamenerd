@@ -26,6 +26,9 @@ final class TriageModel {
     private(set) var isLoading = true
     /// Brief highlight of the last tier pressed.
     private(set) var highlightedTier: Int64?
+    /// A not-owned game the user un-played, awaiting an explicit "Remove from
+    /// library" decision (PLAN §7 follow-up — never a surprise delete).
+    private(set) var removalPrompt: GameSummary?
 
     private var history: [Step] = []
     private let backend: any RankingBackend
@@ -102,6 +105,42 @@ final class TriageModel {
         cursor = insertAt
     }
 
+    // MARK: Safe un-play (`U`)
+
+    /// `U` — "not actually played" (PLAN §7 follow-up). Owned → the game becomes
+    /// Backlog and leaves the queue with no prompt; not owned → a removal prompt is
+    /// raised so the user can explicitly delete it (never a surprise modal).
+    func unplayCurrent() async {
+        guard let game = current else { return }
+        switch (try? await backend.markNotPlayed(game.id)) ?? .notFound {
+        case .becameBacklog:
+            drop(game.id)
+        case .notOwned:
+            removalPrompt = game
+        case .notFound:
+            break
+        }
+    }
+
+    /// Confirm removing a not-owned, un-played game from the library.
+    func confirmRemoval() async {
+        guard let game = removalPrompt else { return }
+        removalPrompt = nil
+        try? await backend.deleteGame(game.id)
+        drop(game.id)
+    }
+
+    /// Cancel the removal — the game stays played and in the queue (un-play was a
+    /// no-op for a not-owned game, so nothing to restore).
+    func cancelRemoval() { removalPrompt = nil }
+
+    /// Remove a game from the pending queue at wherever it currently is.
+    private func drop(_ gameID: Int64) {
+        guard let index = pending.firstIndex(where: { $0.id == gameID }) else { return }
+        pending.remove(at: index)
+        if cursor > pending.count { cursor = pending.count }
+    }
+
     // MARK: Key routing
 
     /// A typed character → a triage action. Returns whether it was consumed.
@@ -109,6 +148,7 @@ final class TriageModel {
     func handle(character: Character) async -> Bool {
         let c = Character(character.lowercased())
         if c == "0" || character == " " { skip(); return true }
+        if c == "u" { await unplayCurrent(); return true }
         return await tierCurrent(letter: String(character))
     }
 

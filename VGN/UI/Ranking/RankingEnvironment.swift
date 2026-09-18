@@ -82,6 +82,12 @@ struct LiveRankingBackend: RankingBackend {
         try await ranking.setTier(ids, tierID: tierID)
     }
 
+    // Triage-safe un-play
+    func markNotPlayed(_ gameID: Int64) async throws -> UnplayOutcome {
+        try await library.markNotPlayed(gameID)
+    }
+    func deleteGame(_ gameID: Int64) async throws { try await library.deleteGame(gameID) }
+
     // Drag / drop overrides
     func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws {
         try await ranking.move(gameID: gameID, toTier: toTier, atIndex: atIndex)
