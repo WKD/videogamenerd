@@ -40,6 +40,10 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
     private(set) var tierCalls: [(ids: [Int64], tierID: Int64?)] = []
     private(set) var moves: [(gameID: Int64, toTier: Int64, atIndex: Int?)] = []
     private(set) var clearedTiers: [Int64] = []
+    private(set) var dividerMoves: [(upper: Int64, lower: Int64, k: Int)] = []
+    /// Scores returned by `derivedScores()`; settable for previews / tests.
+    var scores: [Int64: DerivedScoreValue] = [:]
+    var dividerOutcome = DividerMoveOutcome(movedIDs: [], upperPlaced: 0, lowerPlaced: 0)
 
     // MARK: Duel flow
     func currentDuel() async throws -> DuelPrompt? { currentPrompt }
@@ -70,12 +74,17 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
         clearedTiers.append(gameID)
         if autoApplyMoves { board = Self.removeGame(board, gameID) }
     }
+    func moveDivider(between upperTierID: Int64, and lowerTierID: Int64, by k: Int) async throws -> DividerMoveOutcome {
+        dividerMoves.append((upperTierID, lowerTierID, k))
+        return dividerOutcome
+    }
 
     // MARK: Reads
     func gameDetail(id: Int64) async throws -> GameDetail? { details[id] }
     func tiers() async throws -> [TierInfo] { tierList }
     func tierBoardOnce() async throws -> [TierBoardRow] { board }
     func theTopOnce(filter: LibraryFilter) async throws -> [TopRow] { topRows }
+    func derivedScores() async throws -> [Int64: DerivedScoreValue] { scores }
     func unrankedPlayedGames() async throws -> [GameSummary] { unranked }
     func duelQueueCountOnce() async throws -> Int { queueCount }
     func rankingStatsOnce() async throws -> RankingStats { stats }
