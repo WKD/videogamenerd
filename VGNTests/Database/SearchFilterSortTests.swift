@@ -121,6 +121,30 @@ import GRDB
 
     // MARK: - FTS
 
+    @Test func platformMultiFilterORsFromAnyScope() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        // From "All", platform ∈ {pc, snes} → Broken Sword (pc) + Chrono Trigger (snes).
+        #expect(try await titles(store, LibraryFilter(platforms: ["pc", "snes"]))
+            == ["Broken Sword", "Chrono Trigger"])
+        // A single-slug set narrows like the legacy platform facet.
+        #expect(try await titles(store, LibraryFilter(platforms: ["snes"])) == ["Chrono Trigger"])
+        // AND across kinds: platform ∈ {ps4} AND tier S.
+        #expect(try await titles(store, LibraryFilter(tierIDs: [1], platforms: ["ps4"])) == ["Bloodborne"])
+    }
+
+    @Test func formatFilterMatchesOwnedProductsByFormat() async throws {
+        let store = try await TestDB.makeStore()
+        let ids = try await buildLibrary(store)       // all physical single products
+        _ = try await store.addCopy(gameID: ids["Chrono Trigger"]!, platformID: "snes", format: .rom)
+        _ = try await store.addCopy(gameID: ids["Journey"]!, platformID: "ps4", format: .digital)
+        #expect(try await titles(store, LibraryFilter(formats: [.rom])) == ["Chrono Trigger"])
+        #expect(try await titles(store, LibraryFilter(formats: [.digital])) == ["Journey"])
+        // OR within kind.
+        #expect(try await titles(store, LibraryFilter(formats: [.rom, .digital]))
+            == ["Chrono Trigger", "Journey"])
+    }
+
     @Test func ftsFindsByTitlePrefixAndAltTitle() async throws {
         let store = try await TestDB.makeStore()
         _ = try await buildLibrary(store)

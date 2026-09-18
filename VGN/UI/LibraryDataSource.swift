@@ -89,6 +89,11 @@ enum LibraryFilterEvaluator {
         if let platform = filter.platform, !game.platformIDs.contains(platform) {
             return false
         }
+        // Explicit platform multi-facet (OR within kind).
+        if !filter.platforms.isEmpty,
+           !game.platformIDs.contains(where: { filter.platforms.contains($0) }) {
+            return false
+        }
         return true
     }
 

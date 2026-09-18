@@ -59,21 +59,26 @@ struct RootView: View {
 
     @ViewBuilder
     private var content: some View {
-        ZStack(alignment: .bottom) {
-            if vm.isRankingSelection {
-                RankingPlaceholderView(selection: vm.selection)
-            } else if vm.isPlayNextSelection {
-                PlayNextPlaceholderView()
-            } else {
-                LibraryGridView(vm: vm)
+        VStack(spacing: 0) {
+            if !vm.isRankingSelection && !vm.isPlayNextSelection {
+                FilterChipsBar(vm: vm)
             }
-            if let banner = vm.banner {
-                BannerView(banner: banner) { vm.dismissBanner() }
-                    .padding(12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            ZStack(alignment: .bottom) {
+                if vm.isRankingSelection {
+                    RankingPlaceholderView(selection: vm.selection)
+                } else if vm.isPlayNextSelection {
+                    PlayNextPlaceholderView()
+                } else {
+                    LibraryGridView(vm: vm)
+                }
+                if let banner = vm.banner {
+                    BannerView(banner: banner) { vm.dismissBanner() }
+                        .padding(12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.easeInOut(duration: 0.2), value: vm.banner)
         }
-        .animation(.easeInOut(duration: 0.2), value: vm.banner)
     }
 
     private var confirmationPresented: Binding<Bool> {
@@ -114,6 +119,8 @@ struct RootView: View {
             decadeMenu
             tierMenu
             statusMenu
+            formatMenu
+            platformMenu
             sortMenu
 
             Slider(value: $vm.gridCellWidth,
@@ -204,6 +211,42 @@ struct RootView: View {
         } label: {
             Label("Status", systemImage: "flag")
                 .symbolVariant(vm.filter.statuses.isEmpty ? .none : .fill)
+        }
+    }
+
+    // Ownership format (physical / digital / ROM), driven by ProductFormat.
+    private var formatMenu: some View {
+        Menu {
+            ForEach(ProductFormat.allCases, id: \.self) { format in
+                Toggle(format.label, isOn: membership(\.formats, format))
+            }
+            if !vm.filter.formats.isEmpty {
+                Divider()
+                Button("Clear") { clear(\.formats) }
+            }
+        } label: {
+            Label("Format", systemImage: "opticaldisc")
+                .symbolVariant(vm.filter.formats.isEmpty ? .none : .fill)
+        }
+    }
+
+    // Platform multi-filter, usable from any scope incl. "All" (in-use platforms).
+    private var platformMenu: some View {
+        Menu {
+            if vm.platforms.isEmpty {
+                Button("No platforms yet") {}.disabled(true)
+            } else {
+                ForEach(vm.platforms) { platform in
+                    Toggle(platform.name, isOn: membership(\.platforms, platform.id))
+                }
+                if !vm.filter.platforms.isEmpty {
+                    Divider()
+                    Button("Clear") { clear(\.platforms) }
+                }
+            }
+        } label: {
+            Label("Platform", systemImage: "gamecontroller")
+                .symbolVariant(vm.filter.platforms.isEmpty ? .none : .fill)
         }
     }
 

@@ -112,6 +112,18 @@ enum LibraryQuery {
         if let platform = filter.platform {
             appendPlatformMembership(platform, into: &wheres, args: &args)
         }
+        if !filter.platforms.isEmpty {
+            // OR within the kind: a game on any of the selected platforms matches.
+            let slugs = filter.platforms.sorted()
+            let placeholders = self.placeholders(slugs.count)
+            wheres.append("""
+                (EXISTS(SELECT 1 FROM game_platforms gp WHERE gp.game_id = g.id AND gp.platform_id IN (\(placeholders)))
+                 OR EXISTS(SELECT 1 FROM products p4 JOIN product_games pg4 ON pg4.product_id = p4.id
+                           WHERE pg4.game_id = g.id AND p4.platform_id IN (\(placeholders))))
+                """)
+            args.append(contentsOf: slugs.map { $0 as DatabaseValueConvertible })
+            args.append(contentsOf: slugs.map { $0 as DatabaseValueConvertible })
+        }
         if !filter.tierIDs.isEmpty {
             let ids = filter.tierIDs.sorted()
             wheres.append("g.tier_id IN (\(placeholders(ids.count)))")

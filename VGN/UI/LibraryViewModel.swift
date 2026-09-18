@@ -320,6 +320,23 @@ final class LibraryViewModel {
         }
     }
 
+    // MARK: Filter chips (PLAN §8)
+
+    /// The active-filter chips shown under the toolbar, grouped by kind.
+    var filterChips: [FilterChip] {
+        LibraryFilterChips.chips(for: filter, tiers: tiers, platformShort: PlatformLabels.short)
+    }
+
+    /// Remove one chip's value from the filter (re-runs the query).
+    func removeFilterChip(_ chip: FilterChip) {
+        setFilter(LibraryFilterChips.removing(chip, from: filter))
+    }
+
+    /// Clear every active facet (search included), keeping scope + sort.
+    func clearAllFilters() {
+        setFilter(LibraryFilterChips.cleared(filter))
+    }
+
     /// A binding to one field of the filter that re-runs the query on change.
     func filterBinding<T>(_ keyPath: WritableKeyPath<LibraryFilter, T>) -> Binding<T> {
         Binding(
