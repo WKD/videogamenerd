@@ -18,11 +18,17 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
     var details: [Int64: GameDetail] = [:]
     var tierList: [TierInfo] = TierInfo.defaults
     var board: [TierBoardRow] = []
+    var topRows: [TopRow] = []
     var unranked: [GameSummary] = []
     var queueCount = 0
     var stats = RankingStats(perTier: [])
     var disputes: [Consistency.Dispute] = []
     var setTierResult: SetTierOutcome?
+    /// When true, `move` / `clearTier` mutate `board` in place (so a model's
+    /// `tierBoardOnce()` reconcile sees the effect) using the same insertion
+    /// semantics as `RankMoves`. Off by default so index-math tests inspect the
+    /// recorded calls without the board shifting underneath them.
+    var autoApplyMoves = false
 
     // Recorded calls
     private(set) var answered: [Int64] = []
@@ -32,6 +38,8 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
     private(set) var dismissed: [BorderSuggestion] = []
     private(set) var rePlaced: [Int64] = []
     private(set) var tierCalls: [(ids: [Int64], tierID: Int64?)] = []
+    private(set) var moves: [(gameID: Int64, toTier: Int64, atIndex: Int?)] = []
+    private(set) var clearedTiers: [Int64] = []
 
     // MARK: Duel flow
     func currentDuel() async throws -> DuelPrompt? { currentPrompt }
@@ -53,10 +61,21 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
         return setTierResult ?? SetTierOutcome(applied: ids, skippedUnplayed: [])
     }
 
+    // MARK: Drag / drop overrides
+    func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws {
+        moves.append((gameID, toTier, atIndex))
+        if autoApplyMoves { board = Self.applyMove(board, gameID: gameID, toTier: toTier, atIndex: atIndex) }
+    }
+    func clearTier(_ gameID: Int64) async throws {
+        clearedTiers.append(gameID)
+        if autoApplyMoves { board = Self.removeGame(board, gameID) }
+    }
+
     // MARK: Reads
     func gameDetail(id: Int64) async throws -> GameDetail? { details[id] }
     func tiers() async throws -> [TierInfo] { tierList }
     func tierBoardOnce() async throws -> [TierBoardRow] { board }
+    func theTopOnce(filter: LibraryFilter) async throws -> [TopRow] { topRows }
     func unrankedPlayedGames() async throws -> [GameSummary] { unranked }
     func duelQueueCountOnce() async throws -> Int { queueCount }
     func rankingStatsOnce() async throws -> RankingStats { stats }
@@ -71,6 +90,46 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
     }
     func unrankedGamesStream() -> AsyncStream<[GameSummary]> {
         let v = unranked; return AsyncStream { $0.yield(v); $0.finish() }
+    }
+    func tierBoardStream() -> AsyncStream<[TierBoardRow]> {
+        let v = board; return AsyncStream { $0.yield(v); $0.finish() }
+    }
+    func theTopStream(filter: LibraryFilter) -> AsyncStream<[TopRow]> {
+        let v = topRows; return AsyncStream { $0.yield(v); $0.finish() }
+    }
+
+    // MARK: Board mutation (mirrors RankMoves for `autoApplyMoves`)
+
+    /// Remove a game from wherever it sits on the board.
+    static func removeGame(_ board: [TierBoardRow], _ gameID: Int64) -> [TierBoardRow] {
+        board.map { row in
+            var r = row
+            r.placed.removeAll { $0.id == gameID }
+            r.unplaced.removeAll { $0.id == gameID }
+            return r
+        }
+    }
+
+    /// Apply one `move` to a board of summaries (insertion index is among the
+    /// *other* placed games of the target tier; nil = unplaced tail).
+    static func applyMove(_ board: [TierBoardRow], gameID: Int64, toTier: Int64, atIndex: Int?) -> [TierBoardRow] {
+        // Find the moving summary, then strip it out everywhere.
+        let moving = board.flatMap { $0.placed + $0.unplaced }.first { $0.id == gameID }
+        guard var summary = moving else { return board }
+        var result = removeGame(board, gameID)
+        summary.tierID = toTier
+        summary.tierLetter = result.first { $0.tier.id == toTier }?.tier.letter
+        summary.tierColorHex = result.first { $0.tier.id == toTier }?.tier.colorHex
+        guard let rowIndex = result.firstIndex(where: { $0.tier.id == toTier }) else { return board }
+        if let atIndex {
+            summary.rankKey = 1
+            let clamped = max(0, min(atIndex, result[rowIndex].placed.count))
+            result[rowIndex].placed.insert(summary, at: clamped)
+        } else {
+            summary.rankKey = nil
+            result[rowIndex].unplaced.append(summary)
+        }
+        return result
     }
 
     // MARK: Covers
@@ -160,6 +219,76 @@ extension ScriptedRankingBackend {
             GameSummary(id: 11, title: "Nier Automata", year: 2017, played: true, platformIDs: ["ps4"]),
             GameSummary(id: 12, title: "Hades", year: 2020, played: true, platformIDs: ["pc"]),
         ]
+        return b
+    }
+
+    /// A Tier Board fake: `placedPerTier` fine-ranked games + `unplacedPerTier`
+    /// dimmed-tail games per tier, plus a few unranked-tray games.
+    static func previewBoard(placedPerTier: Int, unplacedPerTier: Int) -> ScriptedRankingBackend {
+        let b = ScriptedRankingBackend()
+        let titles = ["Bloodborne", "Elden Ring", "Hades", "Celeste", "Hollow Knight",
+                      "Nier Automata", "Chrono Trigger", "Dark Souls", "Portal 2", "Journey",
+                      "Outer Wilds", "Disco Elysium", "Undertale", "Braid", "Inside"]
+        let platforms = ["ps4", "ps5", "snes", "pc", "ps2"]
+        var id: Int64 = 1
+        b.board = TierInfo.defaults.map { tier in
+            var placed: [GameSummary] = []
+            for i in 0..<placedPerTier {
+                placed.append(GameSummary(id: id, title: "\(titles[Int(id) % titles.count]) \(id)",
+                                          year: 1995 + Int(id) % 30, tierID: tier.id,
+                                          tierLetter: tier.letter, tierColorHex: tier.colorHex,
+                                          rankKey: RankKey((i + 1) * 1000), played: true, owned: true,
+                                          platformIDs: [platforms[Int(id) % platforms.count]]))
+                id += 1
+            }
+            var unplaced: [GameSummary] = []
+            for _ in 0..<unplacedPerTier {
+                unplaced.append(GameSummary(id: id, title: "\(titles[Int(id) % titles.count]) \(id)",
+                                            year: 1995 + Int(id) % 30, tierID: tier.id,
+                                            tierLetter: tier.letter, tierColorHex: tier.colorHex,
+                                            rankKey: nil, played: true, owned: true,
+                                            platformIDs: [platforms[Int(id) % platforms.count]]))
+                id += 1
+            }
+            return TierBoardRow(tier: tier, placed: placed, unplaced: unplaced)
+        }
+        b.unranked = (0..<4).map { i in
+            GameSummary(id: 900 + Int64(i), title: "Untiered \(i)", year: 2010 + i,
+                        played: true, owned: true, platformIDs: ["pc"])
+        }
+        return b
+    }
+
+    /// A The Top fake: `n` placed games across tiers with global + derived
+    /// positions, optionally a filtered subset.
+    static func previewTop(n: Int, filtered: Bool = false) -> ScriptedRankingBackend {
+        let b = ScriptedRankingBackend()
+        let titles = ["Bloodborne", "Elden Ring", "Hades", "Celeste", "Hollow Knight",
+                      "Nier Automata", "Chrono Trigger", "Dark Souls", "Portal 2", "Journey",
+                      "Outer Wilds", "Disco Elysium", "Undertale", "Braid", "Inside"]
+        let platforms = ["ps4", "ps5", "snes", "pc", "ps2"]
+        var rows: [TopRow] = []
+        let tiers = TierInfo.defaults
+        for i in 0..<n {
+            let tier = tiers[min(i / max(1, n / 6 + 1), tiers.count - 1)]
+            let game = GameSummary(id: Int64(i + 1), title: "\(titles[i % titles.count])",
+                                   year: 1995 + i, tierID: tier.id, tierLetter: tier.letter,
+                                   tierColorHex: tier.colorHex, rankKey: RankKey((i + 1) * 1000),
+                                   played: true, owned: true,
+                                   platformIDs: [platforms[i % platforms.count]])
+            rows.append(TopRow(game: game, globalPosition: i + 1,
+                               derivedPosition: filtered ? nil : i + 1))
+        }
+        if filtered {
+            // Renumber the derived positions 1…k over the kept subset (every 2nd).
+            var derived = 0
+            rows = rows.enumerated().compactMap { idx, row in
+                guard idx % 2 == 0 else { return nil }
+                derived += 1
+                return TopRow(game: row.game, globalPosition: row.globalPosition, derivedPosition: derived)
+            }
+        }
+        b.topRows = rows
         return b
     }
 
