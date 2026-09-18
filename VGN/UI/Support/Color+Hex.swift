@@ -30,9 +30,15 @@ extension Color {
     /// tint generated placeholder covers so a coverless library still reads as
     /// a varied grid rather than a wall of grey.
     static func stableTint(for seed: String) -> Color {
-        var hasher = Hasher()
-        hasher.combine(seed)
-        let h = Double(UInt(bitPattern: hasher.finalize()) % 360) / 360
+        // FNV-1a over the UTF-8 bytes: deterministic *across processes*, unlike
+        // `Hasher`, whose per-process random seed made a game's placeholder tint
+        // change on every launch (and made snapshots non-reproducible).
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in seed.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01b3
+        }
+        let h = Double(hash % 360) / 360
         return Color(hue: h, saturation: 0.42, brightness: 0.55)
     }
 }

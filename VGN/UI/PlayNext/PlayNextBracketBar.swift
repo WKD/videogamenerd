@@ -45,6 +45,7 @@ struct PlayNextBracketBar: View {
                     get: { model.completionist },
                     set: { model.setCompletionist($0) }))
                     .toggleStyle(.checkbox)
+                    .fixedSize()
                     .help("Estimate to 100% instead of a normal playthrough")
 
                 optionsMenu
