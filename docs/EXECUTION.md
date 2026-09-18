@@ -29,7 +29,7 @@ IGDB credentials for fixture recording / live smoke tests: `~/.config/vgn/igdb.e
 ## Shared conventions (contracts)
 
 - IDs: `Int64` row ids for games/products/tiers; platform id = slug `String` (e.g. `ps5`, `snes`, `pc`, `mac`).
-- `VGN/Ranking` and `VGN/Matching` are pure: Foundation only, no GRDB/SwiftUI/AppKit imports, operate on plain values (`Int64` ids, `String` keys).
+- `VGN/Ranking` and `VGN/Matching` are pure: Foundation only, no GRDB/SwiftUI/AppKit imports, operate on plain values (`Int64` ids, `RankKey` rank keys — type decided by the Ranking lane in Wave 0, expected `Int64`).
 - UI views take value types (`GameSummary`, `SidebarCounts`, `LibraryFilter`, `SidebarSelection`) defined in `VGN/Model/`; stores (`@MainActor @Observable`) adapt DB observations to them. Views ship with preview/sample data.
 - Migration v1 holds the **entire** PLAN §4 schema (+ `enrichment_jobs`). Later schema needs = new numbered migration, lane A.
 - Services sit behind protocols where PLAN names one (`CoverProvider`, `TimeToBeatProvider`, `ShelfRecognizer`, `LibraryImporter`).
