@@ -77,6 +77,13 @@ Agents cannot operate the app's windows. Every screen was built from model-level
 3. Tier Board drag & drop (insertion position, multi-select drags) and the divider drag in The Top.
 4. Grid scroll smoothness with real covers (only measured as query time + cell-diffing assertions, never as frames).
 
+## 0b. Found by the hardening pass
+
+- **Fixed 2026-09-19 — the app burned 100 % of a CPU core while idle.** `LibraryGridView`'s context-menu builder mutated the selection (`selectOnly`) while SwiftUI was building every cell's menu, so each update invalidated the view again (~700 selection writes per second). Present since the very first app shell; invisible to 650+ unit tests and to "process stays alive" launch checks; surfaced because the XCUITest runner could never find the app idle. Fix: the builder is pure, selection changes only inside menu actions. **New rule:** nothing reachable from a `body`/`@ViewBuilder`/menu builder may write observable state; launch checks now also assert idle CPU (< 5 % after 8 s) on the main destinations.
+- The UI smoke suite (`VGNUITests`, scheme `VGN-UITests`, `scripts/uitests.sh`) exists and loads; its flows could not assert until the bug above was fixed — status in `docs/uitests.md`. It needs `ENABLE_HARDENED_RUNTIME = NO` on the UI-test target (ad-hoc signing vs library validation).
+- Fixed: the photo-scan sheet could not be dismissed from its input state (no working Cancel, `esc` ignored).
+- Open: Quick Add's sticky flags persisted to the real `UserDefaults` even in sample/seed modes (being fixed with the UI-suite run); a Tier Board model test (`nudgeBackward`) is timing-sensitive; cover downloads are not cancelled when a cell scrolls away and thumbnail decoding runs on the `CoverStore` actor (only matters if real-cover scrolling stutters).
+
 ## 1. Still to build inside milestones 0–6
 
 - **M3 Compilations UI** — **done** (wave 5, lane C). Compilation editor (add/remove/reorder members via the same quick-search, reuse-not-duplicate, orphan-aware removal, Fill-from-IGDB-bundle diff, edit details, auto single↔compilation conversion); inspector "Part of *X* (PS3) · n games" with an inline clickable member list and "Edit compilation…"; grid stack-marker tooltip names the compilation + context-menu "Show Compilation" / "Edit Compilation…" / "Group as Compilation…"; group-a-selection sheet (merges existing singles); the copy-removal warning now lists **member titles** (`GameDetail.Copy.memberTitles/memberIDs`).
