@@ -1,0 +1,197 @@
+import Foundation
+import GRDB
+
+/// Thrown to roll a transaction back and carry a ``WriteOutcome`` out to the
+/// caller (used for the `.wouldOrphan` "ask before deleting" path).
+struct RollbackWithOutcome: Error {
+    let outcome: WriteOutcome
+    init(_ outcome: WriteOutcome) { self.outcome = outcome }
+}
+
+extension LibraryStore {
+    /// Run a write that may bail out with `.wouldOrphan`, converting the
+    /// rollback back into a normal return value.
+    func writeCatchingOrphan(
+        _ body: @Sendable @escaping (Database) throws -> WriteOutcome
+    ) async throws -> WriteOutcome {
+        do {
+            return try await dbWriter.write(body)
+        } catch let rollback as RollbackWithOutcome {
+            return rollback.outcome
+        }
+    }
+
+    // MARK: - Ownership / played predicates
+
+    static func isOwned(_ gameID: Int64, _ db: Database) throws -> Bool {
+        try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM product_games WHERE game_id = ?)",
+                          arguments: [gameID]) ?? false
+    }
+
+    static func isPlayed(_ gameID: Int64, _ db: Database) throws -> Bool {
+        try Bool.fetchOne(db, sql: "SELECT played FROM games WHERE id = ?",
+                          arguments: [gameID]) ?? false
+    }
+
+    /// For each id, delete the game iff it is now neither owned nor played.
+    /// Returns `.wouldOrphan` (rolling back) when that would happen and the
+    /// caller did not confirm.
+    static func resolveOrphans(
+        _ gameIDs: [Int64], confirmOrphanDelete: Bool, db: Database
+    ) throws -> WriteOutcome {
+        var orphans: [Int64] = []
+        for id in gameIDs {
+            // The game may already be gone (cascade); skip those.
+            guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM games WHERE id = ?)",
+                                    arguments: [id]) ?? false else { continue }
+            if try !isOwned(id, db) && !isPlayed(id, db) { orphans.append(id) }
+        }
+        if orphans.isEmpty { return .ok }
+        if !confirmOrphanDelete { throw RollbackWithOutcome(.wouldOrphan(orphans)) }
+        for id in orphans { try deleteGameRow(id, db) }
+        return .ok
+    }
+
+    // MARK: - Row mutations
+
+    /// Set a game's tier and clear its fine-rank key (→ unplaced). Assumes the
+    /// game is already played (caller checks / draft implies it).
+    static func setTierRow(gameID: Int64, tierID: Int64, db: Database) throws {
+        try db.execute(sql: """
+            UPDATE games SET tier_id = ?, rank_key = NULL, updated_at = ? WHERE id = ?
+            """, arguments: [tierID, Date(), gameID])
+    }
+
+    /// Insert-or-update a `game_platforms` row. `played` is OR-ed with any
+    /// existing value so ownership adds never demote a played flag.
+    static func ensureGamePlatform(gameID: Int64, platformID: String, played: Bool, db: Database) throws {
+        try db.execute(sql: """
+            INSERT INTO game_platforms (game_id, platform_id, played)
+            VALUES (?, ?, ?)
+            ON CONFLICT(game_id, platform_id)
+            DO UPDATE SET played = MAX(played, excluded.played)
+            """, arguments: [gameID, platformID, played])
+    }
+
+    /// Create a single-game Product on `platformID` and link the game.
+    @discardableResult
+    static func makeSingleProduct(
+        gameID: Int64, platformID: String,
+        format: ProductFormat, source: ProductSource,
+        edition: String? = nil, region: String? = nil, db: Database
+    ) throws -> Int64 {
+        var product = ProductRecord(
+            platformID: platformID, kind: .single, format: format,
+            edition: edition, region: region, source: source
+        )
+        try product.insert(db)
+        let productID = product.id!
+        try ProductGameRecord(productID: productID, gameID: gameID, position: 0).insert(db)
+        return productID
+    }
+
+    /// Reuse-or-create a compilation member game and link it to the product.
+    static func upsertCompilationMember(
+        _ member: CompilationMemberDraft, productID: Int64, platformID: String, db: Database
+    ) throws -> AddOutcome {
+        let year = member.year ?? member.releaseDate.map(year(of:))
+        var existing: GameRecord?
+        if let igdbID = member.igdbID {
+            existing = try GameRecord.filter(GameRecord.Columns.igdbID == igdbID).fetchOne(db)
+        }
+
+        let gameID: Int64
+        let isNew: Bool
+        if let found = existing, let id = found.id {
+            gameID = id
+            isNew = false
+            if member.played && !found.played {
+                try db.execute(sql: "UPDATE games SET played = 1, updated_at = ? WHERE id = ?",
+                               arguments: [Date(), id])
+            }
+            if let status = member.status {
+                try db.execute(sql: "UPDATE games SET status = ?, updated_at = ? WHERE id = ?",
+                               arguments: [status.rawValue, Date(), id])
+            }
+        } else {
+            var record = GameRecord(
+                igdbID: member.igdbID,
+                title: member.title,
+                sortTitle: SortTitle.make(from: member.title),
+                altTitles: joinAlt(member.altTitles),
+                releaseDate: member.releaseDate,
+                year: year,
+                played: member.played,
+                status: member.status?.rawValue
+            )
+            try record.insert(db)
+            gameID = record.id!
+            isNew = true
+        }
+
+        try ensureGamePlatform(gameID: gameID, platformID: platformID, played: member.played, db: db)
+        // Link to the compilation product (idempotent on the composite PK).
+        try db.execute(sql: """
+            INSERT INTO product_games (product_id, game_id, position)
+            VALUES (?, ?, ?)
+            ON CONFLICT(product_id, game_id) DO UPDATE SET position = excluded.position
+            """, arguments: [productID, gameID, member.position])
+
+        if isNew { return .created(gameID: gameID) }
+        return .addedCopy(gameID: gameID)
+    }
+
+    /// Replace a game's genre set: upsert the genre names and rewrite the join.
+    static func setGenres(_ names: [String], gameID: Int64, db: Database) throws {
+        try db.execute(sql: "DELETE FROM game_genres WHERE game_id = ?", arguments: [gameID])
+        for name in names {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            try db.execute(sql: "INSERT OR IGNORE INTO genres (name) VALUES (?)", arguments: [trimmed])
+            let genreID = try Int64.fetchOne(db, sql: "SELECT id FROM genres WHERE name = ?",
+                                             arguments: [trimmed])!
+            try db.execute(sql: """
+                INSERT OR IGNORE INTO game_genres (game_id, genre_id) VALUES (?, ?)
+                """, arguments: [gameID, genreID])
+        }
+    }
+
+    /// Delete a game and any product left with no members afterwards.
+    static func deleteGameRow(_ gameID: Int64, _ db: Database) throws {
+        // Product ids this game belongs to, so we can garbage-collect empties.
+        let productIDs = try Int64.fetchAll(
+            db, sql: "SELECT product_id FROM product_games WHERE game_id = ?", arguments: [gameID])
+        try db.execute(sql: "DELETE FROM games WHERE id = ?", arguments: [gameID])
+        for productID in productIDs { try purgeEmptyProduct(productID, db) }
+    }
+
+    /// Delete a product if it now has zero member games.
+    static func purgeEmptyProduct(_ productID: Int64, _ db: Database) throws {
+        let remaining = try Int.fetchOne(
+            db, sql: "SELECT COUNT(*) FROM product_games WHERE product_id = ?",
+            arguments: [productID]) ?? 0
+        if remaining == 0 {
+            try db.execute(sql: "DELETE FROM products WHERE id = ?", arguments: [productID])
+        }
+    }
+
+    /// Update `column = value` for a game only when `value` is non-nil.
+    static func setIf<V: DatabaseValueConvertible>(
+        _ value: V?, column: String, gameID: Int64, db: Database
+    ) throws {
+        guard let value else { return }
+        try db.execute(sql: "UPDATE games SET \(column) = ? WHERE id = ?", arguments: [value, gameID])
+    }
+
+    // MARK: - Small utilities
+
+    static func joinAlt(_ alts: [String]) -> String {
+        alts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    static func year(of date: Date) -> Int {
+        Calendar(identifier: .gregorian).component(.year, from: date)
+    }
+}
