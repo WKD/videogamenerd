@@ -1,0 +1,110 @@
+[
+  {
+    "alternative_names" : [
+      {
+        "id" : 57698,
+        "name" : "Shadow of the Colossus HD"
+      },
+      {
+        "id" : 57699,
+        "name" : "Shadow of the Colossus PS3 Remaster"
+      },
+      {
+        "id" : 57700,
+        "name" : "Wanda to Kyozou"
+      },
+      {
+        "id" : 57701,
+        "name" : "Wander and the Colossus"
+      },
+      {
+        "id" : 57702,
+        "name" : "SotC HD PS3"
+      },
+      {
+        "id" : 57703,
+        "name" : "Wanda and the Colossus HD"
+      },
+      {
+        "id" : 57704,
+        "name" : "汪達與巨像"
+      }
+    ],
+    "cover" : {
+      "id" : 117344,
+      "image_id" : "co2ijk"
+    },
+    "first_release_date" : 1326326400,
+    "game_type" : 9,
+    "genres" : [
+      {
+        "id" : 8,
+        "name" : "Platform"
+      },
+      {
+        "id" : 9,
+        "name" : "Puzzle"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 139896,
+    "name" : "Shadow of the Colossus",
+    "parent_game" : 2207,
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      }
+    ],
+    "slug" : "shadow-of-the-colossus--2"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 57715,
+        "name" : "Iko"
+      },
+      {
+        "id" : 160127,
+        "name" : "ICO HD Remaster"
+      },
+      {
+        "id" : 160128,
+        "name" : "ICO"
+      }
+    ],
+    "cover" : {
+      "id" : 329257,
+      "image_id" : "co7221"
+    },
+    "first_release_date" : 1326326400,
+    "game_type" : 9,
+    "genres" : [
+      {
+        "id" : 8,
+        "name" : "Platform"
+      },
+      {
+        "id" : 9,
+        "name" : "Puzzle"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 144612,
+    "name" : "Ico",
+    "parent_game" : 7170,
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      }
+    ],
+    "slug" : "ico--1"
+  }
+]

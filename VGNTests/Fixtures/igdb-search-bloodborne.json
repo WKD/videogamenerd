@@ -1,0 +1,206 @@
+[
+  {
+    "alternative_names" : [
+      {
+        "id" : 27171,
+        "name" : "Project Beast"
+      },
+      {
+        "id" : 130571,
+        "name" : "血源诅咒"
+      }
+    ],
+    "cover" : {
+      "id" : 525225,
+      "image_id" : "cob99l"
+    },
+    "first_release_date" : 1427155200,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 7334,
+    "name" : "Bloodborne",
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "slug" : "bloodborne"
+  },
+  {
+    "cover" : {
+      "id" : 115291,
+      "image_id" : "co2gyj"
+    },
+    "game_type" : 0,
+    "id" : 28734,
+    "name" : "Bloodborne 2",
+    "slug" : "bloodborne-2"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 77796,
+        "name" : "BBPSX"
+      }
+    ],
+    "cover" : {
+      "id" : 205860,
+      "image_id" : "co4euc"
+    },
+    "first_release_date" : 1643587200,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 179685,
+    "name" : "Bloodborne PSX",
+    "platforms" : [
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      }
+    ],
+    "slug" : "bloodborne-psx"
+  },
+  {
+    "cover" : {
+      "id" : 341026,
+      "image_id" : "co7b4y"
+    },
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 10,
+        "name" : "Racing"
+      },
+      {
+        "id" : 33,
+        "name" : "Arcade"
+      }
+    ],
+    "id" : 233928,
+    "name" : "Bloodborne Kart",
+    "platforms" : [
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      }
+    ],
+    "slug" : "bloodborne-kart"
+  },
+  {
+    "cover" : {
+      "id" : 525224,
+      "image_id" : "cob99k"
+    },
+    "first_release_date" : 1448323200,
+    "game_type" : 2,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 14647,
+    "name" : "Bloodborne: The Old Hunters",
+    "parent_game" : 7334,
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "slug" : "bloodborne-the-old-hunters--1"
+  },
+  {
+    "cover" : {
+      "id" : 447716,
+      "image_id" : "co9lgk"
+    },
+    "first_release_date" : 1635465600,
+    "game_type" : 5,
+    "id" : 337349,
+    "name" : "Bloodborne First Person Mod",
+    "parent_game" : 7334,
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "slug" : "bloodborne-first-person-mod"
+  },
+  {
+    "cover" : {
+      "id" : 196681,
+      "image_id" : "co47rd"
+    },
+    "first_release_date" : 1429833600,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      }
+    ],
+    "id" : 44651,
+    "name" : "Bloodborne: Nightmare Edition",
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "slug" : "bloodborne-nightmare-edition",
+    "version_parent" : 7334
+  },
+  {
+    "cover" : {
+      "id" : 596250,
+      "image_id" : "cocs2i"
+    },
+    "first_release_date" : 1429833600,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 44542,
+    "name" : "Bloodborne: Collector's Edition",
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "slug" : "bloodborne-collectors-edition",
+    "version_parent" : 7334
+  }
+]

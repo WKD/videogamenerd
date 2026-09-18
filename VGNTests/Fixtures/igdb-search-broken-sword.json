@@ -1,0 +1,335 @@
+[
+  {
+    "alternative_names" : [
+      {
+        "id" : 93173,
+        "name" : "Broken Sword 1"
+      },
+      {
+        "id" : 93174,
+        "name" : "Baphomets Fluch"
+      },
+      {
+        "id" : 93175,
+        "name" : "Les Chevaliers de Baphomet"
+      },
+      {
+        "id" : 93176,
+        "name" : "Broken Sword: Il Segreto dei Templari"
+      },
+      {
+        "id" : 93177,
+        "name" : "Broken Sword: La Leyenda de los Templarios"
+      },
+      {
+        "id" : 93178,
+        "name" : "Circle of Blood"
+      }
+    ],
+    "cover" : {
+      "id" : 353556,
+      "image_id" : "co7kt0"
+    },
+    "first_release_date" : 1154476800,
+    "game_type" : 11,
+    "genres" : [
+      {
+        "id" : 2,
+        "name" : "Point-and-click"
+      },
+      {
+        "id" : 9,
+        "name" : "Puzzle"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 206503,
+    "name" : "Broken Sword: The Shadow of the Templars",
+    "parent_game" : 206502,
+    "platforms" : [
+      {
+        "id" : 405
+      }
+    ],
+    "slug" : "broken-sword-the-shadow-of-the-templars--2"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 200487,
+        "name" : "Broken Sword: Il segreto dei Templari"
+      },
+      {
+        "id" : 200489,
+        "name" : "Circle of Blood"
+      },
+      {
+        "id" : 187513,
+        "name" : "Baphomets Fluch: Die Verschwörung der Tempelritter"
+      },
+      {
+        "id" : 200488,
+        "name" : "Broken Sword: La leyenda de los templarios"
+      },
+      {
+        "id" : 200490,
+        "name" : "Les Chevaliers de Baphomet"
+      }
+    ],
+    "cover" : {
+      "id" : 229045,
+      "image_id" : "co4wqd"
+    },
+    "first_release_date" : 1016323200,
+    "game_type" : 11,
+    "genres" : [
+      {
+        "id" : 2,
+        "name" : "Point-and-click"
+      },
+      {
+        "id" : 9,
+        "name" : "Puzzle"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 206502,
+    "name" : "Broken Sword: The Shadow of the Templars",
+    "parent_game" : 616,
+    "platforms" : [
+      {
+        "abbreviation" : "GBA",
+        "id" : 24
+      }
+    ],
+    "slug" : "broken-sword-the-shadow-of-the-templars--1"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 93189,
+        "name" : "Broken Sword: The Director's Cut"
+      },
+      {
+        "id" : 93190,
+        "name" : "Les Chevaliers de Baphomet : The Director's Cut"
+      },
+      {
+        "id" : 93191,
+        "name" : "Baphomets Fluch: The Director's Cut"
+      },
+      {
+        "id" : 93415,
+        "name" : "Broken Sword: Il Segreto dei Templari - The Director's Cut"
+      },
+      {
+        "id" : 93416,
+        "name" : "Broken Sword: La Leyenda de los Templarios - Montaje Del Director"
+      }
+    ],
+    "cover" : {
+      "id" : 229082,
+      "image_id" : "co4wre"
+    },
+    "first_release_date" : 1237420800,
+    "game_type" : 11,
+    "genres" : [
+      {
+        "id" : 2,
+        "name" : "Point-and-click"
+      },
+      {
+        "id" : 9,
+        "name" : "Puzzle"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 206510,
+    "name" : "Broken Sword: Shadow of the Templars - The Director's Cut",
+    "parent_game" : 21127,
+    "platforms" : [
+      {
+        "abbreviation" : "NDS",
+        "id" : 20
+      }
+    ],
+    "slug" : "broken-sword-shadow-of-the-templars-the-directors-cut--1"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 158388,
+        "name" : "Baphomets Fluch - Die Verschwörung der Tempelritter: Reforged Edition"
+      },
+      {
+        "id" : 158426,
+        "name" : "Les Chevaliers de Baphomet - L'ombre des templiers"
+      },
+      {
+        "id" : 158427,
+        "name" : "Broken Sword - Il Segreto dei Templari: Reforged"
+      },
+      {
+        "id" : 158428,
+        "name" : "Broken Sword - La Leyenda de los Templarios: Reforged"
+      },
+      {
+        "id" : 181294,
+        "name" : "BS1R.exe"
+      }
+    ],
+    "cover" : {
+      "id" : 412881,
+      "image_id" : "co8ukx"
+    },
+    "first_release_date" : 1726704000,
+    "game_type" : 9,
+    "genres" : [
+      {
+        "id" : 2,
+        "name" : "Point-and-click"
+      },
+      {
+        "id" : 9,
+        "name" : "Puzzle"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      },
+      {
+        "id" : 32,
+        "name" : "Indie"
+      }
+    ],
+    "id" : 262651,
+    "name" : "Broken Sword: Shadow of the Templars Reforged",
+    "parent_game" : 616,
+    "platforms" : [
+      {
+        "abbreviation" : "Series X|S",
+        "id" : 169
+      },
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      },
+      {
+        "abbreviation" : "Linux",
+        "id" : 3
+      },
+      {
+        "abbreviation" : "Switch 2",
+        "id" : 508
+      },
+      {
+        "abbreviation" : "Android",
+        "id" : 34
+      },
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      },
+      {
+        "abbreviation" : "iOS",
+        "id" : 39
+      },
+      {
+        "abbreviation" : "PS5",
+        "id" : 167
+      },
+      {
+        "abbreviation" : "Mac",
+        "id" : 14
+      },
+      {
+        "abbreviation" : "Switch",
+        "id" : 130
+      }
+    ],
+    "slug" : "broken-sword-shadow-of-the-templars-reforged"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 53086,
+        "name" : "Les Chevaliers de Baphomet : The Director's Cut"
+      },
+      {
+        "id" : 68986,
+        "name" : "Broken Sword: The Director's Cut"
+      },
+      {
+        "id" : 93257,
+        "name" : "Broken Sword: Il Segreto dei Templari - The Director's Cut"
+      },
+      {
+        "id" : 93258,
+        "name" : "Broken Sword: La Leyenda de los Templarios - Montaje Del Director"
+      },
+      {
+        "id" : 93194,
+        "name" : "Baphomets Fluch: The Director's Cut"
+      }
+    ],
+    "cover" : {
+      "id" : 455583,
+      "image_id" : "co9rj3"
+    },
+    "first_release_date" : 1237420800,
+    "game_type" : 8,
+    "genres" : [
+      {
+        "id" : 2,
+        "name" : "Point-and-click"
+      },
+      {
+        "id" : 9,
+        "name" : "Puzzle"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 21127,
+    "name" : "Broken Sword: Shadow of the Templars - The Director's Cut",
+    "parent_game" : 616,
+    "platforms" : [
+      {
+        "abbreviation" : "Linux",
+        "id" : 3
+      },
+      {
+        "abbreviation" : "Wii",
+        "id" : 5
+      },
+      {
+        "abbreviation" : "Android",
+        "id" : 34
+      },
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      },
+      {
+        "abbreviation" : "iOS",
+        "id" : 39
+      },
+      {
+        "abbreviation" : "Mac",
+        "id" : 14
+      }
+    ],
+    "slug" : "broken-sword-shadow-of-the-templars-the-directors-cut"
+  }
+]
