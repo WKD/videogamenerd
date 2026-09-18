@@ -21,9 +21,9 @@ struct ShelfTilerConfig: Sendable, Equatable {
     var minBandHeight: Int
 
     init(
-        tileWidth: Int = 1500,
-        maxTileHeight: Int = 2200,
-        overlap: Int = 420,
+        tileWidth: Int = 1850,
+        maxTileHeight: Int = 2400,
+        overlap: Int = 380,
         jpegQuality: Double = 0.8,
         rowAware: Bool = true,
         minBandHeight: Int = 600
@@ -79,18 +79,20 @@ struct ShelfTiler: Sendable {
     // MARK: - Geometry (pure, deterministic, unit-tested without ImageIO)
 
     /// Overlapping start offsets tiling an axis of `length` with tiles of size `tile`
-    /// and `overlap`. The final start is flushed to the edge so coverage is complete.
+    /// and at least `overlap` px between neighbours. Tiles are **evenly distributed**
+    /// (first at 0, last flush to the edge), which guarantees complete coverage with a
+    /// uniform overlap and — unlike a fixed-step walk — never leaves a redundant
+    /// near-duplicate tile at the far edge.
     static func axisStarts(length: Int, tile: Int, overlap: Int) -> [Int] {
         guard length > tile else { return [0] }
         let step = max(1, tile - overlap)
+        // Smallest tile count whose uniform gap is ≤ step (so overlap ≥ requested).
+        let count = max(2, Int((Double(length - overlap) / Double(step)).rounded(.up)))
+        let span = length - tile
         var starts: [Int] = []
-        var s = 0
-        while s + tile < length {
-            starts.append(s)
-            s += step
+        for i in 0..<count {
+            starts.append(Int((Double(i) * Double(span) / Double(count - 1)).rounded()))
         }
-        starts.append(length - tile)   // flush the final tile to the far edge
-        // De-dupe while preserving order (the flush can equal the last interior start).
         var seen = Set<Int>()
         return starts.filter { seen.insert($0).inserted }
     }
