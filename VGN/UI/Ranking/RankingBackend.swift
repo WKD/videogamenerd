@@ -25,6 +25,8 @@ protocol RankingBackend: Sendable {
     /// Move a game to `toTier` at an exact position (0 = top). `atIndex == nil`
     /// drops it into the unplaced tail (tier set, key cleared, re-queued).
     func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws
+    /// Apply several moves as one transaction / one undo step (multi-select drop).
+    func moveBatch(_ moves: [RankMove]) async throws
     /// Clear a game's tier entirely (the `0` key on the board).
     func clearTier(_ gameID: Int64) async throws
     /// Move the boundary between two adjacent tiers by `k` placed games
@@ -55,4 +57,13 @@ protocol RankingBackend: Sendable {
 
     // MARK: Covers (PLAN §9 image pipeline seam)
     func thumbnail(for coverFile: String, pixelSize: CGSize) async -> CGImage?
+}
+
+extension RankingBackend {
+    /// Default: apply the moves sequentially (correct final state; N undo steps).
+    /// `LiveRankingBackend` overrides this with the store's single-transaction,
+    /// single-undo-step batch.
+    func moveBatch(_ moves: [RankMove]) async throws {
+        for m in moves { try await move(gameID: m.gameID, toTier: m.toTier, atIndex: m.atIndex) }
+    }
 }

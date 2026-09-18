@@ -85,6 +85,9 @@ struct LiveRankingBackend: RankingBackend {
     func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws {
         try await ranking.move(gameID: gameID, toTier: toTier, atIndex: atIndex)
     }
+    func moveBatch(_ moves: [RankMove]) async throws {
+        try await ranking.move(moves.map { (gameID: $0.gameID, toTier: $0.toTier, atIndex: $0.atIndex) })
+    }
     func clearTier(_ gameID: Int64) async throws { try await ranking.clearTier(gameID) }
     func moveDivider(between upperTierID: Int64, and lowerTierID: Int64, by k: Int) async throws -> DividerMoveOutcome {
         try await ranking.moveDivider(between: upperTierID, and: lowerTierID, by: k)
