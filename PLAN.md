@@ -20,6 +20,8 @@ Repo: https://github.com/WKD/videogamenerd.git · Local: `~/Code/videogamenerd`
 | PSN | Native Swift client over the unofficial PSN mobile API (NPSSO → tokens). Trophies are only a **"did I play this?" signal** — no trophy data is stored or shown | No official API exists. Isolated behind a protocol; import is always review-then-confirm. |
 | Ranking | **Tiers = dividers inside one ordered list.** Fine rank by **binary-insertion duels inside the tier**, plus drag-reorder. | Incremental by design: a new game costs 1 keystroke (tier) + ~5–7 duels, forever. See §7. |
 | Tiers | **S A B C D F**, labels/colours editable | Decided. |
+| Play Next | **Local, explainable recommendation engine**: taste profile learned from my own tiers/ranks + a time-commitment bracket → one pick (and a few alternatives) among library games I haven't completed | No ML service, no network at recommendation time; every suggestion says *why*. See §7b. |
+| Ownership formats | **physical · digital · ROM** | A ROM is a first-class way to own a game (added manually for now; no importer). |
 | Tests | Swift Testing, unit-test target `VGNTests`, run with `xcodebuild test` | Pure-logic layers (ranking, matching, DB queries) are tested without UI or network. |
 
 ---
@@ -77,7 +79,7 @@ Build / test from the CLI (what I'll use while developing):
 The central idea: **separate the *work* you rank from the *thing* you own.**
 
 - **Game** — the unit that is played, tiered and ranked. One rank slot per game.
-- **Product** — a thing you own: a disc, cartridge or digital licence on one platform. A product contains 1..n games.
+- **Product** — a thing you own: a disc, cartridge, digital licence **or ROM** on one platform. A product contains 1..n games.
   - A standalone copy = product with one game. A **compilation = product with n games.**
   - "Owned" is *derived*: a game is owned iff it belongs to ≥ 1 product. So a compilation is all-or-nothing **by construction** — there is no way to own half of it — while each member game still has its own played flag, tier and rank.
 - Remasters/remakes are separate Games (as IGDB models them): *The Last of Us* (PS3), *Remastered* (PS4), *Part I* (PS5) rank independently. Same game on two platforms (Elden Ring PS4 + PS5) = one Game, two Products.
@@ -91,7 +93,7 @@ games          id · igdb_id? · title · sort_title · release_date · year · 
                cover_file? · added_at · updated_at
 game_platforms game_id · platform_id · played             -- where I played it (not owned case)
 genres / game_genres
-products       id · title · platform_id · kind(single|compilation) · format(physical|digital)
+products       id · title · platform_id · kind(single|compilation) · format(physical|digital|rom)
                edition? · region? · igdb_id? · cover_file? · source(manual|photo|psn) · psn_entitlement? · acquired_at?
 product_games  product_id · game_id · position
 tiers          id · letter · label · color · sort        -- S Masterpiece / A Excellent / B Good / C Average / D Bad / F Awful, editable
@@ -102,6 +104,10 @@ import_titles  source(psn|gog|…) · external_id · name · platform · signals
                                                    -- mappings persist. No trophy details are kept.
 games_fts      FTS5(title, alt_titles)             -- instant search
 catalog_cache  igdb_id · json · fetched_at         -- makes repeat autocomplete instant/offline
+game_traits    game_id · kind(franchise|series|developer|theme|mode|perspective|keyword|similar) · value
+                                                   -- generic taste features for §7b, filled by enrichment
+games          + igdb_rating? · igdb_rating_count?  -- prior for unranked candidates (§7b)
+rec_feedback   game_id · action(snooze|never|picked) · created_at   -- "not this one" memory for §7b
 ```
 
 Invariants (enforced in `VGNCore`, unit-tested):
@@ -156,7 +162,7 @@ Data-driven `platforms.json`, grouped by manufacturer in the sidebar: Sony, Nint
 ### 6.1 Quick Add (⌘N) — the fast path
 Spotlight-style palette, keyboard only:
 1. Type 3+ letters → results stream in (local library + catalog cache instantly, IGDB ~200 ms later; 150 ms debounce, previous request cancelled). Rows: cover, title, year, platform chips. Already-in-library rows are marked.
-2. `↑↓` select · `Tab` cycles platform (defaults to the sidebar's current platform, else the game's most likely one) · `⌘O` owned / `⌘P` played (sticky from last add) · optional `S A B C D` sets the tier right away.
+2. `↑↓` select · `Tab` cycles platform (defaults to the sidebar's current platform, else the game's most likely one) · `⌘O` owned / `⌘P` played (sticky from last add) · `⌘D` cycles the owned format **physical → digital → ROM** (sticky too) · optional `S A B C D` sets the tier right away.
 3. `↩` adds; the field clears and **stays open** for the next game. `⌘↩` adds and opens the inspector. `esc` closes.
 - Picking a bundle result offers "Add as compilation (n games)".
 - Fully manual entry (no IGDB match) is one more row at the bottom: "Create '…' manually".
@@ -228,6 +234,34 @@ Mechanics: `rank_key` is a sparse sortable key per tier (insert = midpoint of ne
 
 ---
 
+## 7b. Play Next — recommendation engine
+
+**Question it answers:** *"I have roughly this much time over the next few weeks — what should I play from my library?"* The answer is always a game I own and have **not completed before**.
+
+### Inputs
+- **Time commitment bracket** (one click): *An evening* (≤ 5 h) · *A week or two* (5–15 h) · *A month* (15–40 h) · *A long haul* (40 h+). Optional precise mode: hours per week × weeks → a budget in hours. A *completionist* toggle switches the estimate from IGDB `normally` to `completely`.
+- **Taste profile**, learned only from my own rankings (§7): each ranked game gets a score from its global position (percentile; tier midpoint for tiered-but-unplaced games). Nothing is asked twice — the ranking work *is* the training data.
+
+### Candidates
+Owned games (any format, incl. ROMs and compilation members) whose status is not *finished* / *completed*: the backlog (owned, unplayed), games marked *playing* (their remaining time = estimate − my playtime) and *abandoned* ones (opt-in, flagged as "give it another go?"). Played games with no status are excluded by default (toggle), since "played" may well mean "finished". Games with no time estimate are not dropped: they are shown in a separate "unknown length" lane rather than guessed at.
+
+### Scoring (pure, deterministic, explainable — `VGN/Recommendation/`, no network, no ML service)
+1. **Feature affinities**: for every trait value (genre, franchise/series, developer, theme, game mode, perspective, platform, decade) compute a *shrunk mean* of the scores of my ranked games having it (Bayesian average toward my overall mean, so one S-tier game doesn't crown a whole genre). Traits I ranked consistently low count against a candidate just as strongly.
+2. **Direct links**: sequel / same franchise as something in my S–A tiers; IGDB `similar_games` of my top-ranked games; same developer as a top game.
+3. **Prior** for cold candidates: IGDB aggregated rating (weighted by rating count), low weight — my taste wins over the crowd's.
+4. **Fit to the bracket**: full marks when the estimate (or remaining time) sits inside the bracket, smooth falloff outside it, hard exclusion beyond ~1.5× the upper bound.
+5. **Rotation**: a small freshness/diversity term so the same game isn't pitched forever; "Not this one" snoozes a game for a few weeks, "Never" removes it from recommendations (`rec_feedback`).
+
+Predicted score = weighted blend of 1–3, multiplied by 4, adjusted by 5. Weights are constants in one place, unit-tested on synthetic libraries (a souls-like lover gets the unplayed souls-like; a 60 h JRPG never shows up in "An evening").
+
+### Output & UI
+- Sidebar entry **Play Next** (LIBRARY section). Bracket picker on top; one **hero pick** (big cover, estimate vs. bracket bar, platform/format I own it on) + 4 alternatives + the "unknown length" lane.
+- Every suggestion carries its reasons in plain words: *"Because you ranked Bloodborne S and Dark Souls A · FromSoftware · ≈ 32 h fits 'A month'"*.
+- Actions: **Start playing** (sets status = playing), **Not this one** (snooze), **Never**, open in inspector. `R` re-rolls among near-ties.
+- Needs from enrichment: the `game_traits` rows + IGDB rating (one more field group on the metadata job) and time-to-beat (§6.4). Recommendation quality grows with the number of ranked games; under ~15 ranked games the view says so and leans on the IGDB prior.
+
+---
+
 ## 8. Main UI
 
 ```
@@ -238,6 +272,7 @@ Mechanics: `rank_key` is a sparse sortable key per tier (insert = midpoint of ne
 │  Played       655   │   ▢ ▢ ▢ ▢ ▢ ▢ ▢     compilation marker                                         │
 │  Backlog      157   │                                                         ┌ Inspector (⌘I) ───┐ │
 │  Unranked      43   │                                                         │ cover, metadata,  │ │
+│  Play Next          │                                                                              │
 │ RANKINGS            │                                                         │ owned copies,     │ │
 │  Tier Board         │                                                         │ played, tier/rank,│ │
 │  The Top            │                                                         │ playtime vs avg   │ │
@@ -250,7 +285,7 @@ Mechanics: `rank_key` is a sparse sortable key per tier (insert = midpoint of ne
 ```
 - Sidebar platforms grouped by manufacturer, only platforms with ≥ 1 game, live counts (one observed aggregate query). Selecting a platform scopes grid, search, filters, Top *and* Quick Add's default platform.
 - Search = FTS5 prefix match on title + alt titles (finds "Baphomet" → *Broken Sword*), results as you type.
-- Filters combine (AND across kinds, OR within a kind), compile to one SQL query, shown as removable chips.
+- Filters combine (AND across kinds, OR within a kind), compile to one SQL query, shown as removable chips. Ownership **format** (physical / digital / ROM) is a filter kind too, and ROM copies carry a small badge in the grid.
 - Compilation members appear individually in the grid with a small stack marker; the inspector shows "Part of *Metal Gear Solid: The Legacy Collection* (PS3)" and toggling ownership there applies to the whole product, listing affected games.
 - Multi-select + keyboard everywhere: `S`…`F` tier, `O`/`P` toggle owned/played, `⌘I` inspector, `⌘F` search, `⌘N` quick add, `space` Quick Look-style big cover.
 
@@ -280,6 +315,7 @@ Each ends with a runnable app and a commit/push.
 | 3 | **Compilations** | Product model UI, bundle prefill from IGDB, compilation editor, all-or-nothing ownership UX | *MGS Legacy Collection* / *ICO & SotC HD* behave correctly |
 | 4 | **Ranking** | Tier keys + Triage, RankingEngine (+ exhaustive tests), Duel, Tier Board with drag, The Top with filters, Refine + border duels, comparison log | New game → tier → 6 duels → correct slot in both views |
 | 5 | **Playtime** | IGDB time-to-beat, manual playtime + status, me-vs-average UI, (optional HLTB provider) | Inspector shows averages for matched games |
+| 5b | **Play Next + ROM format** | `format = rom` end to end (schema, Quick Add `⌘D`, inspector, badge, filter); `game_traits` + IGDB rating enrichment; `RecommendationEngine` (+ tests on synthetic libraries); Play Next view with brackets, reasons, snooze/never, Start playing | With ≥ 15 ranked games, each bracket proposes a sensible unfinished game with a reason I agree with |
 | 6 | **Photo scan** | Tiling, Claude recogniser, Vision fallback + serial extraction, matching, review sheet | The 6 sample photos import with ≥ 90 % correct pre-matches |
 | 7 | **PSN import** | Web login, token store, `LibraryImporter` protocol + shared review sheet, played list (from trophies) / game list / purchased, playtime, re-sync | Full PSN history imported; second sync shows only deltas |
 | 8 | **GOG import** | Second `LibraryImporter`: web login, owned list → review sheet | GOG library imported as owned PC/Mac games |
@@ -311,3 +347,5 @@ Order rationale: 0–4 deliver the whole core loop (add → browse → rank) wit
 | Other importers | **GOG** later; Steam / Xbox / Nintendo not planned. |
 | Sample photos | Originals git-ignored; **downsized JPEG fixtures committed**. |
 | Persistence | GRDB stays even with Xcode available (see §1). |
+| ROMs *(added 2026-09-18)* | Third ownership format next to physical/digital. Manual entry only for now — no romlord/emulator import. |
+| Recommendations *(added 2026-09-18)* | **Play Next** (§7b): local, explainable, driven by my own rankings + a time bracket; only suggests owned, not-yet-completed games. Built as milestone 5b. |
