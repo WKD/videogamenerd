@@ -6,7 +6,7 @@ import Testing
 /// Play Next (PLAN §7b): hero + alternatives, small-library banner, empty states,
 /// and the "Ask Claude" second-opinion column in each of its states.
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(1)), .enabled(if: snapshotSuitesEnabled()))
 struct PlayNextSnapshotTests {
     private let group = "05 Play Next"
     private let wide = SnapSize(width: 1120, height: 780)

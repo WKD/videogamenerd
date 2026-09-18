@@ -25,6 +25,19 @@ import Testing
 // across machines; generation is always on so agents/owner get eyes every run.
 // `VGN_SNAPSHOT_RECORD=1` (re)writes the committed references.
 
+/// Whether the snapshot suites should run. They are **off by default** so the
+/// plain `xcodebuild test` gate stays fast and green: rendering is main-thread /
+/// CPU-heavy and, run in parallel with the rest of the suite, it delays
+/// timing-sensitive tests (e.g. Quick Add's 150 ms debounce) past their budget.
+/// `scripts/snapshots.sh` drops a `.build/snapshot-run` sentinel to enable them;
+/// `VGN_SNAPSHOTS=1` works for a direct `xcodebuild` call. See `docs/snapshots.md`.
+nonisolated func snapshotSuitesEnabled() -> Bool {
+    if ProcessInfo.processInfo.environment["VGN_SNAPSHOTS"] == "1" { return true }
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    return FileManager.default.fileExists(atPath: root.appendingPathComponent(".build/snapshot-run").path)
+}
+
 /// The forced appearance for a snapshot.
 enum SnapAppearance: String, CaseIterable, Sendable {
     case light
@@ -90,11 +103,15 @@ enum SnapshotHarness {
     struct Entry: Sendable { var group: String; var name: String; var appearance: SnapAppearance }
     private static var registry: [Entry] = []
 
-    /// Hosting windows are retained for the whole run rather than torn down after
-    /// each capture: destroying a graph host while a SwiftUI async observation
-    /// transaction is still pending trips an AttributeGraph precondition (SIGABRT).
-    /// Off-screen borderless windows are cheap; they die with the test process.
-    private static var retainedWindows: [NSWindow] = []
+    /// A small ring of live hosting windows. Destroying a graph host while a
+    /// SwiftUI async observation transaction is still pending trips an
+    /// AttributeGraph precondition (SIGABRT), so a window is kept alive for a few
+    /// more captures (long past its own transactions) before being torn down.
+    /// Capping the ring avoids AppKit's "excessive live window count" warning and
+    /// the resource pressure that could flake timing-sensitive tests in the same
+    /// process.
+    private static var windowRing: [NSWindow] = []
+    private static let maxLiveWindows = 4
 
     // MARK: Public entry
 
@@ -166,7 +183,14 @@ enum SnapshotHarness {
         window.isReleasedWhenClosed = false
         window.contentViewController = controller
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        retainedWindows.append(window)
+        // Keep a few recent windows alive (see `windowRing`), tearing down the
+        // oldest — by now long settled, so its teardown is safe.
+        windowRing.append(window)
+        if windowRing.count > maxLiveWindows {
+            let old = windowRing.removeFirst()
+            old.contentViewController = nil   // release the (settled) graph host first
+            old.close()                       // and drop it from AppKit's window list
+        }
 
         host.layoutSubtreeIfNeeded()
         host.needsDisplay = true

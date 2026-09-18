@@ -30,9 +30,12 @@ esac
 # is signalled to the test process by a sentinel file under .build/ (removed on
 # exit) that SnapshotHarness checks.
 mkdir -p .build
-rm -f .build/snapshot-record .build/snapshot-verify
-cleanup() { rm -f .build/snapshot-record .build/snapshot-verify; }
+rm -f .build/snapshot-record .build/snapshot-verify .build/snapshot-run
+cleanup() { rm -f .build/snapshot-record .build/snapshot-verify .build/snapshot-run; }
 trap cleanup EXIT
+
+# Enable the snapshot suites (they are skipped in a plain `xcodebuild test`).
+touch .build/snapshot-run
 
 if [[ "$MODE" == "record" ]]; then
   touch .build/snapshot-record

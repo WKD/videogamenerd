@@ -6,7 +6,7 @@ import Testing
 /// The inspector (PLAN §8): single game with copies / playtime / score line,
 /// multi-select, and the empty state.
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(1)), .enabled(if: snapshotSuitesEnabled()))
 struct InspectorSnapshotTests {
     private let group = "02 Inspector"
     private let size = SnapSize(width: 320, height: 700)

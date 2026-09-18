@@ -37,29 +37,44 @@ pending trips an AttributeGraph precondition (SIGABRT).
 
 ## Running
 
-```sh
-# Generate PNGs + the contact sheet (this is what the normal test run does):
-xcodebuild ... test -only-testing:VGNTests/LibrarySnapshotTests   # (etc.)
+The snapshot suites are **off in a plain `xcodebuild test`** and are enabled by
+the script (or `VGN_SNAPSHOTS=1`):
 
-# Or all snapshot suites + verify against the committed references:
+```sh
+# Generate every screen's PNGs + the contact sheet, and verify against refs:
 scripts/snapshots.sh
+
+# Just generate (no compare) — the usual "give me eyes" command:
+scripts/snapshots.sh --generate
 
 # Re-record the committed reference PNGs after an intentional UI change:
 scripts/snapshots.sh --record
 
-# Generate only, no compare:
-scripts/snapshots.sh --generate
+# Or a single suite directly:
+VGN_SNAPSHOTS=1 xcodebuild ... test -only-testing:VGNTests/RankingSnapshotTests
 ```
 
-Every run writes to `.build/snapshots/` (git-ignored):
+A run writes to `.build/snapshots/` (git-ignored):
 
 * `<name>@light.png` / `<name>@dark.png` for each screen,
 * `index.html` — a **contact sheet** grouped by screen, light and dark side by
   side. Open it to review everything on one page:
   `open .build/snapshots/index.html`.
 
-Generation is **always on** and part of the normal unit tests (kept well under the
-~30 s budget). It never fails the build on pixel differences — see below.
+### Why they are not in the default `xcodebuild test`
+
+Rendering is main-thread / CPU-heavy. Swift Testing runs suites **in parallel**,
+and when the snapshot suites render alongside the rest of the target they steal
+enough of the main actor / CPU (especially with another agent building on the
+same machine) to push timing-sensitive tests past their budget — e.g. Quick Add's
+`debounceCoalescesAndCancelsPrevious` (a 30 ms debounce checked after 150 ms)
+flakes. Measured: the full 655-test suite is green and fast on its own, and green
+with the snapshot suites *disabled*; enabling them in parallel reproducibly flaked
+that one debounce test. So they are gated behind `snapshotSuitesEnabled()`
+(a `.build/snapshot-run` sentinel the script drops, or `VGN_SNAPSHOTS=1`), which
+keeps the gate green, fast (0 s added) and non-flaky. The whole snapshot run is
+~35 s of test time on its own. Getting eyes on the UI is one command
+(`scripts/snapshots.sh --generate`); generation is always on **within that run**.
 
 ## Reference comparison & thresholds
 

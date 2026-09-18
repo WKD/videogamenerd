@@ -8,7 +8,7 @@ import Testing
 /// and confirmation are the genuine rendered state. The floating `NSPanel`
 /// chrome / key handling is out of scope for off-screen rendering (see the doc).
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(1)), .enabled(if: snapshotSuitesEnabled()))
 struct QuickAddSnapshotTests {
     private let group = "03 Quick Add"
     private let size = SnapSize(width: 600, height: 560)

@@ -6,7 +6,7 @@ import Testing
 /// Settings, the compilation editor, ownership/copy-removal sheets, the stats
 /// popover, the database-error screen and the small shared components.
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(1)), .enabled(if: snapshotSuitesEnabled()))
 struct MiscSnapshotTests {
     private let settingsGroup = "07 Settings"
     private let sheetsGroup = "08 Sheets & Popovers"

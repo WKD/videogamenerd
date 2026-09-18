@@ -7,7 +7,7 @@ import Testing
 /// disputes sheet and tier legend. Models are driven with the scripted backend
 /// and `start()`ed before capture so the populated state is what renders.
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(1)), .enabled(if: snapshotSuitesEnabled()))
 struct RankingSnapshotTests {
     private let group = "04 Ranking"
 

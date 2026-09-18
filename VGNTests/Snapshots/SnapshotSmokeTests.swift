@@ -7,7 +7,7 @@ import Testing
 /// A tiny first-light suite that proves the harness renders a leaf view, an
 /// AppKit-backed control view, and a full `NavigationSplitView` window off-screen.
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(1)), .enabled(if: snapshotSuitesEnabled()))
 struct SnapshotSmokeTests {
 
     @Test func leafComponentRenders() async {

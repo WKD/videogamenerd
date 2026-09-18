@@ -6,7 +6,7 @@ import Testing
 /// Photo scan (PLAN §6.2): the input screen, the per-tile progress rows, and the
 /// review sheet with all three confidence buckets + greyed duplicates.
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(1)), .enabled(if: snapshotSuitesEnabled()))
 struct ScanSnapshotTests {
     private let group = "06 Photo Scan"
 

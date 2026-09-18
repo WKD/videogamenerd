@@ -8,7 +8,7 @@ import Testing
 /// and the live `LibraryGridView` `ScrollView` can't render headless), the grid
 /// content, sidebar, filter chips, cells and empty states.
 @MainActor
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(1)), .enabled(if: snapshotSuitesEnabled()))
 struct LibrarySnapshotTests {
     private let group = "01 Library"
 
