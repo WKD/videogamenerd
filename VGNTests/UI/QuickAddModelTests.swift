@@ -32,6 +32,42 @@ struct QuickAddModelTests {
         #expect(results.filter { $0.libraryMatch?.gameID == 10 }.count == 1)
     }
 
+    @Test func mergeCatalogShowsCachedThenLiveReplacesSameID() {
+        let cached = [makeSearchResult(id: 7334, name: "Bloodborne", year: 2015),
+                      makeSearchResult(id: 42, name: "Blood Omen")]
+        // Before the live response, cached rows are shown as-is.
+        #expect(QuickAddModel.mergeCatalog(cached: cached, live: [], liveArrived: false, limit: 12)
+            .map(\.id) == [7334, 42])
+        // Live arrives: it leads and replaces the same id (7334) — no duplicate —
+        // and the cached-only row (42) is appended after.
+        let live = [makeSearchResult(id: 7334, name: "Bloodborne", year: 2015, platforms: ["ps4"]),
+                    makeSearchResult(id: 99, name: "Bloodborne GOTY")]
+        let merged = QuickAddModel.mergeCatalog(cached: cached, live: live, liveArrived: true, limit: 12)
+        #expect(merged.map(\.id) == [7334, 99, 42])
+        #expect(merged.filter { $0.id == 7334 }.count == 1)       // no jump/dup
+        #expect(merged.first?.platformSlugs == ["ps4"])           // the LIVE 7334 row wins
+        // Caps to the limit.
+        #expect(QuickAddModel.mergeCatalog(cached: cached, live: live, liveArrived: true, limit: 2)
+            .map(\.id) == [7334, 99])
+    }
+
+    @Test func cachedRowsSurfaceThenLiveReplacesInModel() {
+        let model = makeQuickAddModel()                 // no real cache seam → drive directly
+        model.query = "blood"
+        let gen = model.searchGeneration
+        // Instant catalogue-cache rows appear before the (debounced) live call.
+        model.applyCached([makeSearchResult(id: 7334, name: "Bloodborne", year: 2015),
+                           makeSearchResult(id: 42, name: "Blood Omen")], generation: gen)
+        #expect(model.results.map(\.title) == ["Bloodborne", "Blood Omen"])
+        #expect(model.results.allSatisfy { $0.source == .catalog })
+        // Live arrives → replaces same id, cached-only appended, no dup / no jump.
+        model.applyRemote([makeSearchResult(id: 7334, name: "Bloodborne", year: 2015, platforms: ["ps4"]),
+                           makeSearchResult(id: 99, name: "Bloodborne GOTY")],
+                          generation: gen, credentials: true)
+        #expect(model.results.map(\.igdbID) == [7334, 99, 42])
+        #expect(model.results.filter { $0.igdbID == 7334 }.count == 1)
+    }
+
     @Test func defaultPlatformFollowsPlanRule() {
         let gen: @Sendable (String) -> Int? = { QuickAddTestPlatforms.generation[$0] }
         // Sidebar platform wins when the game is on it.

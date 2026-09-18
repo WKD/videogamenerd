@@ -184,6 +184,7 @@ final class AppEnvironment {
 
         let quickAdd = QuickAddModel(
             catalog: searcher,
+            catalogCache: built?.graph.catalogCache,   // instant/offline cached rows
             library: LiveLibraryAdder(store: store),
             platforms: PlatformLabels.all
         )

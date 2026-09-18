@@ -41,7 +41,10 @@ enum ServicesFactory {
             return IGDBCredentials(clientID: pair.clientID, secret: pair.secret)
         }
 
-        let catalogCache = CatalogCacheStore(database)
+        // A shared in-process title index (PLAN §6.1): live IGDB searches and the
+        // enrichment write-through keep it warm, so Quick Add gets instant/offline
+        // catalogue hits.
+        let catalogCache = CatalogCacheStore(database, titleIndex: CatalogTitleIndex(catalog: catalog))
         let igdbClient = IGDBClient(
             transport: transport,
             credentials: credentials,

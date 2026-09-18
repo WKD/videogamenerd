@@ -65,4 +65,69 @@ struct CatalogCacheStoreTests {
         #expect(try await store.count() == 1)
         #expect(await store.rawEntry(forID: 2) == nil)
     }
+
+    // MARK: - Instant/offline title search (PLAN §6.1)
+
+    /// A store whose in-process title index is enabled (the live app's wiring).
+    private func makeSearchableStore() async throws -> CatalogCacheStore {
+        let db = try await TestDB.makeSeeded()
+        return CatalogCacheStore(db, titleIndex: CatalogTitleIndex(catalog: TestCatalog.catalog))
+    }
+
+    private func gameEntry(
+        _ id: Int64, name: String, alt: [String] = [], platforms: [Int] = [48], now: Date = Date()
+    ) -> CatalogCacheEntry {
+        let obj: [String: Any] = [
+            "id": id, "name": name, "first_release_date": 1_420_070_400,
+            "cover": ["image_id": "img\(id)"],
+            "platforms": platforms.map { ["id": $0] },
+            "alternative_names": alt.map { ["name": $0] },
+        ]
+        return CatalogCacheEntry(igdbID: id, json: try! JSONSerialization.data(withJSONObject: obj), fetchedAt: now)
+    }
+
+    @Test("Title search is prefix, multi-token and accent-insensitive; searches alt names")
+    func titleSearch() async throws {
+        let store = try await makeSearchableStore()
+        await store.store([
+            gameEntry(7334, name: "Bloodborne", alt: ["Project Beast"]),
+            gameEntry(42, name: "Blood Omen: Legacy of Kain"),
+            gameEntry(100, name: "Broken Sword", alt: ["Les Chevaliers de Baphomet"]),
+            gameEntry(200, name: "Pokémon Red"),
+            gameEntry(300, name: "Metal Gear Solid 3: Snake Eater"),
+        ])
+
+        // Mid-token prefix on the title (uniquely Bloodborne).
+        #expect(await store.searchTitles("bloodb", limit: 12).map(\.id) == [7334])
+        // A shared prefix returns both, title-start matches only.
+        #expect(Set(await store.searchTitles("blood", limit: 12).map(\.id)) == [7334, 42])
+        // Multi-token, order-independent, over an alternative name (French box title).
+        #expect(await store.searchTitles("chev bapho", limit: 12).map(\.id) == [100])
+        // Accent-insensitive.
+        #expect(await store.searchTitles("pokemon", limit: 12).map(\.id) == [200])
+        // Multi-token on the title itself.
+        #expect(await store.searchTitles("metal snake", limit: 12).map(\.id) == [300])
+        // No match.
+        #expect(await store.searchTitles("zelda", limit: 12).isEmpty)
+        // The mapped result carries slugs from the shared catalogue.
+        #expect(await store.searchTitles("bloodb", limit: 12).first?.platformSlugs == ["ps4"])
+    }
+
+    @Test("Title search reads an existing cache (loaded from the DB, no index warm-up)")
+    func titleSearchLoadsFromDB() async throws {
+        // Populate the table through a store WITHOUT an index (so nothing is warmed)…
+        let db = try await TestDB.makeSeeded()
+        let writer = CatalogCacheStore(db)
+        await writer.store([gameEntry(7334, name: "Bloodborne")])
+        // …then a fresh store with an index must still find it (lazy DB load).
+        let reader = CatalogCacheStore(db, titleIndex: CatalogTitleIndex(catalog: TestCatalog.catalog))
+        #expect(await reader.searchTitles("blood", limit: 12).map(\.id) == [7334])
+    }
+
+    @Test("Title search is disabled (empty) when no index is attached")
+    func titleSearchDisabledWithoutIndex() async throws {
+        let (store, date) = try await makeStore()
+        await store.store(gameEntry(7334, name: "Bloodborne", now: date.now))
+        #expect(await store.searchTitles("blood", limit: 12).isEmpty)
+    }
 }
