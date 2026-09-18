@@ -19,10 +19,20 @@ enum PlayStatus: String, Hashable, Sendable, Codable, CaseIterable, Identifiable
     }
 }
 
-/// Whether an owned product is a physical copy or a digital licence (PLAN §4).
+/// Whether an owned product is a physical copy, a digital licence, or a ROM
+/// (PLAN §4). A ROM is a first-class way to own a game, entered manually.
 enum ProductFormat: String, Hashable, Sendable, Codable, CaseIterable {
     case physical
     case digital
+    case rom
+
+    var label: String {
+        switch self {
+        case .physical: return "Physical"
+        case .digital: return "Digital"
+        case .rom: return "ROM"
+        }
+    }
 }
 
 /// A product is a single game or a compilation of many (PLAN §4).

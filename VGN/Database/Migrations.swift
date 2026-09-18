@@ -69,6 +69,49 @@ enum Migrations {
         }
     }
 
+    // MARK: - v3 — ownership format ROM
+
+    /// v3 widens `products.format` to allow `rom` (PLAN §4 — a ROM is a
+    /// first-class, manually-entered way to own a game). SQLite cannot ALTER a
+    /// CHECK constraint, so the table is rebuilt the standard way (create new,
+    /// copy, drop, rename), preserving the `ON DELETE RESTRICT` on `platform_id`,
+    /// the platform index, and `product_games`' foreign key / cascade. Runs with
+    /// deferred foreign-key checks (GRDB's documented table-recreation pattern).
+    static func registerV3(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v3", foreignKeyChecks: .deferred) { db in
+            try db.execute(sql: """
+                CREATE TABLE products_new (
+                    id              INTEGER PRIMARY KEY,
+                    title           TEXT,
+                    platform_id     TEXT    NOT NULL REFERENCES platforms(id) ON DELETE RESTRICT,
+                    kind            TEXT    NOT NULL CHECK (kind   IN ('single','compilation')),
+                    format          TEXT    NOT NULL CHECK (format IN ('physical','digital','rom')),
+                    edition         TEXT,
+                    region          TEXT,
+                    igdb_id         INTEGER,
+                    cover_file      TEXT,
+                    source          TEXT    NOT NULL CHECK (source IN ('manual','photo','psn')),
+                    psn_entitlement TEXT,
+                    acquired_at     DATETIME,
+                    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                """)
+            try db.execute(sql: """
+                INSERT INTO products_new
+                    (id, title, platform_id, kind, format, edition, region, igdb_id,
+                     cover_file, source, psn_entitlement, acquired_at, created_at, updated_at)
+                SELECT
+                    id, title, platform_id, kind, format, edition, region, igdb_id,
+                    cover_file, source, psn_entitlement, acquired_at, created_at, updated_at
+                FROM products;
+                """)
+            try db.execute(sql: "DROP TABLE products;")
+            try db.execute(sql: "ALTER TABLE products_new RENAME TO products;")
+            try db.execute(sql: "CREATE INDEX products_platform_idx ON products(platform_id);")
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

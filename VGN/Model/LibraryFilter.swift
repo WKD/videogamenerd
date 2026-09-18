@@ -45,6 +45,9 @@ struct LibraryFilter: Hashable, Sendable {
     var decades: Set<Int>
     var tierIDs: Set<Int64>
     var statuses: Set<PlayStatus>
+    /// Ownership-format facet (physical / digital / rom). Empty = no constraint;
+    /// a game matches if it has ≥ 1 owned product in one of these formats.
+    var formats: Set<ProductFormat>
 
     /// A single explicit platform facet (slug), independent of the scope.
     var platform: String?
@@ -61,6 +64,7 @@ struct LibraryFilter: Hashable, Sendable {
         decades: Set<Int> = [],
         tierIDs: Set<Int64> = [],
         statuses: Set<PlayStatus> = [],
+        formats: Set<ProductFormat> = [],
         platform: String? = nil,
         scope: SidebarSelection = .all,
         sort: LibrarySort = .title,
@@ -71,6 +75,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.decades = decades
         self.tierIDs = tierIDs
         self.statuses = statuses
+        self.formats = formats
         self.platform = platform
         self.scope = scope
         self.sort = sort
@@ -81,6 +86,6 @@ struct LibraryFilter: Hashable, Sendable {
     /// whether to show "clear filters", empty-state copy, etc.).
     var hasActiveFacets: Bool {
         !searchText.isEmpty || !genres.isEmpty || !decades.isEmpty
-            || !tierIDs.isEmpty || !statuses.isEmpty || platform != nil
+            || !tierIDs.isEmpty || !statuses.isEmpty || !formats.isEmpty || platform != nil
     }
 }

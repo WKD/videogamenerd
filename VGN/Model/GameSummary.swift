@@ -28,6 +28,9 @@ struct GameSummary: Hashable, Sendable, Identifiable {
 
     var status: PlayStatus?
 
+    /// True when this game is owned as a ROM on ≥ 1 platform (PLAN §4 — ROM badge).
+    var hasROM: Bool
+
     init(
         id: Int64,
         title: String,
@@ -41,7 +44,8 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         owned: Bool = false,
         isCompilationMember: Bool = false,
         platformIDs: [String] = [],
-        status: PlayStatus? = nil
+        status: PlayStatus? = nil,
+        hasROM: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -56,6 +60,7 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         self.isCompilationMember = isCompilationMember
         self.platformIDs = platformIDs
         self.status = status
+        self.hasROM = hasROM
     }
 
     /// Derived Backlog membership (PLAN §4 invariant 2): owned but not played.

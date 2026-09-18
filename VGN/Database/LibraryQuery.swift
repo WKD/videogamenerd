@@ -25,6 +25,9 @@ enum LibraryQuery {
             EXISTS(SELECT 1 FROM product_games pg
                    JOIN products p ON p.id = pg.product_id
                    WHERE pg.game_id = g.id AND p.kind = 'compilation') AS is_comp,
+            EXISTS(SELECT 1 FROM product_games pgr
+                   JOIN products pr ON pr.id = pgr.product_id
+                   WHERE pgr.game_id = g.id AND pr.format = 'rom') AS has_rom,
             (SELECT group_concat(pid) FROM (
                 SELECT platform_id AS pid FROM game_platforms WHERE game_id = g.id
                 UNION
@@ -123,6 +126,16 @@ enum LibraryQuery {
             wheres.append("g.status IN (\(placeholders(ss.count)))")
             args.append(contentsOf: ss.map { $0 as DatabaseValueConvertible })
         }
+        if !filter.formats.isEmpty {
+            // A game matches if it has ≥ 1 owned product in one of the formats
+            // (PLAN §4 — physical / digital / rom).
+            let fs = filter.formats.map(\.rawValue).sorted()
+            wheres.append("""
+                EXISTS(SELECT 1 FROM product_games pg JOIN products p ON p.id = pg.product_id
+                       WHERE pg.game_id = g.id AND p.format IN (\(placeholders(fs.count))))
+                """)
+            args.append(contentsOf: fs.map { $0 as DatabaseValueConvertible })
+        }
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
             wheres.append("""
@@ -209,7 +222,8 @@ enum LibraryQuery {
             owned: row["owned"],
             isCompilationMember: row["is_comp"],
             platformIDs: platformIDs,
-            status: statusRaw.flatMap(PlayStatus.init(rawValue:))
+            status: statusRaw.flatMap(PlayStatus.init(rawValue:)),
+            hasROM: row["has_rom"]
         )
     }
 }
