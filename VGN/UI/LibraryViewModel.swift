@@ -90,6 +90,9 @@ final class LibraryViewModel {
     var onRefreshMetadata: (Int64) -> Void = { _ in }
     /// Drop-an-image-to-set-cover (wired by the app to the cover store + store write).
     var onImportCover: (Int64, URL) -> Void = { _, _ in }
+    /// Inspector "Remove custom cover" — clears the hand-picked cover + marker and
+    /// re-enqueues the cover job (wired by the app).
+    var onRemoveCover: (Int64) -> Void = { _ in }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
@@ -436,6 +439,9 @@ final class LibraryViewModel {
 
     /// Manual cover from a dropped/chosen image file (PLAN §5.2 point 4).
     func importCover(gameID: Int64, from url: URL) { onImportCover(gameID, url) }
+
+    /// Remove a hand-picked cover and let enrichment fetch one again (PLAN §5.2).
+    func removeCustomCover(gameID: Int64) { onRemoveCover(gameID) }
 
     // MARK: Empty states
     var isEmptyLibrary: Bool { counts.all == 0 }

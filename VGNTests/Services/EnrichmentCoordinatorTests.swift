@@ -106,6 +106,37 @@ struct EnrichmentCoordinatorTests {
         #expect(try #require(try await harness.game(id)).coverFile == "manual.png")
     }
 
+    @Test("A user-set cover (marker) survives even an explicit refresh; clearing it re-fetches")
+    func userCoverSacredEndToEnd() async throws {
+        let harness = try await EnrichmentHarness.make()
+        defer { harness.cleanup() }
+        let id = try await harness.addGames(1)[0]
+
+        // Enrichment fills metadata + a fetched cover first (the usual order).
+        await harness.coordinator.pump()
+        #expect(try #require(try await harness.game(id)).coverFile?.hasPrefix("\(id)-") == true)
+
+        // The user then hand-picks a cover → `cover` is marked user-edited.
+        try await harness.library.setUserCover(gameID: id, coverFile: "manual.png")
+        #expect(try #require(try await harness.game(id)).userEdited.contains("cover"))
+
+        // An explicit refresh must NOT clobber it (a plain updateMetadata cover would be).
+        await harness.coordinator.refresh(gameID: id)
+        #expect(try #require(try await harness.game(id)).coverFile == "manual.png")
+
+        // "Remove custom cover": clears the file + marker, so a refresh re-fetches.
+        try await harness.library.clearUserCover(gameID: id)
+        let cleared = try #require(try await harness.game(id))
+        #expect(cleared.coverFile == nil)
+        #expect(!cleared.userEdited.contains("cover"))
+
+        await harness.coordinator.refresh(gameID: id)
+        let refetched = try #require(try await harness.game(id))
+        #expect(refetched.coverFile != nil)
+        #expect(refetched.coverFile != "manual.png")
+        #expect(refetched.coverFile?.hasPrefix("\(id)-") == true)
+    }
+
     @Test("refresh(gameID:) forces a re-fetch, overwriting user values")
     func refreshForces() async throws {
         let harness = try await EnrichmentHarness.make()

@@ -215,19 +215,31 @@ final class AppEnvironment {
         settings.connectionTester = built?.graph.connectionTester
 
         // Manual cover from a dropped image (both modes; sample writes to temp).
+        // A hand-picked cover is sacred: `setUserCover` marks the `cover` field
+        // user-edited so background enrichment (even an explicit refresh) never
+        // clobbers it (PLAN §5.2 point 4 / §7b).
         if let graph = built?.graph {
             let coverStore = graph.coverStore
             vm.onImportCover = { [weak vm] gameID, url in
                 Task {
                     do {
                         let stored = try await coverStore.importCover(from: url, gameID: gameID)
-                        // TODO(merge): once the data lane ships a `user_edited` flag,
-                        // set it here so a later "Refresh metadata" won't clobber a
-                        // hand-picked cover. Today the coordinator only fills an empty
-                        // cover_file, so a manual cover already survives normal enrichment.
-                        try await store.updateMetadata(gameID: gameID, MetadataPatch(coverFile: stored.coverFile))
+                        try await store.setUserCover(gameID: gameID, coverFile: stored.coverFile)
                     } catch {
                         vm?.showBanner("Couldn't set the cover.", kind: .error)
+                    }
+                }
+            }
+            // "Remove custom cover": clear the file + marker, then let enrichment
+            // fetch one again (live mode only — sample never touches the network).
+            let coordinator = built?.graph.coordinator
+            vm.onRemoveCover = { [weak vm] gameID in
+                Task {
+                    do {
+                        try await store.clearUserCover(gameID: gameID)
+                        if mode == .live { await coordinator?.refresh(gameID: gameID) }
+                    } catch {
+                        vm?.showBanner("Couldn't remove the cover.", kind: .error)
                     }
                 }
             }

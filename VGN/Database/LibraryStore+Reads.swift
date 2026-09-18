@@ -131,6 +131,7 @@ extension LibraryStore {
 
         let statusRaw: String? = g["status"]
         let owned = !copies.isEmpty
+        let userEdited = UserEditedFields(raw: (g["user_edited"] as String?) ?? "")
         return GameDetail(
             id: g["id"],
             igdbID: g["igdb_id"],
@@ -150,6 +151,7 @@ extension LibraryStore {
             rankKey: g["rank_key"],
             coverFile: g["cover_file"],
             igdbCoverImageID: g["igdb_cover_image_id"],
+            userEditedCover: userEdited.contains(.cover),
             genres: genres,
             platformIDs: platformIDs,
             myPlaytimeS: g["my_playtime_s"],

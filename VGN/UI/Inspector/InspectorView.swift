@@ -98,13 +98,25 @@ private struct SingleGameInspector: View {
                     }
                 }
 
-                Button {
-                    vm.refreshMetadata(gameID: detail.id)
-                } label: {
-                    Label("Refresh metadata", systemImage: "arrow.clockwise")
+                HStack(spacing: 12) {
+                    Button {
+                        vm.refreshMetadata(gameID: detail.id)
+                    } label: {
+                        Label("Refresh metadata", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Re-fetch metadata, cover and completion times from IGDB.")
+
+                    if detail.userEditedCover {
+                        Button {
+                            vm.removeCustomCover(gameID: detail.id)
+                        } label: {
+                            Label("Remove custom cover", systemImage: "photo.badge.arrow.down")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Drop the hand-picked cover and fetch one from IGDB / libretro again.")
+                    }
                 }
-                .buttonStyle(.borderless)
-                .help("Re-fetch metadata, cover and completion times from IGDB.")
 
                 if !detail.genres.isEmpty {
                     Text(detail.genres.joined(separator: " · "))
