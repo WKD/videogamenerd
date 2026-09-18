@@ -137,6 +137,6 @@ struct ScanPipeline: Sendable {
 private final class FailedTiles: @unchecked Sendable {
     private let lock = NSLock()
     private var ids: Set<Int> = []
-    func add(_ id: Int) { lock.withLock { ids.insert(id) } }
+    func add(_ id: Int) { lock.withLock { _ = ids.insert(id) } }
     func snapshot() -> [Int] { lock.withLock { ids.sorted() } }
 }
