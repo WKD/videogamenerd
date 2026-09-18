@@ -2,13 +2,10 @@ import SwiftUI
 
 @main
 struct VGNApp: App {
-    @State private var library: LibraryViewModel
-    @State private var settings: SettingsModel
+    @State private var env: AppEnvironment
 
     init() {
-        let secretStore: any SecretStoring = KeychainStore()
-        _settings = State(initialValue: SettingsModel(secretStore: secretStore))
-        _library = State(initialValue: VGNApp.makeLibraryViewModel())
+        _env = State(initialValue: AppEnvironment.launch())
     }
 
     var body: some Scene {
@@ -20,9 +17,13 @@ struct VGNApp: App {
             // window, so this costs no coverage. Harmless in the real app.
             if VGNApp.isRunningUnitTests {
                 Color.clear
-            } else {
+            } else if let library = env.library {
                 RootView(vm: library)
                     .frame(minWidth: 900, minHeight: 600)
+            } else if let failure = env.failure {
+                DatabaseErrorView(failure: failure)
+            } else {
+                Color.clear
             }
         }
         .defaultSize(width: 1200, height: 780)
@@ -30,7 +31,7 @@ struct VGNApp: App {
         .commands { LibraryCommands() }
 
         Settings {
-            SettingsView(model: settings)
+            SettingsView(model: env.settings)
         }
     }
 
@@ -38,29 +39,6 @@ struct VGNApp: App {
     static var isRunningUnitTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
-
-    /// Build the window's view model.
-    ///
-    /// TEMPORARY (Wave 1): there is no database on this branch yet, so in DEBUG
-    /// the shell runs against sample data through `PreviewLibraryDataSource`.
-    /// The switch below is the single, clearly-named place to remove next wave:
-    /// replace the data source with the GRDB-backed `LibraryDataSource` once the
-    /// database lane has merged. The cover loader likewise swaps `NoopCoverLoader`
-    /// for the services lane's `CoverStore`.
-    static func makeLibraryViewModel() -> LibraryViewModel {
-        #if DEBUG
-        if usePreviewDataUntilLiveWiring {
-            return LibraryViewModel(dataSource: PreviewLibraryDataSource.sampled)
-        }
-        #endif
-        return LibraryViewModel(dataSource: PreviewLibraryDataSource.empty)
-    }
-
-    #if DEBUG
-    /// Flip to `false` to preview the empty-library state in DEBUG. Remove the
-    /// whole switch when live wiring lands.
-    static let usePreviewDataUntilLiveWiring = true
-    #endif
 }
 
 // MARK: - Menu commands (PLAN §8)

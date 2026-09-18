@@ -33,11 +33,15 @@ final class LibraryViewModel {
     private(set) var counts: SidebarCounts = .empty
     private(set) var platforms: [PlatformInfo] = []
     private(set) var tiers: [TierInfo] = []
+    private(set) var genresInUse: [String] = []
+    private(set) var decadesInUse: [Int] = []
 
     // MARK: UI state
     private(set) var selection: SidebarSelection
     private(set) var filter: LibraryFilter
-    var selectedGameIDs: Set<Int64> = []
+    var selectedGameIDs: Set<Int64> = [] {
+        didSet { refreshDetailObservation() }
+    }
     /// The row shift-selection extends from.
     private(set) var selectionAnchor: Int64?
 
@@ -45,6 +49,13 @@ final class LibraryViewModel {
     var gridCellWidth: Double = 150
     static let minCellWidth: Double = 110
     static let maxCellWidth: Double = 230
+
+    /// The live search field text. Debounced (~150 ms) into `filter.searchText`
+    /// so each keystroke doesn't recompile/rerun the grid query (PLAN §8).
+    var searchText: String = "" {
+        didSet { scheduleSearchCommit() }
+    }
+    private var searchDebounceTask: Task<Void, Never>?
 
     var inspectorPresented: Bool = false
     /// True while the toolbar search field owns focus — key intents (S/A/…, O, P)
@@ -60,12 +71,36 @@ final class LibraryViewModel {
     let dataSource: any LibraryDataSource
     let coverLoader: any CoverLoading
 
-    // MARK: Intent hooks (wired to real writes next wave; log-only for now)
+    /// The write-orchestration object (tier/owned/played/status/playtime/delete,
+    /// banners, confirmations, undo). Nil in previews/tests that drive the
+    /// closures directly. Held weakly — the app owns both this and the actions.
+    weak var actions: LibraryActions?
+
+    /// The window's undo manager, injected by `RootView`. Reversible intents
+    /// (tier / played / status / playtime) register their inverse here.
+    var undoManager: UndoManager?
+
+    // MARK: Intent hooks (routed to `LibraryActions` by the app; log-only else)
     var onSetTier: (Set<Int64>, String?) -> Void
     var onSetOwned: (Set<Int64>, Bool) -> Void
     var onSetPlayed: (Set<Int64>, Bool) -> Void
     var onShowInspector: () -> Void
     var onQuickAdd: () -> Void
+
+    // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
+    /// The current transient banner, or nil. Auto-dismisses after a few seconds.
+    var banner: LibraryBanner?
+    /// A pending yes/no confirmation (orphan delete / last-copy removal).
+    var pendingConfirmation: LibraryConfirmation?
+    /// A pending "add a copy" flow needing a platform + format choice.
+    var ownershipRequest: OwnershipRequest?
+    /// A pending "remove which copies?" flow.
+    var copyRemovalRequest: CopyRemovalRequest?
+
+    // MARK: Inspector live detail (single selection)
+    /// Full detail for the single selected game, kept live by an observation so
+    /// the inspector updates itself after any write (PLAN §8).
+    private(set) var selectedDetail: GameDetail?
 
     // MARK: Per-cell boxes (PLAN §9)
     private var cellModels: [Int64: GameCellModel] = [:]
@@ -75,6 +110,17 @@ final class LibraryViewModel {
     private var platformsTask: Task<Void, Never>?
     private var tiersTask: Task<Void, Never>?
     private var gamesTask: Task<Void, Never>?
+    private var detailTask: Task<Void, Never>?
+    private var genresTask: Task<Void, Never>?
+    private var decadesTask: Task<Void, Never>?
+    private var bannerDismissTask: Task<Void, Never>?
+
+    /// Bumped on every `restartGames` so a stale observation task's emission is
+    /// dropped even if it arrives after the newer task started (latest wins).
+    private var gamesGeneration = 0
+    /// The game id the detail observation currently tracks (avoids re-subscribing
+    /// when the same single game stays selected).
+    private var observedDetailID: Int64?
 
     init(
         dataSource: any LibraryDataSource,
@@ -115,6 +161,12 @@ final class LibraryViewModel {
         tiersTask = Task { [dataSource] in
             for await value in dataSource.tiers() { self.tiers = value }
         }
+        genresTask = Task { [dataSource] in
+            for await value in dataSource.genresInUse() { self.genresInUse = value }
+        }
+        decadesTask = Task { [dataSource] in
+            for await value in dataSource.decadesInUse() { self.decadesInUse = value }
+        }
         restartGames()
     }
 
@@ -123,17 +175,29 @@ final class LibraryViewModel {
         platformsTask?.cancel(); platformsTask = nil
         tiersTask?.cancel(); tiersTask = nil
         gamesTask?.cancel(); gamesTask = nil
+        detailTask?.cancel(); detailTask = nil
+        genresTask?.cancel(); genresTask = nil
+        decadesTask?.cancel(); decadesTask = nil
     }
 
     private func restartGames() {
         gamesTask?.cancel()
+        gamesGeneration &+= 1
+        let generation = gamesGeneration
         let filter = self.filter
         gamesTask = Task { [dataSource] in
             for await rows in dataSource.games(filter: filter) {
+                // Drop a stale task's late emission — the newest restart wins.
+                if Task.isCancelled || generation != self.gamesGeneration { break }
                 self.applyGames(rows)
             }
         }
     }
+
+    /// Adopt tier definitions directly. The app feeds these from the `tiers()`
+    /// observation in `start()`; exposed so tests can seed them without a live
+    /// observation.
+    func applyTiers(_ newTiers: [TierInfo]) { tiers = newTiers }
 
     /// Adopt a freshly-observed set of rows. `internal` so tests (and the live
     /// store next wave) can drive it directly.
@@ -152,6 +216,27 @@ final class LibraryViewModel {
         }
         selectedGameIDs.formIntersection(ids)
         if let anchor = selectionAnchor, !ids.contains(anchor) { selectionAnchor = nil }
+    }
+
+    /// (Re)subscribe the inspector's live detail to the single selected game.
+    /// A single-selection change swaps the observation; zero/many clears it.
+    private func refreshDetailObservation() {
+        let single: Int64? = selectedGameIDs.count == 1 ? selectedGameIDs.first : nil
+        guard single != observedDetailID else { return }
+        observedDetailID = single
+        detailTask?.cancel()
+        guard let id = single else {
+            selectedDetail = nil
+            detailTask = nil
+            return
+        }
+        if selectedDetail?.id != id { selectedDetail = nil }
+        detailTask = Task { [dataSource] in
+            for await detail in dataSource.gameDetailStream(id: id) {
+                if Task.isCancelled || self.observedDetailID != id { break }
+                self.selectedDetail = detail
+            }
+        }
     }
 
     // MARK: Cell boxes
@@ -202,7 +287,26 @@ final class LibraryViewModel {
     func setFilter(_ new: LibraryFilter) {
         guard new != filter else { return }
         filter = new
+        // Keep the search field in sync when the filter's text is set
+        // programmatically (e.g. "Clear filters"). The guard in the didSet
+        // prevents a commit loop (text already equals the filter).
+        if searchText != new.searchText { searchText = new.searchText }
         restartGames()
+    }
+
+    /// Debounce the search field into the filter (latest keystroke wins).
+    private func scheduleSearchCommit() {
+        searchDebounceTask?.cancel()
+        let text = searchText
+        guard text != filter.searchText else { return }
+        searchDebounceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled, let self, text == self.searchText else { return }
+            guard text != self.filter.searchText else { return }
+            var f = self.filter
+            f.searchText = text
+            self.setFilter(f)
+        }
     }
 
     /// A binding to one field of the filter that re-runs the query on change.
@@ -322,4 +426,23 @@ final class LibraryViewModel {
     // MARK: Empty states
     var isEmptyLibrary: Bool { counts.all == 0 }
     var isEmptyFilterResult: Bool { games.isEmpty && !isEmptyLibrary }
+
+    // MARK: Non-blocking feedback
+
+    /// Show a transient banner (auto-dismisses). Errors are surfaced here rather
+    /// than swallowed (PLAN §8).
+    func showBanner(_ message: String, kind: LibraryBanner.Kind = .info) {
+        banner = LibraryBanner(message: message, kind: kind)
+        bannerDismissTask?.cancel()
+        bannerDismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(kind == .error ? 6 : 4))
+            guard !Task.isCancelled else { return }
+            self?.banner = nil
+        }
+    }
+
+    func dismissBanner() {
+        bannerDismissTask?.cancel()
+        banner = nil
+    }
 }
