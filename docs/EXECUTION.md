@@ -35,6 +35,9 @@ IGDB credentials for fixture recording / live smoke tests: `~/.config/vgn/igdb.e
 - Services sit behind protocols where PLAN names one (`CoverProvider`, `TimeToBeatProvider`, `ShelfRecognizer`, `LibraryImporter`).
 - App support dir: `~/Library/Application Support/VGN/` (`vgn.sqlite`, `covers/`, `thumbs/`, `backups/`). Tests use in-memory / temp-dir DBs, never the real one.
 
+- **Bundle resources are flattened.** Synchronised groups copy every non-Swift file into the bundle's `Resources/` root regardless of subfolder. So resource/fixture **file names must be unique per bundle** (app: `VGN/**`, tests: `VGNTests/**`) — prefix fixtures by topic (`igdb-search-bloodborne.json`, not `igdb/search.json`). Already taken in the test bundle: `platforms.json` (IGDB platform dump), `IMG_368x.jpg`, `tile*.jpg`. Load with `Bundle.main.url(forResource:withExtension:)` in the app; in tests use a `Bundle(for:)`-style lookup on a class defined in the test target.
+- `VGN/Resources/platforms.json` (61 platforms) fields: `id, name, short, manufacturer, group, kind, generation?, igdbIDs [Int], libretroRepo?, sort`. The sidebar groups by **`group`** (Sony, Nintendo, Sega, Microsoft, Atari, NEC, SNK, Computer, Arcade, Other), `sort` ascending within group. `libretroRepo` is read straight from the platform — there is no separate plist.
+
 ## Waves
 
 | Wave | Agent A | Agent B | Agent C | Tags |

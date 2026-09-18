@@ -18,12 +18,16 @@ struct PlatformInfo: Hashable, Sendable, Identifiable, Codable {
     var name: String
     /// Short label for chips, e.g. "PS5".
     var short: String
-    /// Manufacturer used for the sidebar grouping, e.g. "Sony", "Nintendo".
+    /// True hardware maker, e.g. "Sony", "Commodore".
     var manufacturer: String
+    /// Sidebar section, e.g. "Sony", "Nintendo", "Computer", "Arcade", "Other".
+    /// Differs from `manufacturer` for computers (Amiga → "Computer"). The sidebar
+    /// groups by this, never by `manufacturer`.
+    var group: String
     var kind: PlatformKind
     /// Hardware generation, when meaningful (nil for computers/arcade).
     var generation: Int?
-    /// Sort order within its manufacturer group.
+    /// Sort order within its `group` (ascending, roughly newest first).
     var sort: Int
 
     init(
@@ -31,6 +35,7 @@ struct PlatformInfo: Hashable, Sendable, Identifiable, Codable {
         name: String,
         short: String,
         manufacturer: String,
+        group: String? = nil,
         kind: PlatformKind,
         generation: Int? = nil,
         sort: Int = 0
@@ -39,6 +44,7 @@ struct PlatformInfo: Hashable, Sendable, Identifiable, Codable {
         self.name = name
         self.short = short
         self.manufacturer = manufacturer
+        self.group = group ?? manufacturer
         self.kind = kind
         self.generation = generation
         self.sort = sort
