@@ -272,6 +272,36 @@ struct LiveWiringTests {
         #expect(try await store.gameDetail(id: id)?.tierID == nil)
     }
 
+    @Test func bulkTierIsOneUndoStepRevertingEachToItsPriorTier() async throws {
+        let store = try await UIWiring.makeStore()
+        let a = try await store.addGame(GameDraft(title: "A", platformIDs: ["ps4"], played: true)).gameID
+        let b = try await store.addGame(GameDraft(title: "B", platformIDs: ["ps4"], played: true)).gameID
+        let c = try await store.addGame(GameDraft(title: "C", platformIDs: ["ps4"], played: true)).gameID
+        let (vm, actions) = UIWiring.makeWired(store)
+        vm.applyTiers(try await store.tiers())
+        try await UIWiring.syncGames(vm, from: store)
+        let undo = UndoManager()
+        vm.undoManager = undo
+
+        // Give B a different prior tier, then isolate the bulk step.
+        await actions.setTier(ids: [b], letter: "B")
+        let bPrior = try await store.gameDetail(id: b)?.tierID
+        try await UIWiring.syncGames(vm, from: store)
+        undo.removeAllActions()
+
+        // One bulk action across the whole selection.
+        await actions.setTier(ids: [a, b, c], letter: "S")
+        for id in [a, b, c] { #expect(try await store.gameDetail(id: id)?.tierLetter == "S") }
+        #expect(undo.canUndo)                          // exactly one step registered
+
+        // A single grouped inverse returns each game to its own prior tier
+        // (a,c → none; b → B), proving the bulk registered as one undo step.
+        await actions.restoreTiers([a: nil, b: bPrior, c: nil])
+        #expect(try await store.gameDetail(id: a)?.tierID == nil)
+        #expect(try await store.gameDetail(id: c)?.tierID == nil)
+        #expect(try await store.gameDetail(id: b)?.tierLetter == "B")
+    }
+
     // MARK: - Sample launch mode + live sidebar grouping
 
     @Test func sampleLaunchModeSeedsThroughStore() async throws {

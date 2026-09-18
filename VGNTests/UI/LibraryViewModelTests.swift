@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import VGN
 
@@ -161,6 +162,104 @@ struct LibraryViewModelCellCacheTests {
         vm.applyGames(Array(vm.games.prefix(2)))   // drop id 3
         #expect(vm.selectedGameIDs.isEmpty)         // stale selection pruned
         #expect(vm.games.count == 2)
+    }
+}
+
+/// A controllable clock for the type-to-select window.
+@MainActor private final class ClockBox { var now = Date(timeIntervalSince1970: 1_000) }
+
+@MainActor
+@Suite(.serialized)
+struct MultiSelectAndTypeSelectTests {
+
+    private func typeSelectGames() -> [GameSummary] {
+        // Sorted-by-title order: Mega Man, Metroid, Sonic, Zelda.
+        [GameSummary(id: 1, title: "Mega Man", played: true, owned: true, platformIDs: ["nes"]),
+         GameSummary(id: 2, title: "Metroid", played: true, owned: true, platformIDs: ["nes"]),
+         GameSummary(id: 3, title: "Sonic", played: true, owned: true, platformIDs: ["genesis"]),
+         GameSummary(id: 4, title: "Zelda", played: true, owned: true, platformIDs: ["nes"])]
+    }
+
+    private func makeVM(_ games: [GameSummary], _ clock: ClockBox) async -> LibraryViewModel {
+        let vm = LibraryViewModel(dataSource: PreviewLibraryDataSource(games: games), now: { clock.now })
+        vm.start()
+        for _ in 0..<200 where vm.games.isEmpty { await Task.yield() }
+        return vm
+    }
+
+    @Test func shiftArrowExtendsAndContractsRange() async {
+        let vm = await loadedVM(orderedGames(5))
+        vm.selectOnly(2)
+        vm.extendSelection(by: 1)
+        #expect(vm.selectedGameIDs == [2, 3])
+        vm.extendSelection(by: 1)
+        #expect(vm.selectedGameIDs == [2, 3, 4])
+        vm.extendSelection(by: -3)              // cursor 4 → 1, pivot on anchor 2
+        #expect(vm.selectedGameIDs == [1, 2])
+    }
+
+    @Test func typeToSelectJumpsOnNonTierLetter() async {
+        let clock = ClockBox()
+        let vm = await makeVM(typeSelectGames(), clock)
+        var tierCalls = 0
+        vm.onSetTier = { _, _ in tierCalls += 1 }
+        vm.selectOnly(4)                        // Zelda selected
+
+        // "m" is not a tier key → type-to-select jumps to the first "m" title.
+        #expect(vm.handleGridCharacter("m") == 1)   // Mega Man
+        #expect(vm.selectedGameIDs == [1])
+        // Continue the buffer: "e" → "me" still Mega Man; "t" → "met" → Metroid.
+        _ = vm.handleGridCharacter("e")
+        #expect(vm.handleGridCharacter("t") == 2)   // Metroid
+        #expect(tierCalls == 0)                     // never tiered
+    }
+
+    @Test func tierKeyFiresOnFirstKeystrokeWithSelection() async {
+        let clock = ClockBox()
+        let vm = await makeVM(typeSelectGames(), clock)
+        var lastTier: (Set<Int64>, String?)?
+        vm.onSetTier = { ids, letter in lastTier = (ids, letter) }
+        vm.selectOnly(2)                        // Metroid selected, buffer inactive
+
+        // "s" is a tier key + a selection exists + buffer inactive → tiers, no jump.
+        #expect(vm.handleGridCharacter("s") == nil)
+        #expect(lastTier?.0 == [2])
+        #expect(lastTier?.1 == "S")
+        #expect(vm.selectedGameIDs == [2])      // selection unchanged (no jump)
+    }
+
+    @Test func tierLetterTypesToSelectWhenNothingSelected() async {
+        let clock = ClockBox()
+        let vm = await makeVM(typeSelectGames(), clock)
+        var tierCalls = 0
+        vm.onSetTier = { _, _ in tierCalls += 1 }
+        vm.clearSelection()                     // nothing selected
+
+        // With no selection, even a tier letter starts type-to-select → Sonic.
+        #expect(vm.handleGridCharacter("s") == 3)
+        #expect(vm.selectedGameIDs == [3])
+        #expect(tierCalls == 0)
+    }
+
+    @Test func activeBufferSuppressesTierKeysUntilWindowExpires() async {
+        let clock = ClockBox()
+        let vm = await makeVM(typeSelectGames(), clock)
+        var tierCalls = 0
+        vm.onSetTier = { _, _ in tierCalls += 1 }
+        vm.selectOnly(1)
+
+        // Start a buffer with a non-tier letter → active.
+        _ = vm.handleGridCharacter("m")
+        #expect(vm.isTypeBufferActive())
+        // A tier letter within the window extends the buffer (no tiering).
+        #expect(vm.handleGridCharacter("s") == nil)   // "ms" matches nothing
+        #expect(tierCalls == 0)
+
+        // Past the ~1 s window the buffer expires → a tier letter tiers again.
+        clock.now = clock.now.addingTimeInterval(2)
+        #expect(!vm.isTypeBufferActive())
+        _ = vm.handleGridCharacter("s")
+        #expect(tierCalls == 1)
     }
 }
 
