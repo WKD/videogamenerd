@@ -65,6 +65,50 @@ import GRDB
         let count = try await restored.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games") }
         #expect(count == 1)
     }
+
+    @Test func restoreReplacesLiveDatabaseFromSnapshot() async throws {
+        var config = Configuration()
+        config.foreignKeysEnabled = true
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("VGN-restore-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let liveURL = dir.appendingPathComponent("vgn.sqlite")
+
+        // Live DB with one game; snapshot it; then add a second game *after* the snapshot.
+        var snapshot: URL!
+        do {
+            let db = try AppDatabase(try DatabasePool(path: liveURL.path, configuration: config))
+            let store = LibraryStore(db)
+            try await db.seedPlatforms(from: TestDB.platforms)
+            _ = try await store.addGame(GameDraft(title: "Original", platformIDs: ["pc"], owned: true))
+            snapshot = try db.backup(intoDirectory: dir.appendingPathComponent("backups"))
+            _ = try await store.addGame(GameDraft(title: "Added Later", platformIDs: ["pc"], owned: true))
+            let live = try await db.dbWriter.read { d in
+                try String.fetchAll(d, sql: "SELECT title FROM games ORDER BY title")
+            }
+            #expect(live == ["Added Later", "Original"])
+        }   // the pool closes here (no open connection on liveURL)
+
+        // Restore over the (now-closed) live file, then reopen.
+        try AppDatabase.restore(from: snapshot, to: liveURL)
+        let reopened = try AppDatabase(try DatabasePool(path: liveURL.path, configuration: config))
+        let titles = try await reopened.dbWriter.read { d in
+            try String.fetchAll(d, sql: "SELECT title FROM games ORDER BY title")
+        }
+        #expect(titles == ["Original"])   // the post-snapshot game is gone
+
+        // A bad snapshot is rejected and leaves the live file untouched.
+        let junk = dir.appendingPathComponent("junk.sqlite")
+        try Data("not a database".utf8).write(to: junk)
+        #expect(throws: AppDatabase.RestoreError.self) {
+            try AppDatabase.restore(from: junk, to: liveURL)
+        }
+        let missing = dir.appendingPathComponent("nope.sqlite")
+        #expect(throws: AppDatabase.RestoreError.missing) {
+            try AppDatabase.validateBackup(at: missing)
+        }
+    }
 }
 
 @Suite struct PerformanceTests {

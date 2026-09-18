@@ -57,6 +57,69 @@ extension AppDatabase {
         }
     }
 
+    // MARK: - Restore
+
+    /// A backup could not be restored.
+    enum RestoreError: Error, Sendable, Equatable {
+        case missing                 // the snapshot file does not exist
+        case notAVGNDatabase         // the file is not a readable VGN snapshot
+    }
+
+    /// Verify `url` is a readable VGN snapshot: an openable SQLite database that
+    /// carries the `games` table. Throws ``RestoreError`` otherwise. Opens the file
+    /// read-only and closes it before returning, so it never mutates the snapshot.
+    static func validateBackup(at url: URL) throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { throw RestoreError.missing }
+        var config = Configuration()
+        config.readonly = true
+        do {
+            let queue = try DatabaseQueue(path: url.path, configuration: config)
+            let ok = try queue.read { db in
+                try Bool.fetchOne(
+                    db, sql: "SELECT 1 FROM sqlite_master WHERE type='table' AND name='games'") ?? false
+            }
+            guard ok else { throw RestoreError.notAVGNDatabase }
+        } catch let error as RestoreError {
+            throw error
+        } catch {
+            throw RestoreError.notAVGNDatabase
+        }
+    }
+
+    /// Restore the database file at `destination` from the snapshot at `source`
+    /// (PLAN §9 Safety — "backups nobody has ever restored are not backups").
+    ///
+    /// **Precondition:** no `DatabasePool` / ``AppDatabase`` is open on `destination`.
+    /// Call this at launch, *before* ``live()`` — it replaces the database file and
+    /// deletes the WAL sidecars, which a live connection would fight. The snapshot is
+    /// validated first, and staged next to the destination before the swap, so a bad
+    /// or unreadable `source` leaves the existing database untouched.
+    static func restore(from source: URL, to destination: URL) throws {
+        try validateBackup(at: source)
+        let fm = FileManager.default
+        let staged = destination.deletingLastPathComponent()
+            .appendingPathComponent("vgn-restore-\(UUID().uuidString).sqlite")
+        try fm.copyItem(at: source, to: staged)
+        do {
+            // Remove the live file and any stale WAL/SHM (the snapshot is a clean,
+            // non-WAL VACUUM INTO copy; a leftover -wal would corrupt it), then move
+            // the validated copy into place with an atomic same-directory rename.
+            for path in [destination.path, destination.path + "-wal", destination.path + "-shm"] {
+                try? fm.removeItem(atPath: path)
+            }
+            try fm.moveItem(at: staged, to: destination)
+        } catch {
+            try? fm.removeItem(at: staged)
+            throw error
+        }
+    }
+
+    /// Convenience: restore the live application database from `source` (resolves the
+    /// live path via ``AppPaths``). Precondition as ``restore(from:to:)``.
+    static func restoreLive(from source: URL) throws {
+        try restore(from: source, to: AppPaths.databaseURL())
+    }
+
     private static let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
