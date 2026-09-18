@@ -124,7 +124,9 @@ func jsonArray(_ data: Data) -> [[String: Any]] {
 }
 
 let searchFields = "name,first_release_date,platforms.abbreviation,cover.image_id,genres.name,game_type,alternative_names.name,slug,parent_game,version_parent"
-let fullFields = "name,slug,summary,first_release_date,platforms.abbreviation,cover.image_id,genres.name,game_type,alternative_names.name,bundles,parent_game,version_parent"
+// §7b traits + rating fields appended to the enrichment field list.
+let traitFields = "franchise.name,franchises.name,collection.name,collections.name,involved_companies.company.name,involved_companies.developer,themes.name,game_modes.name,player_perspectives.name,keywords.name,similar_games,total_rating,total_rating_count,aggregated_rating,aggregated_rating_count,rating,rating_count"
+let fullFields = "name,slug,summary,first_release_date,platforms.abbreviation,cover.image_id,genres.name,game_type,alternative_names.name,bundles,parent_game,version_parent," + traitFields
 
 // MARK: - 0. game_types reference
 
@@ -207,5 +209,64 @@ let ttbIDs = Set([bloodborneID] + collectedMemberIDs)
 let ttbSet = "(" + ttbIDs.map(String.init).joined(separator: ",") + ")"
 prettyWrite(igdb("game_time_to_beats", "where game_id = \(ttbSet); fields game_id,hastily,normally,completely,count; limit 30;"),
             to: "igdb-ttb.json")
+
+// MARK: - 6. §7b Play Next corpus — ~12 well-known games spanning tastes.
+
+// This fixture doubles as the recommendation engine's realistic test corpus. We
+// search each title, pick the best main-game match, then fetch full metadata
+// (incl. the §7b trait/rating fields) + time-to-beat for all of them.
+print("\n=== §7b Play Next corpus ===")
+let corpusTitles = [
+    "Bloodborne", "Dark Souls", "Elden Ring", "The Last of Us",
+    "Uncharted 4 A Thief's End", "Persona 5", "Final Fantasy X", "Hollow Knight",
+    "Super Mario Odyssey", "Heavy Rain", "Yakuza 0", "Resident Evil 2",
+]
+var corpusIDs: [Int] = []
+for title in corpusTitles {
+    let esc = title.replacingOccurrences(of: "\"", with: "\\\"")
+    let hits = jsonArray(igdb("games",
+        "search \"\(esc)\"; fields id,name,game_type,version_parent,total_rating_count; limit 12;"))
+    // The canonical game is the most-rated main/remake/remaster that is not an
+    // edition (version_parent set) — total_rating_count is the crowd-size proxy.
+    let eligible = hits.filter {
+        ($0["version_parent"] == nil) && [0, 8, 9].contains($0["game_type"] as? Int ?? -1)
+            && ($0["total_rating_count"] as? Int ?? 0) > 0
+    }
+    let pick = eligible.max(by: {
+        ($0["total_rating_count"] as? Int ?? 0) < ($1["total_rating_count"] as? Int ?? 0)
+    }) ?? hits.first
+    if let id = pick?["id"] as? Int {
+        corpusIDs.append(id)
+        print("· \(title) → \(pick?["name"] ?? "?") (id \(id), ratings \(pick?["total_rating_count"] ?? 0))")
+    } else {
+        print("· \(title) → NO MATCH")
+    }
+}
+let corpusSet = "(" + corpusIDs.map(String.init).joined(separator: ",") + ")"
+let corpusData = igdb("games", "where id = \(corpusSet); fields \(fullFields); limit \(corpusIDs.count);")
+prettyWrite(corpusData, to: "igdb-games-corpus.json")
+prettyWrite(igdb("game_time_to_beats",
+                 "where game_id = \(corpusSet); fields game_id,hastily,normally,completely,count; limit 30;"),
+            to: "igdb-ttb-corpus.json")
+
+// Which rating / trait fields are actually populated? (report only)
+print("\n=== trait / rating population report ===")
+for obj in jsonArray(corpusData) {
+    let name = obj["name"] as? String ?? "?"
+    let franchises = (obj["franchises"] as? [Int])?.count ?? 0
+    let hasFranchise = obj["franchise"] != nil
+    let collections = (obj["collections"] as? [Int])?.count ?? ((obj["collection"] != nil) ? 1 : 0)
+    let ic = (obj["involved_companies"] as? [[String: Any]])?.count ?? 0
+    let themes = (obj["themes"] as? [Int])?.count ?? 0
+    let modes = (obj["game_modes"] as? [Int])?.count ?? 0
+    let persp = (obj["player_perspectives"] as? [Int])?.count ?? 0
+    let keywords = (obj["keywords"] as? [Int])?.count ?? 0
+    let similar = (obj["similar_games"] as? [Int])?.count ?? 0
+    let total = obj["total_rating"] as? Double
+    let totalCount = obj["total_rating_count"] as? Int
+    let agg = obj["aggregated_rating"] as? Double
+    let rating = obj["rating"] as? Double
+    print("· \(name): franchise=\(hasFranchise) franchises=\(franchises) coll=\(collections) companies=\(ic) themes=\(themes) modes=\(modes) persp=\(persp) kw=\(keywords) similar=\(similar) total=\(total.map { String(format: "%.1f", $0) } ?? "-")(\(totalCount ?? -1)) agg=\(agg.map { String(format: "%.1f", $0) } ?? "-") rating=\(rating.map { String(format: "%.1f", $0) } ?? "-")")
+}
 
 print("\nDone. Fixtures in \(fixturesDir.path)")

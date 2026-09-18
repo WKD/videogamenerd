@@ -1,0 +1,189 @@
+import Foundation
+
+/// A game the user has ranked — the taste training data (PLAN §7b). `score` is its
+/// 0…1 taste score (rank percentile / tier midpoint); `traits` includes the
+/// synthesised genre / platform / decade features alongside the persisted ones.
+struct RankedGame: Hashable, Sendable {
+    var id: GameID
+    var igdbID: Int64?
+    var score: Double
+    var traits: [GameTrait]
+
+    init(id: GameID, igdbID: Int64? = nil, score: Double, traits: [GameTrait] = []) {
+        self.id = id
+        self.igdbID = igdbID
+        self.score = score
+        self.traits = traits
+    }
+
+    /// The IGDB ids listed in this game's `similar_games`.
+    var similarIGDBIDs: [Int64] { traits.compactMap(\.similarGameID) }
+}
+
+/// A game eligible to be recommended (PLAN §7b Candidates): owned (any format,
+/// incl. ROMs and compilation members) and not finished/completed. Carries the
+/// facts the engine scores on **and** the display facts it echoes into a
+/// ``PlayNextSuggestion`` (so the store maps DB → engine → UI once).
+struct Candidate: Hashable, Sendable {
+    var id: GameID
+    var igdbID: Int64?
+    var traits: [GameTrait]
+
+    /// IGDB `normally` time-to-beat in seconds (nil ⇒ unknown length).
+    var estimateSeconds: Int?
+    /// IGDB `completely` time-to-beat (used when the bracket is completionist).
+    var completionistSeconds: Int?
+    /// The user's own playtime so far (remaining time for a `playing` game).
+    var myPlaytimeSeconds: Int?
+
+    var status: RecCandidateStatus
+    var igdbRating: Double?
+    var ratingCount: Int?
+    /// False when there is no IGDB match at all (manual entry / obscure ROM).
+    var hasMetadata: Bool
+
+    // Display facts (echoed into the suggestion).
+    var title: String
+    var year: Int?
+    var coverFile: String?
+    var platformIDs: [String]
+    var formats: [ProductFormat]
+    var playStatus: PlayStatus?
+
+    init(
+        id: GameID,
+        igdbID: Int64? = nil,
+        traits: [GameTrait] = [],
+        estimateSeconds: Int? = nil,
+        completionistSeconds: Int? = nil,
+        myPlaytimeSeconds: Int? = nil,
+        status: RecCandidateStatus,
+        igdbRating: Double? = nil,
+        ratingCount: Int? = nil,
+        hasMetadata: Bool = true,
+        title: String = "",
+        year: Int? = nil,
+        coverFile: String? = nil,
+        platformIDs: [String] = [],
+        formats: [ProductFormat] = [],
+        playStatus: PlayStatus? = nil
+    ) {
+        self.id = id
+        self.igdbID = igdbID
+        self.traits = traits
+        self.estimateSeconds = estimateSeconds
+        self.completionistSeconds = completionistSeconds
+        self.myPlaytimeSeconds = myPlaytimeSeconds
+        self.status = status
+        self.igdbRating = igdbRating
+        self.ratingCount = ratingCount
+        self.hasMetadata = hasMetadata
+        self.title = title
+        self.year = year
+        self.coverFile = coverFile
+        self.platformIDs = platformIDs
+        self.formats = formats
+        self.playStatus = playStatus
+    }
+
+    var similarIGDBIDs: [Int64] { traits.compactMap(\.similarGameID) }
+
+    /// The raw estimate for the chosen mode (before subtracting playtime).
+    func fullEstimate(completionist: Bool) -> Int? {
+        completionist ? (completionistSeconds ?? estimateSeconds) : estimateSeconds
+    }
+
+    /// The estimate the bracket is tested against: the full estimate, minus the
+    /// user's playtime when the game is already `playing` (PLAN §7b remaining time).
+    func bracketEstimate(completionist: Bool) -> Int? {
+        guard let full = fullEstimate(completionist: completionist) else { return nil }
+        if status == .playing, let played = myPlaytimeSeconds {
+            return max(0, full - played)
+        }
+        return full
+    }
+}
+
+/// A candidate's eligibility status (PLAN §7b). `finished` / `completed` games
+/// never become candidates (the store filters them), so they are not modelled here.
+enum RecCandidateStatus: Hashable, Sendable {
+    case backlog        // owned, not played
+    case playing
+    case abandoned      // opt-in
+    case playedUnknown  // played, no status — excluded by default (toggle)
+}
+
+/// The "not this one" memory (PLAN §7b `rec_feedback`), as engine values.
+struct RecFeedbackState: Hashable, Sendable {
+    /// Games snoozed until this instant (seconds since 1970). A game past its
+    /// snooze is eligible again.
+    var snoozedUntil: [GameID: Double]
+    /// Games removed for good.
+    var never: Set<GameID>
+    /// Games recently picked (a mild rotation penalty).
+    var picked: Set<GameID>
+
+    init(snoozedUntil: [GameID: Double] = [:], never: Set<GameID> = [], picked: Set<GameID> = []) {
+        self.snoozedUntil = snoozedUntil
+        self.never = never
+        self.picked = picked
+    }
+}
+
+/// Options for one `recommend` call (PLAN §7b candidate rules + rotation seed).
+struct RecommendationOptions: Hashable, Sendable {
+    /// Include `abandoned` games ("give it another go?").
+    var includeAbandoned: Bool
+    /// Include games played with no completion status ("played" may mean finished).
+    var includePlayedWithoutStatus: Bool
+    /// Deterministic rotation seed; changing it re-rolls near-ties (PLAN §7b `R`).
+    var seed: UInt64
+    /// "Now" for snooze comparison, seconds since 1970.
+    var now: Double
+    /// Max alternatives beyond the hero (PLAN §7b: "up to 4").
+    var maxAlternatives: Int
+    /// Max entries in the unknown-length lane.
+    var maxUnknownLength: Int
+
+    init(
+        includeAbandoned: Bool = false,
+        includePlayedWithoutStatus: Bool = false,
+        seed: UInt64 = 0,
+        now: Double = Date().timeIntervalSince1970,
+        maxAlternatives: Int = 4,
+        maxUnknownLength: Int = 8
+    ) {
+        self.includeAbandoned = includeAbandoned
+        self.includePlayedWithoutStatus = includePlayedWithoutStatus
+        self.seed = seed
+        self.now = now
+        self.maxAlternatives = maxAlternatives
+        self.maxUnknownLength = maxUnknownLength
+    }
+}
+
+/// Everything one `recommend` call needs (PLAN §7b). Plain values — no I/O.
+struct RecommendationInput: Sendable {
+    var ranked: [RankedGame]
+    var candidates: [Candidate]
+    var bracket: TimeBracket
+    var feedback: RecFeedbackState
+    var options: RecommendationOptions
+    var weights: RecommendationWeights
+
+    init(
+        ranked: [RankedGame],
+        candidates: [Candidate],
+        bracket: TimeBracket,
+        feedback: RecFeedbackState = RecFeedbackState(),
+        options: RecommendationOptions = RecommendationOptions(),
+        weights: RecommendationWeights = RecommendationWeights()
+    ) {
+        self.ranked = ranked
+        self.candidates = candidates
+        self.bracket = bracket
+        self.feedback = feedback
+        self.options = options
+        self.weights = weights
+    }
+}

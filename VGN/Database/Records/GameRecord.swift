@@ -26,6 +26,9 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
     var ttbSource: String?
     var igdbCoverImageID: String?
     var coverFile: String?
+    var igdbRating: Double?
+    var igdbRatingCount: Int?
+    var userEdited: String
     var addedAt: Date
     var updatedAt: Date
 
@@ -52,6 +55,9 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         case ttbSource = "ttb_source"
         case igdbCoverImageID = "igdb_cover_image_id"
         case coverFile = "cover_file"
+        case igdbRating = "igdb_rating"
+        case igdbRatingCount = "igdb_rating_count"
+        case userEdited = "user_edited"
         case addedAt = "added_at"
         case updatedAt = "updated_at"
     }
@@ -83,6 +89,9 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         ttbSource: String? = nil,
         igdbCoverImageID: String? = nil,
         coverFile: String? = nil,
+        igdbRating: Double? = nil,
+        igdbRatingCount: Int? = nil,
+        userEdited: String = "",
         addedAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -106,6 +115,9 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         self.ttbSource = ttbSource
         self.igdbCoverImageID = igdbCoverImageID
         self.coverFile = coverFile
+        self.igdbRating = igdbRating
+        self.igdbRatingCount = igdbRatingCount
+        self.userEdited = userEdited
         self.addedAt = addedAt
         self.updatedAt = updatedAt
     }

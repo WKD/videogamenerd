@@ -1,0 +1,4534 @@
+[
+  {
+    "aggregated_rating" : 95,
+    "aggregated_rating_count" : 2,
+    "alternative_names" : [
+      {
+        "id" : 62778,
+        "name" : "FINAL FANTASY X"
+      },
+      {
+        "id" : 60696,
+        "name" : "FF10"
+      },
+      {
+        "id" : 60697,
+        "name" : "Final Fantasy 10"
+      },
+      {
+        "id" : 60698,
+        "name" : "FFX"
+      },
+      {
+        "id" : 60699,
+        "name" : "Final Fantasy X International"
+      },
+      {
+        "id" : 60700,
+        "name" : "Final Fantasy 10 International"
+      },
+      {
+        "id" : 60701,
+        "name" : "最终幻想10"
+      },
+      {
+        "id" : 60702,
+        "name" : "Финальная Фантазия 10"
+      }
+    ],
+    "bundles" : [
+      282727,
+      301388
+    ],
+    "collections" : [
+      {
+        "id" : 39,
+        "name" : "Final Fantasy"
+      },
+      {
+        "id" : 9008,
+        "name" : "Final Fantasy X"
+      }
+    ],
+    "cover" : {
+      "id" : 85213,
+      "image_id" : "co1tr1"
+    },
+    "first_release_date" : 995500800,
+    "franchise" : {
+      "id" : 4,
+      "name" : "Final Fantasy"
+    },
+    "franchises" : [
+      {
+        "id" : 4,
+        "name" : "Final Fantasy"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 418,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 252,
+          "name" : "Square Electronic Arts"
+        },
+        "developer" : false,
+        "id" : 178030
+      },
+      {
+        "company" : {
+          "id" : 250,
+          "name" : "Square"
+        },
+        "developer" : false,
+        "id" : 253625
+      },
+      {
+        "company" : {
+          "id" : 52975,
+          "name" : "Square Product Development Division 1"
+        },
+        "developer" : true,
+        "id" : 253626
+      },
+      {
+        "company" : {
+          "id" : 13634,
+          "name" : "Sony Computer Entertainment"
+        },
+        "developer" : false,
+        "id" : 403002
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 226,
+        "name" : "magic"
+      },
+      {
+        "id" : 236,
+        "name" : "grinding"
+      },
+      {
+        "id" : 274,
+        "name" : "minigames"
+      },
+      {
+        "id" : 415,
+        "name" : "turn-based"
+      },
+      {
+        "id" : 497,
+        "name" : "summoning support"
+      },
+      {
+        "id" : 563,
+        "name" : "military"
+      },
+      {
+        "id" : 1061,
+        "name" : "giant monsters"
+      },
+      {
+        "id" : 1102,
+        "name" : "religion"
+      },
+      {
+        "id" : 1209,
+        "name" : "party-based combat"
+      },
+      {
+        "id" : 1393,
+        "name" : "tropical"
+      },
+      {
+        "id" : 1525,
+        "name" : "character development"
+      },
+      {
+        "id" : 2123,
+        "name" : "religious"
+      },
+      {
+        "id" : 2125,
+        "name" : "love story"
+      },
+      {
+        "id" : 2399,
+        "name" : "turn-based combat"
+      },
+      {
+        "id" : 4239,
+        "name" : "platform exclusive"
+      },
+      {
+        "id" : 4578,
+        "name" : "motion blur"
+      },
+      {
+        "id" : 4615,
+        "name" : "profanity"
+      },
+      {
+        "id" : 4709,
+        "name" : "save point"
+      },
+      {
+        "id" : 4940,
+        "name" : "underwater gameplay"
+      },
+      {
+        "id" : 5314,
+        "name" : "cross-save"
+      },
+      {
+        "id" : 5323,
+        "name" : "mercenary"
+      },
+      {
+        "id" : 5542,
+        "name" : "interactive environments"
+      },
+      {
+        "id" : 5823,
+        "name" : "motion capture animation"
+      },
+      {
+        "id" : 5936,
+        "name" : "summoners"
+      },
+      {
+        "id" : 5989,
+        "name" : "quick time event"
+      },
+      {
+        "id" : 6221,
+        "name" : "androgyny"
+      },
+      {
+        "id" : 6463,
+        "name" : "heterochromia"
+      },
+      {
+        "id" : 6541,
+        "name" : "poisoning"
+      },
+      {
+        "id" : 6542,
+        "name" : "victory music"
+      },
+      {
+        "id" : 6642,
+        "name" : "random encounter"
+      },
+      {
+        "id" : 7304,
+        "name" : "airship"
+      },
+      {
+        "id" : 7467,
+        "name" : "petrification"
+      },
+      {
+        "id" : 10006,
+        "name" : "monomyth"
+      },
+      {
+        "id" : 10348,
+        "name" : "kill quest"
+      }
+    ],
+    "name" : "Final Fantasy X",
+    "platforms" : [
+      {
+        "abbreviation" : "PS2",
+        "id" : 8
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      },
+      {
+        "id" : 3,
+        "name" : "Bird view \/ Isometric"
+      },
+      {
+        "id" : 4,
+        "name" : "Side view"
+      }
+    ],
+    "rating" : 87.809300331616072,
+    "rating_count" : 1100,
+    "similar_games" : [
+      389,
+      13557,
+      217623,
+      421,
+      384,
+      1262,
+      26765,
+      73,
+      2449,
+      26766
+    ],
+    "slug" : "final-fantasy-x",
+    "summary" : "Final Fantasy X is the tenth main installment in the FF series and the first title released on sixth-generation consoles. It was also the first game to feature fully three-dimensional areas rather than including pre-rendered backdrops, and the first to include voice acting. Final Fantasy X tells the story of a star blitzball player, Tidus, who journeys with a young and beautiful summoner named Yuna on her quest to save the world of Spira from an endless cycle of destruction wrought by the colossal menace Sin.",
+    "themes" : [
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      },
+      {
+        "id" : 18,
+        "name" : "Science fiction"
+      },
+      {
+        "id" : 31,
+        "name" : "Drama"
+      },
+      {
+        "id" : 44,
+        "name" : "Romance"
+      }
+    ],
+    "total_rating" : 91.404650165808036,
+    "total_rating_count" : 1102
+  },
+  {
+    "aggregated_rating" : 80.25,
+    "aggregated_rating_count" : 10,
+    "alternative_names" : [
+      {
+        "id" : 72373,
+        "name" : "Heavy Rain: When the Heart Squeaks"
+      },
+      {
+        "id" : 72371,
+        "name" : "The Origami Killer"
+      },
+      {
+        "id" : 72372,
+        "name" : "Heavy Rain: Kokoro no Kishimu Toki"
+      },
+      {
+        "id" : 130122,
+        "name" : "暴雨殺機"
+      },
+      {
+        "id" : 196446,
+        "name" : "HeavyRain.exe"
+      }
+    ],
+    "bundles" : [
+      44547,
+      118902,
+      136184,
+      144777,
+      45279
+    ],
+    "cover" : {
+      "id" : 480235,
+      "image_id" : "coaajv"
+    },
+    "first_release_date" : 1266451200,
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 493,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 261,
+          "name" : "Quantic Dream"
+        },
+        "developer" : true,
+        "id" : 106307
+      },
+      {
+        "company" : {
+          "id" : 13634,
+          "name" : "Sony Computer Entertainment"
+        },
+        "developer" : false,
+        "id" : 180642
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 1,
+        "name" : "modern warfare"
+      },
+      {
+        "id" : 6,
+        "name" : "rail shooter"
+      },
+      {
+        "id" : 21,
+        "name" : "helicopter"
+      },
+      {
+        "id" : 72,
+        "name" : "exploration"
+      },
+      {
+        "id" : 129,
+        "name" : "bloody"
+      },
+      {
+        "id" : 134,
+        "name" : "psychological thriller"
+      },
+      {
+        "id" : 140,
+        "name" : "serial killer"
+      },
+      {
+        "id" : 215,
+        "name" : "detective"
+      },
+      {
+        "id" : 218,
+        "name" : "interactive fiction"
+      },
+      {
+        "id" : 221,
+        "name" : "murder"
+      },
+      {
+        "id" : 222,
+        "name" : "drugs"
+      },
+      {
+        "id" : 512,
+        "name" : "quick-time events"
+      },
+      {
+        "id" : 558,
+        "name" : "death"
+      },
+      {
+        "id" : 563,
+        "name" : "military"
+      },
+      {
+        "id" : 578,
+        "name" : "permadeath"
+      },
+      {
+        "id" : 840,
+        "name" : "cinematic"
+      },
+      {
+        "id" : 962,
+        "name" : "female protagonist"
+      },
+      {
+        "id" : 1033,
+        "name" : "action-adventure"
+      },
+      {
+        "id" : 1136,
+        "name" : "noir"
+      },
+      {
+        "id" : 1186,
+        "name" : "multiple protagonists"
+      },
+      {
+        "id" : 1313,
+        "name" : "multiple endings"
+      },
+      {
+        "id" : 1440,
+        "name" : "artificial intelligence"
+      },
+      {
+        "id" : 1478,
+        "name" : "on-rails"
+      },
+      {
+        "id" : 1523,
+        "name" : "dialogue trees"
+      },
+      {
+        "id" : 1669,
+        "name" : "crime"
+      },
+      {
+        "id" : 1779,
+        "name" : "torture"
+      },
+      {
+        "id" : 1846,
+        "name" : "mud"
+      },
+      {
+        "id" : 1881,
+        "name" : "amnesia"
+      },
+      {
+        "id" : 1961,
+        "name" : "nudity"
+      },
+      {
+        "id" : 2069,
+        "name" : "pizza"
+      },
+      {
+        "id" : 2416,
+        "name" : "hide and seek"
+      },
+      {
+        "id" : 3486,
+        "name" : "boss fight"
+      },
+      {
+        "id" : 3831,
+        "name" : "explosion"
+      },
+      {
+        "id" : 4138,
+        "name" : "single-player only"
+      },
+      {
+        "id" : 4239,
+        "name" : "platform exclusive"
+      },
+      {
+        "id" : 4245,
+        "name" : "playstation trophies"
+      },
+      {
+        "id" : 4259,
+        "name" : "modern military"
+      },
+      {
+        "id" : 4267,
+        "name" : "clowns"
+      },
+      {
+        "id" : 4287,
+        "name" : "voice acting"
+      },
+      {
+        "id" : 4333,
+        "name" : "ranking system"
+      },
+      {
+        "id" : 4345,
+        "name" : "bink video"
+      },
+      {
+        "id" : 4353,
+        "name" : "human"
+      },
+      {
+        "id" : 4359,
+        "name" : "polygonal 3d"
+      },
+      {
+        "id" : 4412,
+        "name" : "rat"
+      },
+      {
+        "id" : 4437,
+        "name" : "playstation move support"
+      },
+      {
+        "id" : 4541,
+        "name" : "original soundtrack release"
+      },
+      {
+        "id" : 4613,
+        "name" : "non-player character"
+      },
+      {
+        "id" : 4615,
+        "name" : "profanity"
+      },
+      {
+        "id" : 4796,
+        "name" : "playstation experience 2015"
+      },
+      {
+        "id" : 4850,
+        "name" : "moral decisions"
+      },
+      {
+        "id" : 4851,
+        "name" : "morale"
+      },
+      {
+        "id" : 4855,
+        "name" : "branching storyline"
+      },
+      {
+        "id" : 4897,
+        "name" : "auto-saving"
+      },
+      {
+        "id" : 4998,
+        "name" : "betrayal"
+      },
+      {
+        "id" : 5255,
+        "name" : "unreliable narrator"
+      },
+      {
+        "id" : 5377,
+        "name" : "robbery"
+      },
+      {
+        "id" : 5411,
+        "name" : "depression"
+      },
+      {
+        "id" : 5447,
+        "name" : "canonical death"
+      },
+      {
+        "id" : 5453,
+        "name" : "destructible environment"
+      },
+      {
+        "id" : 5488,
+        "name" : "bribery"
+      },
+      {
+        "id" : 5514,
+        "name" : "addiction"
+      },
+      {
+        "id" : 5523,
+        "name" : "leaderboard"
+      },
+      {
+        "id" : 5533,
+        "name" : "no hud"
+      },
+      {
+        "id" : 5539,
+        "name" : "split screen event"
+      },
+      {
+        "id" : 5570,
+        "name" : "film noir"
+      },
+      {
+        "id" : 5639,
+        "name" : "invisible wall"
+      },
+      {
+        "id" : 5675,
+        "name" : "suicide"
+      },
+      {
+        "id" : 5735,
+        "name" : "hallucination"
+      },
+      {
+        "id" : 5789,
+        "name" : "realism"
+      },
+      {
+        "id" : 5815,
+        "name" : "car accident"
+      },
+      {
+        "id" : 5823,
+        "name" : "motion capture animation"
+      },
+      {
+        "id" : 5850,
+        "name" : "high definition graphics"
+      },
+      {
+        "id" : 5963,
+        "name" : "plot twist"
+      },
+      {
+        "id" : 5989,
+        "name" : "quick time event"
+      },
+      {
+        "id" : 6008,
+        "name" : "unskippable tutorial"
+      },
+      {
+        "id" : 6084,
+        "name" : "not-so-bad guys"
+      },
+      {
+        "id" : 6189,
+        "name" : "meme origin"
+      },
+      {
+        "id" : 6235,
+        "name" : "agents"
+      },
+      {
+        "id" : 6368,
+        "name" : "overweight character"
+      },
+      {
+        "id" : 6539,
+        "name" : "kidnapping"
+      },
+      {
+        "id" : 6692,
+        "name" : "aggressive door-opening"
+      },
+      {
+        "id" : 6745,
+        "name" : "surprising character switches"
+      },
+      {
+        "id" : 6752,
+        "name" : "character models based on actual people"
+      },
+      {
+        "id" : 6962,
+        "name" : "aquarium"
+      },
+      {
+        "id" : 7112,
+        "name" : "dream sequence"
+      },
+      {
+        "id" : 7114,
+        "name" : "new purchase incentives"
+      },
+      {
+        "id" : 7154,
+        "name" : "missing relative"
+      },
+      {
+        "id" : 7215,
+        "name" : "context sensitive"
+      },
+      {
+        "id" : 7221,
+        "name" : "reversible cover art"
+      },
+      {
+        "id" : 7351,
+        "name" : "sociopathy"
+      },
+      {
+        "id" : 8150,
+        "name" : "sex work"
+      },
+      {
+        "id" : 8157,
+        "name" : "playstation home tie-in"
+      },
+      {
+        "id" : 8983,
+        "name" : "tragic hero"
+      },
+      {
+        "id" : 9283,
+        "name" : "heroic sacrifice"
+      },
+      {
+        "id" : 9328,
+        "name" : "dark past"
+      },
+      {
+        "id" : 9529,
+        "name" : "greatest hits"
+      },
+      {
+        "id" : 9605,
+        "name" : "cold open"
+      },
+      {
+        "id" : 9768,
+        "name" : "surgery in game"
+      },
+      {
+        "id" : 10149,
+        "name" : "tank controls"
+      },
+      {
+        "id" : 11113,
+        "name" : "inner-thoughts world"
+      },
+      {
+        "id" : 11122,
+        "name" : "pax prime 2010"
+      },
+      {
+        "id" : 11247,
+        "name" : "sixaxis support"
+      },
+      {
+        "id" : 11524,
+        "name" : "forensics"
+      },
+      {
+        "id" : 11975,
+        "name" : "initial install"
+      },
+      {
+        "id" : 12067,
+        "name" : "interactive achievement awards 2011"
+      },
+      {
+        "id" : 12440,
+        "name" : "uncanny valley"
+      },
+      {
+        "id" : 13036,
+        "name" : "tokyo game show 2009"
+      },
+      {
+        "id" : 13068,
+        "name" : "pax 2009"
+      },
+      {
+        "id" : 13082,
+        "name" : "gamescom 2009"
+      },
+      {
+        "id" : 13505,
+        "name" : "rogue cop"
+      },
+      {
+        "id" : 17136,
+        "name" : "david cage"
+      },
+      {
+        "id" : 26306,
+        "name" : "sexual themes"
+      }
+    ],
+    "name" : "Heavy Rain",
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      },
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 1,
+        "name" : "First person"
+      },
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 81.50873777203077,
+    "rating_count" : 1128,
+    "similar_games" : [
+      499,
+      109,
+      960,
+      40,
+      847,
+      1342,
+      2031,
+      7318,
+      481,
+      549
+    ],
+    "slug" : "heavy-rain",
+    "summary" : "Heavy Rain is a cinematic psychological thriller from game developer Quantic Dream exclusively for the PlayStation 3. Dealing with a range of adult themes, the game revolves around a sophisticated plot and strong narrative threads that explore a complex moral proposition. You assume the role of multiple characters with very different backgrounds, motivations, and skills in a world where each player decision affects what will follow.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 20,
+        "name" : "Thriller"
+      },
+      {
+        "id" : 31,
+        "name" : "Drama"
+      },
+      {
+        "id" : 43,
+        "name" : "Mystery"
+      }
+    ],
+    "total_rating" : 80.879368886015385,
+    "total_rating_count" : 1138
+  },
+  {
+    "aggregated_rating" : 91.538461538461533,
+    "aggregated_rating_count" : 13,
+    "alternative_names" : [
+      {
+        "id" : 37402,
+        "name" : "Одни из нас"
+      },
+      {
+        "id" : 24559,
+        "name" : "TLoU"
+      },
+      {
+        "id" : 175430,
+        "name" : "The Last of Us™ Remastered"
+      }
+    ],
+    "collections" : [
+      {
+        "id" : 864,
+        "name" : "The Last of Us"
+      }
+    ],
+    "cover" : {
+      "id" : 81915,
+      "image_id" : "co1r7f"
+    },
+    "first_release_date" : 1371168000,
+    "franchises" : [
+      {
+        "id" : 2675,
+        "name" : "The Last of Us"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 1009,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 401,
+          "name" : "Naughty Dog"
+        },
+        "developer" : true,
+        "id" : 73932
+      },
+      {
+        "company" : {
+          "id" : 13634,
+          "name" : "Sony Computer Entertainment"
+        },
+        "developer" : false,
+        "id" : 185895
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 64,
+        "name" : "hunting"
+      },
+      {
+        "id" : 69,
+        "name" : "post-apocalyptic"
+      },
+      {
+        "id" : 159,
+        "name" : "disease"
+      },
+      {
+        "id" : 161,
+        "name" : "infection"
+      },
+      {
+        "id" : 221,
+        "name" : "murder"
+      },
+      {
+        "id" : 222,
+        "name" : "drugs"
+      },
+      {
+        "id" : 283,
+        "name" : "story driven"
+      },
+      {
+        "id" : 380,
+        "name" : "chess"
+      },
+      {
+        "id" : 429,
+        "name" : "dystopian"
+      },
+      {
+        "id" : 510,
+        "name" : "crafting"
+      },
+      {
+        "id" : 558,
+        "name" : "death"
+      },
+      {
+        "id" : 623,
+        "name" : "horse"
+      },
+      {
+        "id" : 789,
+        "name" : "doctor"
+      },
+      {
+        "id" : 962,
+        "name" : "female protagonist"
+      },
+      {
+        "id" : 977,
+        "name" : "hand-to-hand combat"
+      },
+      {
+        "id" : 1033,
+        "name" : "action-adventure"
+      },
+      {
+        "id" : 1317,
+        "name" : "apocalypse"
+      },
+      {
+        "id" : 1320,
+        "name" : "undead"
+      },
+      {
+        "id" : 1322,
+        "name" : "mutants"
+      },
+      {
+        "id" : 1333,
+        "name" : "online"
+      },
+      {
+        "id" : 1373,
+        "name" : "hostages"
+      },
+      {
+        "id" : 1403,
+        "name" : "building"
+      },
+      {
+        "id" : 1440,
+        "name" : "artificial intelligence"
+      },
+      {
+        "id" : 1710,
+        "name" : "snow"
+      },
+      {
+        "id" : 1836,
+        "name" : "survival horror"
+      },
+      {
+        "id" : 1846,
+        "name" : "mud"
+      },
+      {
+        "id" : 1935,
+        "name" : "dog"
+      },
+      {
+        "id" : 1971,
+        "name" : "over the shoulder"
+      },
+      {
+        "id" : 2040,
+        "name" : "echolocation"
+      },
+      {
+        "id" : 2280,
+        "name" : "climbing"
+      },
+      {
+        "id" : 2672,
+        "name" : "giraffe"
+      },
+      {
+        "id" : 3433,
+        "name" : "horse riding"
+      },
+      {
+        "id" : 3486,
+        "name" : "boss fight"
+      },
+      {
+        "id" : 3540,
+        "name" : "comic book"
+      },
+      {
+        "id" : 4221,
+        "name" : "game critics awards"
+      },
+      {
+        "id" : 4239,
+        "name" : "platform exclusive"
+      },
+      {
+        "id" : 4245,
+        "name" : "playstation trophies"
+      },
+      {
+        "id" : 4250,
+        "name" : "rivaling factions"
+      },
+      {
+        "id" : 4284,
+        "name" : "leveling up"
+      },
+      {
+        "id" : 4287,
+        "name" : "voice acting"
+      },
+      {
+        "id" : 4368,
+        "name" : "mouse"
+      },
+      {
+        "id" : 4392,
+        "name" : "bow and arrow"
+      },
+      {
+        "id" : 4433,
+        "name" : "bat"
+      },
+      {
+        "id" : 4473,
+        "name" : "photo mode"
+      },
+      {
+        "id" : 4541,
+        "name" : "original soundtrack release"
+      },
+      {
+        "id" : 4544,
+        "name" : "unlockables"
+      },
+      {
+        "id" : 4614,
+        "name" : "extreme violence"
+      },
+      {
+        "id" : 4615,
+        "name" : "profanity"
+      },
+      {
+        "id" : 4623,
+        "name" : "fake in-game advertising"
+      },
+      {
+        "id" : 4637,
+        "name" : "corpse"
+      },
+      {
+        "id" : 4641,
+        "name" : "tape recorder"
+      },
+      {
+        "id" : 4711,
+        "name" : "sprinting mechanics"
+      },
+      {
+        "id" : 4843,
+        "name" : "saving the world"
+      },
+      {
+        "id" : 4850,
+        "name" : "moral decisions"
+      },
+      {
+        "id" : 4891,
+        "name" : "melee"
+      },
+      {
+        "id" : 4918,
+        "name" : "real-time combat"
+      },
+      {
+        "id" : 4974,
+        "name" : "male antagonist"
+      },
+      {
+        "id" : 4990,
+        "name" : "instant kill"
+      },
+      {
+        "id" : 5150,
+        "name" : "wilhelm scream"
+      },
+      {
+        "id" : 5264,
+        "name" : "vending machine interaction"
+      },
+      {
+        "id" : 5308,
+        "name" : "rpg elements"
+      },
+      {
+        "id" : 5317,
+        "name" : "gamescom 2014"
+      },
+      {
+        "id" : 5329,
+        "name" : "coming of age"
+      },
+      {
+        "id" : 5339,
+        "name" : "mid-development ip split"
+      },
+      {
+        "id" : 5425,
+        "name" : "arcade cabinet"
+      },
+      {
+        "id" : 5451,
+        "name" : "cover system"
+      },
+      {
+        "id" : 5485,
+        "name" : "rebels"
+      },
+      {
+        "id" : 5587,
+        "name" : "villain"
+      },
+      {
+        "id" : 5593,
+        "name" : "anti-hero"
+      },
+      {
+        "id" : 5608,
+        "name" : "evolving title screen"
+      },
+      {
+        "id" : 5675,
+        "name" : "suicide"
+      },
+      {
+        "id" : 5815,
+        "name" : "car accident"
+      },
+      {
+        "id" : 5823,
+        "name" : "motion capture animation"
+      },
+      {
+        "id" : 5885,
+        "name" : "gamescom 2012"
+      },
+      {
+        "id" : 5999,
+        "name" : "stealth kill"
+      },
+      {
+        "id" : 6066,
+        "name" : "poverty"
+      },
+      {
+        "id" : 6075,
+        "name" : "banter during gameplay"
+      },
+      {
+        "id" : 6169,
+        "name" : "d.i.c.e. awards 2014"
+      },
+      {
+        "id" : 6210,
+        "name" : "cannibalism"
+      },
+      {
+        "id" : 6254,
+        "name" : "enemy tagging"
+      },
+      {
+        "id" : 6309,
+        "name" : "in-engine cinematic"
+      },
+      {
+        "id" : 6462,
+        "name" : "psychopathy"
+      },
+      {
+        "id" : 6471,
+        "name" : "women in refrigerators syndrome"
+      },
+      {
+        "id" : 6541,
+        "name" : "poisoning"
+      },
+      {
+        "id" : 6620,
+        "name" : "scripted events"
+      },
+      {
+        "id" : 6648,
+        "name" : "new game plus"
+      },
+      {
+        "id" : 6745,
+        "name" : "surprising character switches"
+      },
+      {
+        "id" : 6870,
+        "name" : "cutscene menu"
+      },
+      {
+        "id" : 6878,
+        "name" : "animal petting"
+      },
+      {
+        "id" : 6998,
+        "name" : "workbench mechanics"
+      },
+      {
+        "id" : 7028,
+        "name" : "adapted to - tv show"
+      },
+      {
+        "id" : 7048,
+        "name" : "escaping imprisonment"
+      },
+      {
+        "id" : 7097,
+        "name" : "censored version"
+      },
+      {
+        "id" : 7115,
+        "name" : "united states army"
+      },
+      {
+        "id" : 7229,
+        "name" : "game developers choice awards 2014"
+      },
+      {
+        "id" : 7303,
+        "name" : "pax east 2013"
+      },
+      {
+        "id" : 7335,
+        "name" : "anarchism"
+      },
+      {
+        "id" : 7351,
+        "name" : "sociopathy"
+      },
+      {
+        "id" : 7355,
+        "name" : "anti-villain"
+      },
+      {
+        "id" : 7403,
+        "name" : "pax prime 2012"
+      },
+      {
+        "id" : 7419,
+        "name" : "close quarters combat"
+      },
+      {
+        "id" : 7603,
+        "name" : "foreshadowing"
+      },
+      {
+        "id" : 8157,
+        "name" : "playstation home tie-in"
+      },
+      {
+        "id" : 8854,
+        "name" : "forced slow walking"
+      },
+      {
+        "id" : 9161,
+        "name" : "no respawn"
+      },
+      {
+        "id" : 9283,
+        "name" : "heroic sacrifice"
+      },
+      {
+        "id" : 9328,
+        "name" : "dark past"
+      },
+      {
+        "id" : 9366,
+        "name" : "landmark button"
+      },
+      {
+        "id" : 9661,
+        "name" : "comic relief"
+      },
+      {
+        "id" : 9768,
+        "name" : "surgery in game"
+      },
+      {
+        "id" : 11281,
+        "name" : "tragic villain"
+      },
+      {
+        "id" : 23856,
+        "name" : "lgbtq+"
+      }
+    ],
+    "name" : "The Last of Us",
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 92.839452115352287,
+    "rating_count" : 3585,
+    "similar_games" : [
+      37,
+      847,
+      1164,
+      1941,
+      1020,
+      1305,
+      538,
+      499,
+      434,
+      1985
+    ],
+    "slug" : "the-last-of-us",
+    "summary" : "The Last of Us is a third-person action-adventure game featuring a mix of exploration, stealth and combat. Players face both infected creatures and hostile human enemies while progressing through varied environments. The game includes a narrative-driven single-player campaign and a competitive online multiplayer mode called Factions. Trophy support is included, and additional downloadable content was made available separately.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 19,
+        "name" : "Horror"
+      },
+      {
+        "id" : 21,
+        "name" : "Survival"
+      },
+      {
+        "id" : 23,
+        "name" : "Stealth"
+      }
+    ],
+    "total_rating" : 92.188956826906917,
+    "total_rating_count" : 3598
+  },
+  {
+    "aggregated_rating" : 93.239999999999995,
+    "aggregated_rating_count" : 25,
+    "alternative_names" : [
+      {
+        "id" : 61291,
+        "name" : "Uncharted: Kaizokuou to Saigo no Hihou"
+      },
+      {
+        "id" : 98764,
+        "name" : "‏Uncharted 4: نهايةُ لِص"
+      },
+      {
+        "id" : 98759,
+        "name" : "Uncharted 4: Kres złodzieja"
+      },
+      {
+        "id" : 98760,
+        "name" : "Uncharted 4"
+      },
+      {
+        "id" : 98761,
+        "name" : "Uncharted 4: O Fim de um Ladrão"
+      },
+      {
+        "id" : 98762,
+        "name" : "Uncharted 4: El Desenlace del Ladrón"
+      },
+      {
+        "id" : 98763,
+        "name" : "Uncharted 4: Путь вора"
+      },
+      {
+        "id" : 98765,
+        "name" : "Uncharted 4: Fine di un ladro"
+      }
+    ],
+    "collections" : [
+      {
+        "id" : 97,
+        "name" : "Uncharted"
+      }
+    ],
+    "cover" : {
+      "id" : 81917,
+      "image_id" : "co1r7h"
+    },
+    "first_release_date" : 1462838400,
+    "franchises" : [
+      {
+        "id" : 2121,
+        "name" : "Uncharted"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      },
+      {
+        "id" : 2,
+        "name" : "Multiplayer"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 7331,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 401,
+          "name" : "Naughty Dog"
+        },
+        "developer" : true,
+        "id" : 17326
+      },
+      {
+        "company" : {
+          "id" : 10100,
+          "name" : "Sony Interactive Entertainment"
+        },
+        "developer" : false,
+        "id" : 130942
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 57,
+        "name" : "motorcycle"
+      },
+      {
+        "id" : 1033,
+        "name" : "action-adventure"
+      },
+      {
+        "id" : 1186,
+        "name" : "multiple protagonists"
+      },
+      {
+        "id" : 1190,
+        "name" : "treasure hunt"
+      },
+      {
+        "id" : 1333,
+        "name" : "online"
+      },
+      {
+        "id" : 1403,
+        "name" : "building"
+      },
+      {
+        "id" : 1971,
+        "name" : "over the shoulder"
+      },
+      {
+        "id" : 2071,
+        "name" : "sequel"
+      },
+      {
+        "id" : 4221,
+        "name" : "game critics awards"
+      },
+      {
+        "id" : 4239,
+        "name" : "platform exclusive"
+      },
+      {
+        "id" : 4261,
+        "name" : "pre-release public testing"
+      },
+      {
+        "id" : 4266,
+        "name" : "alternate costumes"
+      },
+      {
+        "id" : 4282,
+        "name" : "60 fps on consoles"
+      },
+      {
+        "id" : 4287,
+        "name" : "voice acting"
+      },
+      {
+        "id" : 4336,
+        "name" : "famous quotes"
+      },
+      {
+        "id" : 4359,
+        "name" : "polygonal 3d"
+      },
+      {
+        "id" : 4400,
+        "name" : "microtransaction"
+      },
+      {
+        "id" : 4473,
+        "name" : "photo mode"
+      },
+      {
+        "id" : 4541,
+        "name" : "original soundtrack release"
+      },
+      {
+        "id" : 4578,
+        "name" : "motion blur"
+      },
+      {
+        "id" : 4768,
+        "name" : "playstation experience 2016"
+      },
+      {
+        "id" : 4796,
+        "name" : "playstation experience 2015"
+      },
+      {
+        "id" : 4869,
+        "name" : "downloadable content"
+      },
+      {
+        "id" : 4871,
+        "name" : "pax east 2016"
+      },
+      {
+        "id" : 4903,
+        "name" : "grapple"
+      },
+      {
+        "id" : 4918,
+        "name" : "real-time combat"
+      },
+      {
+        "id" : 4927,
+        "name" : "useable vehicles"
+      },
+      {
+        "id" : 4974,
+        "name" : "male antagonist"
+      },
+      {
+        "id" : 5175,
+        "name" : "female antagonist"
+      },
+      {
+        "id" : 5215,
+        "name" : "game developers choice awards 2017"
+      },
+      {
+        "id" : 5254,
+        "name" : "d.i.c.e. awards 2017"
+      },
+      {
+        "id" : 5323,
+        "name" : "mercenary"
+      },
+      {
+        "id" : 5564,
+        "name" : "british accent"
+      },
+      {
+        "id" : 5999,
+        "name" : "stealth kill"
+      },
+      {
+        "id" : 6137,
+        "name" : "linear gameplay"
+      },
+      {
+        "id" : 7075,
+        "name" : "sibling rivalry"
+      },
+      {
+        "id" : 7576,
+        "name" : "behind the waterfall"
+      },
+      {
+        "id" : 9364,
+        "name" : "running towards the screen"
+      },
+      {
+        "id" : 9366,
+        "name" : "landmark button"
+      },
+      {
+        "id" : 12556,
+        "name" : "the game awards - nominee"
+      },
+      {
+        "id" : 14051,
+        "name" : "the game awards 2016"
+      },
+      {
+        "id" : 14063,
+        "name" : "the game awards - best studio or game direction - nominee"
+      },
+      {
+        "id" : 15078,
+        "name" : "the game awards 2015"
+      },
+      {
+        "id" : 23933,
+        "name" : "male protagonist"
+      },
+      {
+        "id" : 39007,
+        "name" : "the game awards - best action-adventure game - nominee"
+      },
+      {
+        "id" : 39009,
+        "name" : "the game awards - best art direction - nominee"
+      },
+      {
+        "id" : 39034,
+        "name" : "the game awards - best narrative - nominee"
+      },
+      {
+        "id" : 39035,
+        "name" : "the game awards - best narrative - winner"
+      },
+      {
+        "id" : 39038,
+        "name" : "the game awards - best performance - nominee"
+      },
+      {
+        "id" : 39039,
+        "name" : "the game awards - best performance - winner"
+      },
+      {
+        "id" : 39049,
+        "name" : "the game awards - game of the year - nominee"
+      },
+      {
+        "id" : 39050,
+        "name" : "the game awards - world premiere"
+      }
+    ],
+    "name" : "Uncharted 4: A Thief's End",
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 90.425497865198821,
+    "rating_count" : 2645,
+    "similar_games" : [
+      11156,
+      565,
+      431,
+      512,
+      19564,
+      7334,
+      471,
+      7725,
+      26192,
+      550
+    ],
+    "slug" : "uncharted-4-a-thief-s-end",
+    "summary" : "Several years after his last adventure, retired fortune hunter, Nathan Drake, is forced back into the world of thieves. With the stakes much more personal, Drake embarks on a globe-trotting journey in pursuit of a historical conspiracy behind a fabled pirate treasure. His greatest adventure will test his physical limits, his resolve, and ultimately what he's willing to sacrifice to save the ones he loves.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      },
+      {
+        "id" : 22,
+        "name" : "Historical"
+      },
+      {
+        "id" : 23,
+        "name" : "Stealth"
+      }
+    ],
+    "total_rating" : 91.832748932599401,
+    "total_rating_count" : 2670
+  },
+  {
+    "aggregated_rating" : 91.111111111111114,
+    "aggregated_rating_count" : 18,
+    "alternative_names" : [
+      {
+        "id" : 27171,
+        "name" : "Project Beast"
+      },
+      {
+        "id" : 130571,
+        "name" : "血源诅咒"
+      }
+    ],
+    "bundles" : [
+      42931,
+      150034,
+      136691
+    ],
+    "cover" : {
+      "id" : 525225,
+      "image_id" : "cob99l"
+    },
+    "first_release_date" : 1427155200,
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      },
+      {
+        "id" : 2,
+        "name" : "Multiplayer"
+      },
+      {
+        "id" : 3,
+        "name" : "Co-operative"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 7334,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 1012,
+          "name" : "FromSoftware"
+        },
+        "developer" : true,
+        "id" : 17333
+      },
+      {
+        "company" : {
+          "id" : 13634,
+          "name" : "Sony Computer Entertainment"
+        },
+        "developer" : false,
+        "id" : 180655
+      },
+      {
+        "company" : {
+          "id" : 27364,
+          "name" : "Japan Studio"
+        },
+        "developer" : true,
+        "id" : 402970
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 129,
+        "name" : "bloody"
+      },
+      {
+        "id" : 159,
+        "name" : "disease"
+      },
+      {
+        "id" : 423,
+        "name" : "gothic"
+      },
+      {
+        "id" : 905,
+        "name" : "difficult"
+      },
+      {
+        "id" : 1033,
+        "name" : "action-adventure"
+      },
+      {
+        "id" : 1295,
+        "name" : "lovecraftian"
+      },
+      {
+        "id" : 1333,
+        "name" : "online"
+      },
+      {
+        "id" : 2472,
+        "name" : "sword & sorcery"
+      },
+      {
+        "id" : 2543,
+        "name" : "playstation network"
+      },
+      {
+        "id" : 4134,
+        "name" : "digital distribution"
+      },
+      {
+        "id" : 4245,
+        "name" : "playstation trophies"
+      },
+      {
+        "id" : 4284,
+        "name" : "leveling up"
+      },
+      {
+        "id" : 4796,
+        "name" : "playstation experience 2015"
+      },
+      {
+        "id" : 4823,
+        "name" : "character creation"
+      },
+      {
+        "id" : 4852,
+        "name" : "side quests"
+      },
+      {
+        "id" : 4854,
+        "name" : "pick your gender"
+      },
+      {
+        "id" : 4869,
+        "name" : "downloadable content"
+      },
+      {
+        "id" : 4897,
+        "name" : "auto-saving"
+      },
+      {
+        "id" : 4918,
+        "name" : "real-time combat"
+      },
+      {
+        "id" : 4974,
+        "name" : "male antagonist"
+      },
+      {
+        "id" : 5175,
+        "name" : "female antagonist"
+      },
+      {
+        "id" : 5316,
+        "name" : "pax prime 2014"
+      },
+      {
+        "id" : 5317,
+        "name" : "gamescom 2014"
+      },
+      {
+        "id" : 5323,
+        "name" : "mercenary"
+      },
+      {
+        "id" : 5447,
+        "name" : "canonical death"
+      },
+      {
+        "id" : 5564,
+        "name" : "british accent"
+      },
+      {
+        "id" : 6034,
+        "name" : "camera control"
+      },
+      {
+        "id" : 6076,
+        "name" : "sliding down ladders"
+      },
+      {
+        "id" : 6214,
+        "name" : "day one patch"
+      },
+      {
+        "id" : 6241,
+        "name" : "tokyo game show 2014"
+      },
+      {
+        "id" : 6648,
+        "name" : "new game plus"
+      },
+      {
+        "id" : 10045,
+        "name" : "no game pause"
+      },
+      {
+        "id" : 15076,
+        "name" : "the game awards 2014"
+      },
+      {
+        "id" : 17326,
+        "name" : "soulslike"
+      },
+      {
+        "id" : 29644,
+        "name" : "physical release"
+      },
+      {
+        "id" : 39050,
+        "name" : "the game awards - world premiere"
+      }
+    ],
+    "name" : "Bloodborne",
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 91.242684840975187,
+    "rating_count" : 1861,
+    "similar_games" : [
+      11133,
+      1887,
+      5619,
+      2368,
+      498,
+      27304,
+      7331,
+      28168,
+      105049,
+      7725
+    ],
+    "slug" : "bloodborne",
+    "summary" : "An action RPG in which the player embodies a Hunter who, after being transfused with the mysterious blood local to the city of Yharnam, sets off into a \"night of the Hunt\", an extended night in which Hunters may phase in and out of dream and reality in order to thin the outbreak of abominable beasts that plague the land and, for the more resilient and insightful Hunters, uncover the answers to the Hunt's many mysteries.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      },
+      {
+        "id" : 19,
+        "name" : "Horror"
+      },
+      {
+        "id" : 38,
+        "name" : "Open world"
+      }
+    ],
+    "total_rating" : 91.176897976043151,
+    "total_rating_count" : 1879
+  },
+  {
+    "aggregated_rating" : 93.571428571428569,
+    "aggregated_rating_count" : 21,
+    "alternative_names" : [
+      {
+        "id" : 24453,
+        "name" : "P5"
+      },
+      {
+        "id" : 156641,
+        "name" : "Shin Megami Tensei: Persona 5"
+      },
+      {
+        "id" : 156606,
+        "name" : "女神異聞錄5"
+      },
+      {
+        "id" : 156607,
+        "name" : "女神异闻录5"
+      }
+    ],
+    "collections" : [
+      {
+        "id" : 552,
+        "name" : "Persona"
+      },
+      {
+        "id" : 9216,
+        "name" : "Persona 5"
+      }
+    ],
+    "cover" : {
+      "id" : 81906,
+      "image_id" : "co1r76"
+    },
+    "first_release_date" : 1473897600,
+    "franchises" : [
+      {
+        "id" : 592,
+        "name" : "Megami Tensei"
+      },
+      {
+        "id" : 552,
+        "name" : "Persona"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 9927,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 9969,
+          "name" : "P Studio"
+        },
+        "developer" : true,
+        "id" : 35624
+      },
+      {
+        "company" : {
+          "id" : 2488,
+          "name" : "Atlus USA"
+        },
+        "developer" : false,
+        "id" : 35623
+      },
+      {
+        "company" : {
+          "id" : 423,
+          "name" : "Deep Silver"
+        },
+        "developer" : false,
+        "id" : 37286
+      },
+      {
+        "company" : {
+          "id" : 818,
+          "name" : "Atlus"
+        },
+        "developer" : false,
+        "id" : 369001
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 78,
+        "name" : "anime"
+      },
+      {
+        "id" : 175,
+        "name" : "demon"
+      },
+      {
+        "id" : 215,
+        "name" : "detective"
+      },
+      {
+        "id" : 221,
+        "name" : "murder"
+      },
+      {
+        "id" : 236,
+        "name" : "grinding"
+      },
+      {
+        "id" : 311,
+        "name" : "tennis"
+      },
+      {
+        "id" : 415,
+        "name" : "turn-based"
+      },
+      {
+        "id" : 509,
+        "name" : "fishing"
+      },
+      {
+        "id" : 510,
+        "name" : "crafting"
+      },
+      {
+        "id" : 521,
+        "name" : "jrpg"
+      },
+      {
+        "id" : 558,
+        "name" : "death"
+      },
+      {
+        "id" : 1209,
+        "name" : "party-based combat"
+      },
+      {
+        "id" : 1244,
+        "name" : "social"
+      },
+      {
+        "id" : 1289,
+        "name" : "backtracking"
+      },
+      {
+        "id" : 1299,
+        "name" : "time limit"
+      },
+      {
+        "id" : 1313,
+        "name" : "multiple endings"
+      },
+      {
+        "id" : 1504,
+        "name" : "high school"
+      },
+      {
+        "id" : 1523,
+        "name" : "dialogue trees"
+      },
+      {
+        "id" : 2016,
+        "name" : "billiards"
+      },
+      {
+        "id" : 2147,
+        "name" : "otaku"
+      },
+      {
+        "id" : 2170,
+        "name" : "dreams"
+      },
+      {
+        "id" : 2184,
+        "name" : "talking animals"
+      },
+      {
+        "id" : 2199,
+        "name" : "silent protagonist"
+      },
+      {
+        "id" : 2377,
+        "name" : "party-based"
+      },
+      {
+        "id" : 2390,
+        "name" : "roaming encounters"
+      },
+      {
+        "id" : 2399,
+        "name" : "turn-based combat"
+      },
+      {
+        "id" : 2452,
+        "name" : "day\/night cycle"
+      },
+      {
+        "id" : 3486,
+        "name" : "boss fight"
+      },
+      {
+        "id" : 4241,
+        "name" : "students"
+      },
+      {
+        "id" : 4245,
+        "name" : "playstation trophies"
+      },
+      {
+        "id" : 4284,
+        "name" : "leveling up"
+      },
+      {
+        "id" : 4287,
+        "name" : "voice acting"
+      },
+      {
+        "id" : 4397,
+        "name" : "upgradeable weapons"
+      },
+      {
+        "id" : 4410,
+        "name" : "game reference"
+      },
+      {
+        "id" : 4468,
+        "name" : "party system"
+      },
+      {
+        "id" : 4497,
+        "name" : "randomly generated dungeons"
+      },
+      {
+        "id" : 4541,
+        "name" : "original soundtrack release"
+      },
+      {
+        "id" : 4710,
+        "name" : "buddhism"
+      },
+      {
+        "id" : 4711,
+        "name" : "sprinting mechanics"
+      },
+      {
+        "id" : 4768,
+        "name" : "playstation experience 2016"
+      },
+      {
+        "id" : 4787,
+        "name" : "treasure chest"
+      },
+      {
+        "id" : 4850,
+        "name" : "moral decisions"
+      },
+      {
+        "id" : 4852,
+        "name" : "side quests"
+      },
+      {
+        "id" : 4918,
+        "name" : "real-time combat"
+      },
+      {
+        "id" : 4970,
+        "name" : "fusion"
+      },
+      {
+        "id" : 5029,
+        "name" : "difficulty level"
+      },
+      {
+        "id" : 5264,
+        "name" : "vending machine interaction"
+      },
+      {
+        "id" : 5314,
+        "name" : "cross-save"
+      },
+      {
+        "id" : 5323,
+        "name" : "mercenary"
+      },
+      {
+        "id" : 5377,
+        "name" : "robbery"
+      },
+      {
+        "id" : 5399,
+        "name" : "shinto"
+      },
+      {
+        "id" : 5400,
+        "name" : "order and chaos"
+      },
+      {
+        "id" : 5485,
+        "name" : "rebels"
+      },
+      {
+        "id" : 5963,
+        "name" : "plot twist"
+      },
+      {
+        "id" : 6020,
+        "name" : "alternate reality"
+      },
+      {
+        "id" : 6064,
+        "name" : "power of friendship"
+      },
+      {
+        "id" : 6117,
+        "name" : "teenager"
+      },
+      {
+        "id" : 6141,
+        "name" : "recurring character"
+      },
+      {
+        "id" : 6241,
+        "name" : "tokyo game show 2014"
+      },
+      {
+        "id" : 6461,
+        "name" : "flashback"
+      },
+      {
+        "id" : 6648,
+        "name" : "new game plus"
+      },
+      {
+        "id" : 7048,
+        "name" : "escaping imprisonment"
+      },
+      {
+        "id" : 7080,
+        "name" : "fast traveling"
+      },
+      {
+        "id" : 7112,
+        "name" : "dream sequence"
+      },
+      {
+        "id" : 7334,
+        "name" : "detective mode"
+      },
+      {
+        "id" : 7540,
+        "name" : "archangel"
+      },
+      {
+        "id" : 7653,
+        "name" : "hidden room"
+      },
+      {
+        "id" : 8900,
+        "name" : "yandere"
+      },
+      {
+        "id" : 9182,
+        "name" : "potential love interest"
+      },
+      {
+        "id" : 9331,
+        "name" : "j-pop"
+      },
+      {
+        "id" : 9364,
+        "name" : "running towards the screen"
+      },
+      {
+        "id" : 9376,
+        "name" : "shadow stealth"
+      },
+      {
+        "id" : 12083,
+        "name" : "the game awards - best score or music - nominee"
+      },
+      {
+        "id" : 12087,
+        "name" : "the game awards 2017"
+      },
+      {
+        "id" : 12556,
+        "name" : "the game awards - nominee"
+      },
+      {
+        "id" : 23933,
+        "name" : "male protagonist"
+      },
+      {
+        "id" : 25963,
+        "name" : "turn-based rpg"
+      },
+      {
+        "id" : 38828,
+        "name" : "full voice acting"
+      },
+      {
+        "id" : 39009,
+        "name" : "the game awards - best art direction - nominee"
+      },
+      {
+        "id" : 39040,
+        "name" : "the game awards - best roleplaying game - nominee"
+      },
+      {
+        "id" : 39041,
+        "name" : "the game awards - best roleplaying game - winner"
+      },
+      {
+        "id" : 39049,
+        "name" : "the game awards - game of the year - nominee"
+      }
+    ],
+    "name" : "Persona 5",
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 92.453730460486995,
+    "rating_count" : 1113,
+    "similar_games" : [
+      9600,
+      20996,
+      11454,
+      11453,
+      9577,
+      1819,
+      116,
+      11156,
+      6923,
+      521
+    ],
+    "slug" : "persona-5",
+    "summary" : "Persona 5, a turn-based JRPG with visual novel elements, follows a high school student with a criminal record for a crime he didn't commit. Soon he meets several characters who share similar fates to him, and discovers a metaphysical realm which allows him and his friends to channel their pent-up frustrations into becoming a group of vigilantes reveling in aesthetics and rebellion while fighting corruption.",
+    "themes" : [
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      },
+      {
+        "id" : 27,
+        "name" : "Comedy"
+      },
+      {
+        "id" : 31,
+        "name" : "Drama"
+      },
+      {
+        "id" : 43,
+        "name" : "Mystery"
+      }
+    ],
+    "total_rating" : 93.012579515957782,
+    "total_rating_count" : 1134
+  },
+  {
+    "aggregated_rating" : 86.07692307692308,
+    "aggregated_rating_count" : 26,
+    "alternative_names" : [
+      {
+        "id" : 133222,
+        "name" : "DARK SOULS III"
+      },
+      {
+        "id" : 69524,
+        "name" : "Dark Souls 3"
+      },
+      {
+        "id" : 69526,
+        "name" : "黑暗之魂III"
+      },
+      {
+        "id" : 86585,
+        "name" : "다크 소울 3"
+      },
+      {
+        "id" : 119903,
+        "name" : "DS3"
+      }
+    ],
+    "bundles" : [
+      28210,
+      141472,
+      47486
+    ],
+    "collections" : [
+      {
+        "id" : 543,
+        "name" : "Dark Souls"
+      }
+    ],
+    "cover" : {
+      "id" : 525397,
+      "image_id" : "cob9ed"
+    },
+    "first_release_date" : 1458777600,
+    "franchises" : [
+      {
+        "id" : 1124,
+        "name" : "Dark Souls"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      },
+      {
+        "id" : 2,
+        "name" : "Multiplayer"
+      },
+      {
+        "id" : 3,
+        "name" : "Co-operative"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 11133,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 248,
+          "name" : "Bandai Namco Entertainment"
+        },
+        "developer" : false,
+        "id" : 25021
+      },
+      {
+        "company" : {
+          "id" : 1012,
+          "name" : "FromSoftware"
+        },
+        "developer" : true,
+        "id" : 86770
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 151,
+        "name" : "medieval"
+      },
+      {
+        "id" : 250,
+        "name" : "3d"
+      },
+      {
+        "id" : 537,
+        "name" : "dark fantasy"
+      },
+      {
+        "id" : 558,
+        "name" : "death"
+      },
+      {
+        "id" : 1033,
+        "name" : "action-adventure"
+      },
+      {
+        "id" : 1333,
+        "name" : "online"
+      },
+      {
+        "id" : 2071,
+        "name" : "sequel"
+      },
+      {
+        "id" : 2472,
+        "name" : "sword & sorcery"
+      },
+      {
+        "id" : 4272,
+        "name" : "customizable characters"
+      },
+      {
+        "id" : 4345,
+        "name" : "bink video"
+      },
+      {
+        "id" : 4353,
+        "name" : "human"
+      },
+      {
+        "id" : 4796,
+        "name" : "playstation experience 2015"
+      },
+      {
+        "id" : 4854,
+        "name" : "pick your gender"
+      },
+      {
+        "id" : 4869,
+        "name" : "downloadable content"
+      },
+      {
+        "id" : 5019,
+        "name" : "parrying"
+      },
+      {
+        "id" : 5254,
+        "name" : "d.i.c.e. awards 2017"
+      },
+      {
+        "id" : 5359,
+        "name" : "crab"
+      },
+      {
+        "id" : 5379,
+        "name" : "pax prime 2015"
+      },
+      {
+        "id" : 5447,
+        "name" : "canonical death"
+      },
+      {
+        "id" : 5564,
+        "name" : "british accent"
+      },
+      {
+        "id" : 6034,
+        "name" : "camera control"
+      },
+      {
+        "id" : 6076,
+        "name" : "sliding down ladders"
+      },
+      {
+        "id" : 6648,
+        "name" : "new game plus"
+      },
+      {
+        "id" : 8267,
+        "name" : "entering world in a painting"
+      },
+      {
+        "id" : 12556,
+        "name" : "the game awards - nominee"
+      },
+      {
+        "id" : 14051,
+        "name" : "the game awards 2016"
+      },
+      {
+        "id" : 14059,
+        "name" : "best role playing game: nominee - 2016 (the game awards)"
+      },
+      {
+        "id" : 17326,
+        "name" : "soulslike"
+      },
+      {
+        "id" : 26048,
+        "name" : "realtime 3d"
+      },
+      {
+        "id" : 39040,
+        "name" : "the game awards - best roleplaying game - nominee"
+      },
+      {
+        "id" : 40744,
+        "name" : "interconnected-world"
+      }
+    ],
+    "name" : "Dark Souls III",
+    "platforms" : [
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      },
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      },
+      {
+        "abbreviation" : "XONE",
+        "id" : 49
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 87.152742872171956,
+    "rating_count" : 1964,
+    "similar_games" : [
+      7334,
+      2368,
+      214414,
+      84,
+      54548,
+      28168,
+      19576,
+      76253,
+      106803,
+      26166
+    ],
+    "slug" : "dark-souls-iii",
+    "summary" : "Dark Souls III is an action role-playing game developed by FromSoftware and published by Bandai Namco Entertainment. Released in March 2016, it is the fourth entry in the Souls series and the final instalment in the Dark Souls trilogy. Set in the decaying kingdom of Lothric, players take on the role of the \"Ashen One,\" an undead warrior tasked with rekindling the First Flame to prevent the world from falling into darkness.\n\nThe game features challenging combat, intricate level design, and a deep, lore-rich narrative.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      }
+    ],
+    "total_rating" : 86.614832974547511,
+    "total_rating_count" : 1990
+  },
+  {
+    "aggregated_rating" : 86,
+    "aggregated_rating_count" : 20,
+    "alternative_names" : [
+      {
+        "id" : 167609,
+        "name" : "Y0"
+      },
+      {
+        "id" : 61555,
+        "name" : "Yakuza Zero"
+      },
+      {
+        "id" : 183626,
+        "name" : "Yakuza0.exe"
+      },
+      {
+        "id" : 255064,
+        "name" : "Ryu ga Gotoku 0: Chikai no Basho"
+      },
+      {
+        "id" : 255065,
+        "name" : "Like a Dragon 0: The Place of Oath"
+      }
+    ],
+    "bundles" : [
+      254290,
+      254291,
+      97248
+    ],
+    "collections" : [
+      {
+        "id" : 380,
+        "name" : "Yakuza: Like a Dragon"
+      }
+    ],
+    "cover" : {
+      "id" : 99897,
+      "image_id" : "co252x"
+    },
+    "first_release_date" : 1426118400,
+    "franchises" : [
+      {
+        "id" : 1467,
+        "name" : "Yakuza: Like a Dragon"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      },
+      {
+        "id" : 2,
+        "name" : "Multiplayer"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 13,
+        "name" : "Simulator"
+      },
+      {
+        "id" : 25,
+        "name" : "Hack and slash\/Beat 'em up"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 11397,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 19967,
+          "name" : "Lab42 Games"
+        },
+        "developer" : false,
+        "id" : 78776
+      },
+      {
+        "company" : {
+          "id" : 14087,
+          "name" : "Sega Corporation"
+        },
+        "developer" : false,
+        "id" : 239246
+      },
+      {
+        "company" : {
+          "id" : 15878,
+          "name" : "Sega Games"
+        },
+        "developer" : false,
+        "id" : 239244
+      },
+      {
+        "company" : {
+          "id" : 112,
+          "name" : "Sega"
+        },
+        "developer" : false,
+        "id" : 239245
+      },
+      {
+        "company" : {
+          "id" : 19080,
+          "name" : "Ryu Ga Gotoku Studio"
+        },
+        "developer" : true,
+        "id" : 278046
+      },
+      {
+        "company" : {
+          "id" : 15878,
+          "name" : "Sega Games"
+        },
+        "developer" : true,
+        "id" : 278047
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 54,
+        "name" : "pool"
+      },
+      {
+        "id" : 61,
+        "name" : "martial arts"
+      },
+      {
+        "id" : 128,
+        "name" : "1980s"
+      },
+      {
+        "id" : 221,
+        "name" : "murder"
+      },
+      {
+        "id" : 274,
+        "name" : "minigames"
+      },
+      {
+        "id" : 284,
+        "name" : "organized crime"
+      },
+      {
+        "id" : 472,
+        "name" : "prequel"
+      },
+      {
+        "id" : 729,
+        "name" : "gambling"
+      },
+      {
+        "id" : 757,
+        "name" : "karaoke"
+      },
+      {
+        "id" : 889,
+        "name" : "gangs"
+      },
+      {
+        "id" : 982,
+        "name" : "brawler"
+      },
+      {
+        "id" : 1011,
+        "name" : "mahjong"
+      },
+      {
+        "id" : 1033,
+        "name" : "action-adventure"
+      },
+      {
+        "id" : 1186,
+        "name" : "multiple protagonists"
+      },
+      {
+        "id" : 1567,
+        "name" : "japan"
+      },
+      {
+        "id" : 1669,
+        "name" : "crime"
+      },
+      {
+        "id" : 3234,
+        "name" : "yakuza"
+      },
+      {
+        "id" : 4134,
+        "name" : "digital distribution"
+      },
+      {
+        "id" : 4245,
+        "name" : "playstation trophies"
+      },
+      {
+        "id" : 4282,
+        "name" : "60 fps on consoles"
+      },
+      {
+        "id" : 4674,
+        "name" : "card collection"
+      },
+      {
+        "id" : 4768,
+        "name" : "playstation experience 2016"
+      },
+      {
+        "id" : 4852,
+        "name" : "side quests"
+      },
+      {
+        "id" : 4891,
+        "name" : "melee"
+      },
+      {
+        "id" : 4998,
+        "name" : "betrayal"
+      },
+      {
+        "id" : 5425,
+        "name" : "arcade cabinet"
+      },
+      {
+        "id" : 5542,
+        "name" : "interactive environments"
+      },
+      {
+        "id" : 5545,
+        "name" : "dart"
+      },
+      {
+        "id" : 5792,
+        "name" : "skill tree"
+      },
+      {
+        "id" : 5823,
+        "name" : "motion capture animation"
+      },
+      {
+        "id" : 7080,
+        "name" : "fast traveling"
+      },
+      {
+        "id" : 7294,
+        "name" : "the 1980s"
+      },
+      {
+        "id" : 8150,
+        "name" : "sex work"
+      },
+      {
+        "id" : 9222,
+        "name" : "product placement"
+      },
+      {
+        "id" : 9835,
+        "name" : "metagame"
+      },
+      {
+        "id" : 10167,
+        "name" : "framing"
+      },
+      {
+        "id" : 23933,
+        "name" : "male protagonist"
+      },
+      {
+        "id" : 26248,
+        "name" : "collectathon"
+      },
+      {
+        "id" : 38887,
+        "name" : "food"
+      },
+      {
+        "id" : 45061,
+        "name" : "asian protagonist"
+      }
+    ],
+    "name" : "Yakuza 0",
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      },
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      },
+      {
+        "abbreviation" : "XONE",
+        "id" : 49
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 86.076050207432559,
+    "rating_count" : 511,
+    "similar_games" : [
+      12527,
+      36550,
+      1217,
+      2060,
+      2059,
+      146851,
+      75235,
+      2061,
+      501,
+      11156
+    ],
+    "slug" : "yakuza-0",
+    "summary" : "Yakuza 0 is an action-adventure beat 'em up and a prequel to the Yakuza series, set in 1988 Japan during the country's economic bubble era. The game follows two protagonists: Kazuma Kiryu in Tokyo's Kamurocho district and Goro Majima in Osaka's Sotenbori district. Players alternate between their stories as they navigate the criminal underworld, engaging in street fights using multiple switchable combat styles, managing businesses, and participating in a wide variety of side activities and minigames. The game is largely credited with bringing the long-running franchise to mainstream Western attention.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 31,
+        "name" : "Drama"
+      },
+      {
+        "id" : 38,
+        "name" : "Open world"
+      }
+    ],
+    "total_rating" : 86.038025103716279,
+    "total_rating_count" : 531
+  },
+  {
+    "aggregated_rating" : 91.25,
+    "aggregated_rating_count" : 8,
+    "alternative_names" : [
+      {
+        "id" : 169043,
+        "name" : "Hollow Knight: Voidheart Edition"
+      },
+      {
+        "id" : 182108,
+        "name" : "hollow_knight.exe"
+      }
+    ],
+    "bundles" : [
+      116151
+    ],
+    "collections" : [
+      {
+        "id" : 5702,
+        "name" : "Hollow Knight"
+      }
+    ],
+    "cover" : {
+      "id" : 533941,
+      "image_id" : "cobfzp"
+    },
+    "first_release_date" : 1487894400,
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 8,
+        "name" : "Platform"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      },
+      {
+        "id" : 32,
+        "name" : "Indie"
+      }
+    ],
+    "id" : 14593,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 7263,
+          "name" : "Team Cherry"
+        },
+        "developer" : true,
+        "id" : 228860
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 223,
+        "name" : "dark"
+      },
+      {
+        "id" : 227,
+        "name" : "sword"
+      },
+      {
+        "id" : 285,
+        "name" : "skill-based"
+      },
+      {
+        "id" : 288,
+        "name" : "2d"
+      },
+      {
+        "id" : 477,
+        "name" : "metroidvania"
+      },
+      {
+        "id" : 518,
+        "name" : "insects"
+      },
+      {
+        "id" : 1033,
+        "name" : "action-adventure"
+      },
+      {
+        "id" : 1158,
+        "name" : "steam"
+      },
+      {
+        "id" : 1293,
+        "name" : "achievements"
+      },
+      {
+        "id" : 1494,
+        "name" : "steam trading cards"
+      },
+      {
+        "id" : 1524,
+        "name" : "explorable world"
+      },
+      {
+        "id" : 1697,
+        "name" : "atmospheric"
+      },
+      {
+        "id" : 2111,
+        "name" : "giant insects"
+      },
+      {
+        "id" : 2199,
+        "name" : "silent protagonist"
+      },
+      {
+        "id" : 2425,
+        "name" : "crowdfunding - kickstarter"
+      },
+      {
+        "id" : 2814,
+        "name" : "hand-drawn"
+      },
+      {
+        "id" : 3001,
+        "name" : "crowdfunding"
+      },
+      {
+        "id" : 3014,
+        "name" : "2d platformer"
+      },
+      {
+        "id" : 3486,
+        "name" : "boss fight"
+      },
+      {
+        "id" : 4004,
+        "name" : "steam achievements"
+      },
+      {
+        "id" : 4135,
+        "name" : "xbox controller support for pc"
+      },
+      {
+        "id" : 4344,
+        "name" : "controller recommendation"
+      },
+      {
+        "id" : 4957,
+        "name" : "crowd funded"
+      },
+      {
+        "id" : 5000,
+        "name" : "shielded enemies"
+      },
+      {
+        "id" : 5019,
+        "name" : "parrying"
+      },
+      {
+        "id" : 5818,
+        "name" : "merchants"
+      },
+      {
+        "id" : 7080,
+        "name" : "fast traveling"
+      },
+      {
+        "id" : 7416,
+        "name" : "creature compendium"
+      },
+      {
+        "id" : 12087,
+        "name" : "the game awards 2017"
+      },
+      {
+        "id" : 12109,
+        "name" : "best debut indie game: nominee - 2017 (the game awards)"
+      },
+      {
+        "id" : 12556,
+        "name" : "the game awards - nominee"
+      },
+      {
+        "id" : 16877,
+        "name" : "controller support"
+      },
+      {
+        "id" : 39015,
+        "name" : "the game awards - best debut indie game - nominee"
+      },
+      {
+        "id" : 40744,
+        "name" : "interconnected-world"
+      },
+      {
+        "id" : 41460,
+        "name" : "armed bugs"
+      },
+      {
+        "id" : 44930,
+        "name" : "money"
+      },
+      {
+        "id" : 45011,
+        "name" : "shop keeper"
+      },
+      {
+        "id" : 45142,
+        "name" : "sidescroller"
+      },
+      {
+        "id" : 49376,
+        "name" : "available on - luna plus"
+      },
+      {
+        "id" : 50913,
+        "name" : "available on - luna gog"
+      }
+    ],
+    "name" : "Hollow Knight",
+    "platforms" : [
+      {
+        "abbreviation" : "Series X|S",
+        "id" : 169
+      },
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      },
+      {
+        "abbreviation" : "Linux",
+        "id" : 3
+      },
+      {
+        "abbreviation" : "Switch 2",
+        "id" : 508
+      },
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      },
+      {
+        "abbreviation" : "PS5",
+        "id" : 167
+      },
+      {
+        "abbreviation" : "Mac",
+        "id" : 14
+      },
+      {
+        "abbreviation" : "WiiU",
+        "id" : 41
+      },
+      {
+        "abbreviation" : "XONE",
+        "id" : 49
+      },
+      {
+        "abbreviation" : "Switch",
+        "id" : 130
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 4,
+        "name" : "Side view"
+      }
+    ],
+    "rating" : 91.799406839749267,
+    "rating_count" : 2237,
+    "similar_games" : [
+      115289,
+      26820,
+      9174,
+      194821,
+      34705,
+      9806,
+      32969,
+      191435,
+      14761,
+      10681
+    ],
+    "slug" : "hollow-knight",
+    "summary" : "A 2D metroidvania with an emphasis on close combat and exploration in which the player enters the once-prosperous now-bleak insect kingdom of Hallownest, travels through its various districts, meets friendly inhabitants, fights hostile ones and uncovers the kingdom's history while improving their combat abilities and movement arsenal by fighting bosses and accessing out-of-the-way areas.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      }
+    ],
+    "total_rating" : 91.524703419874641,
+    "total_rating_count" : 2245
+  },
+  {
+    "aggregated_rating" : 92.833333333333329,
+    "aggregated_rating_count" : 12,
+    "alternative_names" : [
+      {
+        "id" : 82970,
+        "name" : "RE2 Remake"
+      },
+      {
+        "id" : 82971,
+        "name" : "REmake 2"
+      },
+      {
+        "id" : 82972,
+        "name" : "Resident Evil 2 Remake"
+      },
+      {
+        "id" : 95835,
+        "name" : "Biohazard RE:2"
+      },
+      {
+        "id" : 188429,
+        "name" : "re2.exe"
+      }
+    ],
+    "bundles" : [
+      132952,
+      167078,
+      170055,
+      218545,
+      110809
+    ],
+    "collections" : [
+      {
+        "id" : 83,
+        "name" : "Resident Evil"
+      }
+    ],
+    "cover" : {
+      "id" : 70959,
+      "image_id" : "co1ir3"
+    },
+    "first_release_date" : 1548374400,
+    "franchises" : [
+      {
+        "id" : 29,
+        "name" : "Resident Evil"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      }
+    ],
+    "game_type" : 8,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 19686,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 37,
+          "name" : "Capcom"
+        },
+        "developer" : false,
+        "id" : 184693
+      },
+      {
+        "company" : {
+          "id" : 42265,
+          "name" : "Capcom Development Division 1"
+        },
+        "developer" : true,
+        "id" : 184694
+      },
+      {
+        "company" : {
+          "id" : 8593,
+          "name" : "K2"
+        },
+        "developer" : false,
+        "id" : 184695
+      },
+      {
+        "company" : {
+          "id" : 41399,
+          "name" : "NeoBards Entertainment"
+        },
+        "developer" : false,
+        "id" : 252401
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 5,
+        "name" : "zombies"
+      },
+      {
+        "id" : 129,
+        "name" : "bloody"
+      },
+      {
+        "id" : 606,
+        "name" : "resource management"
+      },
+      {
+        "id" : 1308,
+        "name" : "gore"
+      },
+      {
+        "id" : 1836,
+        "name" : "survival horror"
+      },
+      {
+        "id" : 6370,
+        "name" : "gore system"
+      },
+      {
+        "id" : 7039,
+        "name" : "strategic dismemberment"
+      },
+      {
+        "id" : 7062,
+        "name" : "severed limbs"
+      },
+      {
+        "id" : 7097,
+        "name" : "censored version"
+      },
+      {
+        "id" : 39007,
+        "name" : "the game awards - best action-adventure game - nominee"
+      },
+      {
+        "id" : 39011,
+        "name" : "the game awards - best audio design - nominee"
+      },
+      {
+        "id" : 39024,
+        "name" : "the game awards - best game direction - nominee"
+      },
+      {
+        "id" : 39049,
+        "name" : "the game awards - game of the year - nominee"
+      },
+      {
+        "id" : 49376,
+        "name" : "available on - luna plus"
+      }
+    ],
+    "name" : "Resident Evil 2",
+    "parent_game" : 880,
+    "platforms" : [
+      {
+        "abbreviation" : "Series X|S",
+        "id" : 169
+      },
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      },
+      {
+        "abbreviation" : "Switch 2",
+        "id" : 508
+      },
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      },
+      {
+        "abbreviation" : "iOS",
+        "id" : 39
+      },
+      {
+        "abbreviation" : "PS5",
+        "id" : 167
+      },
+      {
+        "abbreviation" : "Mac",
+        "id" : 14
+      },
+      {
+        "abbreviation" : "XONE",
+        "id" : 49
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 87.405170612719019,
+    "rating_count" : 1425,
+    "similar_games" : [
+      19561,
+      36813,
+      970,
+      51524,
+      201156,
+      134612,
+      76253,
+      142520,
+      262678,
+      141114
+    ],
+    "slug" : "resident-evil-2--1",
+    "summary" : "Resident Evil 2 is a remake of 1998's Resident Evil 2. The game was not developed with the intent of improving the original, but rather a reimagining of the original story with redesigned maps, characters and story elements. Gameplay mechanics are more similar to Resident Evil 7: Biohazard though with the use of an over-the-shoulder camera.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 19,
+        "name" : "Horror"
+      },
+      {
+        "id" : 21,
+        "name" : "Survival"
+      }
+    ],
+    "total_rating" : 90.119251973026167,
+    "total_rating_count" : 1437
+  },
+  {
+    "aggregated_rating" : 96.705882352941174,
+    "aggregated_rating_count" : 17,
+    "alternative_names" : [
+      {
+        "id" : 154586,
+        "name" : "超级马力欧奥德赛"
+      }
+    ],
+    "collections" : [
+      {
+        "id" : 240,
+        "name" : "Super Mario"
+      }
+    ],
+    "cover" : {
+      "id" : 76371,
+      "image_id" : "co1mxf"
+    },
+    "first_release_date" : 1509062400,
+    "franchises" : [
+      {
+        "id" : 845,
+        "name" : "Mario"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      },
+      {
+        "id" : 3,
+        "name" : "Co-operative"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 8,
+        "name" : "Platform"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 26758,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 70,
+          "name" : "Nintendo"
+        },
+        "developer" : false,
+        "id" : 268535
+      },
+      {
+        "company" : {
+          "id" : 2910,
+          "name" : "1-UP Studio"
+        },
+        "developer" : false,
+        "id" : 69095
+      },
+      {
+        "company" : {
+          "id" : 45213,
+          "name" : "Nintendo EPD Production Group No. 8"
+        },
+        "developer" : true,
+        "id" : 369727
+      },
+      {
+        "company" : {
+          "id" : 2095,
+          "name" : "Panic Button Games"
+        },
+        "developer" : false,
+        "id" : 369728
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 87,
+        "name" : "dinosaurs"
+      },
+      {
+        "id" : 138,
+        "name" : "underwater"
+      },
+      {
+        "id" : 250,
+        "name" : "3d"
+      },
+      {
+        "id" : 902,
+        "name" : "rabbit"
+      },
+      {
+        "id" : 1065,
+        "name" : "dragon"
+      },
+      {
+        "id" : 1935,
+        "name" : "dog"
+      },
+      {
+        "id" : 2071,
+        "name" : "sequel"
+      },
+      {
+        "id" : 2155,
+        "name" : "wall jump"
+      },
+      {
+        "id" : 2229,
+        "name" : "amiibo"
+      },
+      {
+        "id" : 2231,
+        "name" : "3d platformer"
+      },
+      {
+        "id" : 2324,
+        "name" : "swimming"
+      },
+      {
+        "id" : 3014,
+        "name" : "2d platformer"
+      },
+      {
+        "id" : 4154,
+        "name" : "pax west 2017"
+      },
+      {
+        "id" : 4221,
+        "name" : "game critics awards"
+      },
+      {
+        "id" : 4239,
+        "name" : "platform exclusive"
+      },
+      {
+        "id" : 4266,
+        "name" : "alternate costumes"
+      },
+      {
+        "id" : 4297,
+        "name" : "protagonist's name in the title"
+      },
+      {
+        "id" : 4438,
+        "name" : "motion control"
+      },
+      {
+        "id" : 4465,
+        "name" : "deliberately retro"
+      },
+      {
+        "id" : 4473,
+        "name" : "photo mode"
+      },
+      {
+        "id" : 4731,
+        "name" : "tyrannosaurus rex"
+      },
+      {
+        "id" : 4777,
+        "name" : "checkpoints"
+      },
+      {
+        "id" : 4787,
+        "name" : "treasure chest"
+      },
+      {
+        "id" : 4869,
+        "name" : "downloadable content"
+      },
+      {
+        "id" : 4940,
+        "name" : "underwater gameplay"
+      },
+      {
+        "id" : 7241,
+        "name" : "hammer bros."
+      },
+      {
+        "id" : 7243,
+        "name" : "wiggler"
+      },
+      {
+        "id" : 7536,
+        "name" : "sphinx"
+      },
+      {
+        "id" : 7576,
+        "name" : "behind the waterfall"
+      },
+      {
+        "id" : 8267,
+        "name" : "entering world in a painting"
+      },
+      {
+        "id" : 9364,
+        "name" : "running towards the screen"
+      },
+      {
+        "id" : 12083,
+        "name" : "the game awards - best score or music - nominee"
+      },
+      {
+        "id" : 12087,
+        "name" : "the game awards 2017"
+      },
+      {
+        "id" : 12556,
+        "name" : "the game awards - nominee"
+      },
+      {
+        "id" : 29960,
+        "name" : "cranky kong"
+      },
+      {
+        "id" : 39007,
+        "name" : "the game awards - best action-adventure game - nominee"
+      },
+      {
+        "id" : 39011,
+        "name" : "the game awards - best audio design - nominee"
+      },
+      {
+        "id" : 39019,
+        "name" : "the game awards - best family game - nominee"
+      },
+      {
+        "id" : 39020,
+        "name" : "the game awards - best family game - winner"
+      },
+      {
+        "id" : 39024,
+        "name" : "the game awards - best game direction - nominee"
+      },
+      {
+        "id" : 39049,
+        "name" : "the game awards - game of the year - nominee"
+      },
+      {
+        "id" : 40736,
+        "name" : "beach"
+      },
+      {
+        "id" : 44289,
+        "name" : "swimsuits"
+      },
+      {
+        "id" : 44592,
+        "name" : "desert"
+      }
+    ],
+    "name" : "Super Mario Odyssey",
+    "platforms" : [
+      {
+        "abbreviation" : "Switch 2",
+        "id" : 508
+      },
+      {
+        "abbreviation" : "Switch",
+        "id" : 130
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 88.827887974568,
+    "rating_count" : 1873,
+    "similar_games" : [
+      19565,
+      11156,
+      7346,
+      119388,
+      7331,
+      1077,
+      1074,
+      54548,
+      19576,
+      1352
+    ],
+    "slug" : "super-mario-odyssey",
+    "summary" : "Explore incredible places far from the Mushroom Kingdom as you join Mario and his new ally Cappy on a massive, globe-trotting 3D adventure. Use amazing new abilities, like the power to capture and control objects, animals, and enemies to collect Power Moons so you can power up the Odyssey airship and save Princess Peach from Bowser’s wedding plans!",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      },
+      {
+        "id" : 33,
+        "name" : "Sandbox"
+      },
+      {
+        "id" : 38,
+        "name" : "Open world"
+      }
+    ],
+    "total_rating" : 92.76688516375458,
+    "total_rating_count" : 1890
+  },
+  {
+    "aggregated_rating" : 96.900000000000006,
+    "aggregated_rating_count" : 10,
+    "alternative_names" : [
+      {
+        "id" : 24917,
+        "name" : "Great Rune"
+      },
+      {
+        "id" : 79656,
+        "name" : "ELDEN RING"
+      },
+      {
+        "id" : 83944,
+        "name" : "エルデンリング"
+      },
+      {
+        "id" : 123543,
+        "name" : "艾爾登法環"
+      },
+      {
+        "id" : 130570,
+        "name" : "艾尔登法环"
+      }
+    ],
+    "bundles" : [
+      287975,
+      287984,
+      338079
+    ],
+    "collections" : [
+      {
+        "id" : 10964,
+        "name" : "Elden Ring"
+      }
+    ],
+    "cover" : {
+      "id" : 212094,
+      "image_id" : "co4jni"
+    },
+    "first_release_date" : 1645747200,
+    "franchises" : [
+      {
+        "id" : 8190,
+        "name" : "Elden Ring"
+      }
+    ],
+    "game_modes" : [
+      {
+        "id" : 1,
+        "name" : "Single player"
+      },
+      {
+        "id" : 2,
+        "name" : "Multiplayer"
+      },
+      {
+        "id" : 3,
+        "name" : "Co-operative"
+      }
+    ],
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 12,
+        "name" : "Role-playing (RPG)"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 119133,
+    "involved_companies" : [
+      {
+        "company" : {
+          "id" : 248,
+          "name" : "Bandai Namco Entertainment"
+        },
+        "developer" : false,
+        "id" : 334813
+      },
+      {
+        "company" : {
+          "id" : 1012,
+          "name" : "FromSoftware"
+        },
+        "developer" : true,
+        "id" : 334814
+      }
+    ],
+    "keywords" : [
+      {
+        "id" : 72,
+        "name" : "exploration"
+      },
+      {
+        "id" : 98,
+        "name" : "monsters"
+      },
+      {
+        "id" : 105,
+        "name" : "knights"
+      },
+      {
+        "id" : 109,
+        "name" : "violence"
+      },
+      {
+        "id" : 151,
+        "name" : "medieval"
+      },
+      {
+        "id" : 162,
+        "name" : "brutal"
+      },
+      {
+        "id" : 226,
+        "name" : "magic"
+      },
+      {
+        "id" : 227,
+        "name" : "sword"
+      },
+      {
+        "id" : 250,
+        "name" : "3d"
+      },
+      {
+        "id" : 332,
+        "name" : "dragons"
+      },
+      {
+        "id" : 558,
+        "name" : "death"
+      },
+      {
+        "id" : 623,
+        "name" : "horse"
+      },
+      {
+        "id" : 701,
+        "name" : "archery"
+      },
+      {
+        "id" : 905,
+        "name" : "difficult"
+      },
+      {
+        "id" : 1032,
+        "name" : "insanity"
+      },
+      {
+        "id" : 1065,
+        "name" : "dragon"
+      },
+      {
+        "id" : 1293,
+        "name" : "achievements"
+      },
+      {
+        "id" : 1317,
+        "name" : "apocalypse"
+      },
+      {
+        "id" : 1320,
+        "name" : "undead"
+      },
+      {
+        "id" : 1333,
+        "name" : "online"
+      },
+      {
+        "id" : 1345,
+        "name" : "traps"
+      },
+      {
+        "id" : 1494,
+        "name" : "steam trading cards"
+      },
+      {
+        "id" : 1524,
+        "name" : "explorable world"
+      },
+      {
+        "id" : 3433,
+        "name" : "horse riding"
+      },
+      {
+        "id" : 3486,
+        "name" : "boss fight"
+      },
+      {
+        "id" : 4004,
+        "name" : "steam achievements"
+      },
+      {
+        "id" : 4135,
+        "name" : "xbox controller support for pc"
+      },
+      {
+        "id" : 4150,
+        "name" : "steam cloud"
+      },
+      {
+        "id" : 4272,
+        "name" : "customizable characters"
+      },
+      {
+        "id" : 4359,
+        "name" : "polygonal 3d"
+      },
+      {
+        "id" : 4392,
+        "name" : "bow and arrow"
+      },
+      {
+        "id" : 4397,
+        "name" : "upgradeable weapons"
+      },
+      {
+        "id" : 4580,
+        "name" : "wasd movement"
+      },
+      {
+        "id" : 4613,
+        "name" : "non-player character"
+      },
+      {
+        "id" : 4759,
+        "name" : "minotaurs"
+      },
+      {
+        "id" : 4770,
+        "name" : "ragdoll physics"
+      },
+      {
+        "id" : 4777,
+        "name" : "checkpoints"
+      },
+      {
+        "id" : 4843,
+        "name" : "saving the world"
+      },
+      {
+        "id" : 4850,
+        "name" : "moral decisions"
+      },
+      {
+        "id" : 4852,
+        "name" : "side quests"
+      },
+      {
+        "id" : 4855,
+        "name" : "branching storyline"
+      },
+      {
+        "id" : 4886,
+        "name" : "player vs player"
+      },
+      {
+        "id" : 4891,
+        "name" : "melee"
+      },
+      {
+        "id" : 4897,
+        "name" : "auto-saving"
+      },
+      {
+        "id" : 5018,
+        "name" : "optional boss"
+      },
+      {
+        "id" : 5019,
+        "name" : "parrying"
+      },
+      {
+        "id" : 5323,
+        "name" : "mercenary"
+      },
+      {
+        "id" : 5541,
+        "name" : "non-linear storytelling"
+      },
+      {
+        "id" : 5840,
+        "name" : "multiple enemy boss fights"
+      },
+      {
+        "id" : 5999,
+        "name" : "stealth kill"
+      },
+      {
+        "id" : 6648,
+        "name" : "new game plus"
+      },
+      {
+        "id" : 6716,
+        "name" : "dual wielding"
+      },
+      {
+        "id" : 7080,
+        "name" : "fast traveling"
+      },
+      {
+        "id" : 7369,
+        "name" : "secret achievements"
+      },
+      {
+        "id" : 7423,
+        "name" : "status effects"
+      },
+      {
+        "id" : 7653,
+        "name" : "hidden room"
+      },
+      {
+        "id" : 9533,
+        "name" : "souls as currency"
+      },
+      {
+        "id" : 9777,
+        "name" : "soul steal"
+      },
+      {
+        "id" : 9781,
+        "name" : "old-fashioned english"
+      },
+      {
+        "id" : 9782,
+        "name" : "pyromancer"
+      },
+      {
+        "id" : 12083,
+        "name" : "the game awards - best score or music - nominee"
+      },
+      {
+        "id" : 16877,
+        "name" : "controller support"
+      },
+      {
+        "id" : 17326,
+        "name" : "soulslike"
+      },
+      {
+        "id" : 17689,
+        "name" : "dual wield"
+      },
+      {
+        "id" : 24287,
+        "name" : "fictional world"
+      },
+      {
+        "id" : 38778,
+        "name" : "bosses"
+      },
+      {
+        "id" : 39010,
+        "name" : "the game awards - best art direction - winner"
+      },
+      {
+        "id" : 39011,
+        "name" : "the game awards - best audio design - nominee"
+      },
+      {
+        "id" : 39025,
+        "name" : "the game awards - best game direction - winner"
+      },
+      {
+        "id" : 39034,
+        "name" : "the game awards - best narrative - nominee"
+      },
+      {
+        "id" : 39041,
+        "name" : "the game awards - best roleplaying game - winner"
+      },
+      {
+        "id" : 39046,
+        "name" : "the game awards - game of the year - winner"
+      },
+      {
+        "id" : 39049,
+        "name" : "the game awards - game of the year - nominee"
+      },
+      {
+        "id" : 39942,
+        "name" : "lore rich"
+      },
+      {
+        "id" : 40744,
+        "name" : "interconnected-world"
+      },
+      {
+        "id" : 42105,
+        "name" : "shield"
+      },
+      {
+        "id" : 43613,
+        "name" : "epic adventure"
+      },
+      {
+        "id" : 44373,
+        "name" : "axe"
+      },
+      {
+        "id" : 44629,
+        "name" : "steam families"
+      },
+      {
+        "id" : 47799,
+        "name" : "sword sorcery"
+      },
+      {
+        "id" : 48013,
+        "name" : "spear"
+      },
+      {
+        "id" : 48014,
+        "name" : "scythe"
+      },
+      {
+        "id" : 48097,
+        "name" : "dynamic weather"
+      },
+      {
+        "id" : 48116,
+        "name" : "the game awards 2022"
+      },
+      {
+        "id" : 48594,
+        "name" : "the game awards - most anticipated game - winner"
+      }
+    ],
+    "name" : "Elden Ring",
+    "platforms" : [
+      {
+        "abbreviation" : "Series X|S",
+        "id" : 169
+      },
+      {
+        "abbreviation" : "PS4",
+        "id" : 48
+      },
+      {
+        "abbreviation" : "Switch 2",
+        "id" : 508
+      },
+      {
+        "abbreviation" : "PC",
+        "id" : 6
+      },
+      {
+        "abbreviation" : "PS5",
+        "id" : 167
+      },
+      {
+        "abbreviation" : "XONE",
+        "id" : 49
+      }
+    ],
+    "player_perspectives" : [
+      {
+        "id" : 2,
+        "name" : "Third person"
+      }
+    ],
+    "rating" : 93.43356220014941,
+    "rating_count" : 2291,
+    "similar_games" : [
+      2155,
+      2368,
+      23733,
+      5619,
+      1942,
+      103329,
+      115289,
+      1887,
+      3025,
+      7346
+    ],
+    "slug" : "elden-ring",
+    "summary" : "Elden Ring is an action RPG developed by FromSoftware and published by Bandai Namco Entertainment, released in February 2022. Directed by Hidetaka Miyazaki, with world-building contributions from novelist George R. R. Martin, the game features an expansive open world called the Lands Between. Players assume the role of a customisable character known as the Tarnished, who must explore this world, battle formidable enemies, and seek to restore the Elden Ring to become the Elden Lord.\n\nThe game builds on the challenging gameplay mechanics familiar from the Dark Souls series but introduces a more open-ended structure with vast exploration, dynamic weather, and a day-night cycle. It offers deep lore, complex characters, and an interconnected world filled with secrets, dungeons, and powerful bosses.",
+    "themes" : [
+      {
+        "id" : 1,
+        "name" : "Action"
+      },
+      {
+        "id" : 17,
+        "name" : "Fantasy"
+      },
+      {
+        "id" : 38,
+        "name" : "Open world"
+      }
+    ],
+    "total_rating" : 95.166781100074701,
+    "total_rating_count" : 2301
+  }
+]

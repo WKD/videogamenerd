@@ -132,6 +132,13 @@ struct MetadataPatch: Sendable, Equatable {
     var ttbNormallyS: Int?
     var ttbCompletelyS: Int?
     var ttbSource: String?
+    /// Replaces the game's IGDB-derived trait set (PLAN §7b). When non-nil, every
+    /// existing enrichment-sourced trait row is rebuilt from this list (replace-all
+    /// per kind — see ``LibraryStore/setTraits(_:gameID:db:)``).
+    var traits: [GameTrait]?
+    /// IGDB aggregated rating (0…100) — the crowd prior (PLAN §7b).
+    var igdbRating: Double?
+    var igdbRatingCount: Int?
 
     init(
         title: String? = nil,
@@ -146,7 +153,10 @@ struct MetadataPatch: Sendable, Equatable {
         ttbHastilyS: Int? = nil,
         ttbNormallyS: Int? = nil,
         ttbCompletelyS: Int? = nil,
-        ttbSource: String? = nil
+        ttbSource: String? = nil,
+        traits: [GameTrait]? = nil,
+        igdbRating: Double? = nil,
+        igdbRatingCount: Int? = nil
     ) {
         self.title = title
         self.summary = summary
@@ -161,6 +171,9 @@ struct MetadataPatch: Sendable, Equatable {
         self.ttbNormallyS = ttbNormallyS
         self.ttbCompletelyS = ttbCompletelyS
         self.ttbSource = ttbSource
+        self.traits = traits
+        self.igdbRating = igdbRating
+        self.igdbRatingCount = igdbRatingCount
     }
 }
 

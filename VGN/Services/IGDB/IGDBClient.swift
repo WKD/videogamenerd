@@ -154,7 +154,7 @@ actor IGDBClient {
 
     private nonisolated func metadata(from dto: IGDBGameDTO) -> IGDBGameMetadata {
         let igdbIDs = (dto.platforms ?? []).map(\.id)
-        return IGDBGameMetadata(
+        var meta = IGDBGameMetadata(
             id: dto.id,
             name: dto.name ?? "",
             slug: dto.slug,
@@ -171,6 +171,50 @@ actor IGDBClient {
             parentGameID: dto.parentGame,
             versionParentID: dto.versionParent
         )
+        // §7b traits (deduped, order-preserving).
+        meta.franchises = Self.names(dto.franchise.map { [$0] } ?? [], dto.franchises)
+        meta.series = Self.names(dto.collection.map { [$0] } ?? [], dto.collections)
+        meta.developers = Self.dedup((dto.involvedCompanies ?? [])
+            .filter { $0.developer == true }
+            .compactMap { $0.company?.name })
+        meta.themes = Self.names(nil, dto.themes)
+        meta.gameModes = Self.names(nil, dto.gameModes)
+        meta.perspectives = Self.names(nil, dto.playerPerspectives)
+        meta.keywords = Array(Self.names(nil, dto.keywords).prefix(IGDBTraitLimits.keywords))
+        meta.similarGameIDs = dto.similarGames ?? []
+        let (rating, count) = Self.resolveRating(dto)
+        meta.igdbRating = rating
+        meta.igdbRatingCount = count
+        return meta
+    }
+
+    /// Deduped, non-empty names from an optional leading singular ref plus an
+    /// optional array of refs, in order (singular first).
+    private nonisolated static func names(
+        _ leading: [IGDBGameDTO.NamedRef]?, _ array: [IGDBGameDTO.NamedRef]?
+    ) -> [String] {
+        dedup(((leading ?? []) + (array ?? [])).compactMap(\.name))
+    }
+
+    private nonisolated static func dedup(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var out: [String] = []
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, seen.insert(trimmed).inserted else { continue }
+            out.append(trimmed)
+        }
+        return out
+    }
+
+    /// Resolve the crowd rating (PLAN §7b): `total_rating` when present, else the
+    /// critic `aggregated_rating`, else the user `rating`. The count follows the
+    /// chosen source.
+    private nonisolated static func resolveRating(_ dto: IGDBGameDTO) -> (Double?, Int?) {
+        if let r = dto.totalRating { return (r, dto.totalRatingCount) }
+        if let r = dto.aggregatedRating { return (r, dto.aggregatedRatingCount) }
+        if let r = dto.rating { return (r, dto.ratingCount) }
+        return (nil, nil)
     }
 
     private func searchResult(from meta: IGDBGameMetadata) -> IGDBSearchResult {

@@ -16,9 +16,8 @@ enum EnrichmentMetadataMapping {
         applyCore(meta, into: &patch)
         applyClassification(meta, into: &patch)
         applyCoverImage(meta, into: &patch)
-        // Future field groups (§7b) plug in here, e.g.:
-        //   applyTraits(meta, into: &patch)   // franchise/series/developer/…
-        //   applyRating(meta, into: &patch)   // igdb_rating (+ count)
+        applyTraits(meta, into: &patch)
+        applyRating(meta, into: &patch)
         return patch
     }
 
@@ -42,5 +41,20 @@ enum EnrichmentMetadataMapping {
     /// IGDB cover `image_id` — the seed the cover job turns into a download URL.
     static func applyCoverImage(_ meta: IGDBGameMetadata, into patch: inout MetadataPatch) {
         patch.igdbCoverImageID = meta.coverImageID
+    }
+
+    /// The §7b taste features: franchise / series / developer / theme / mode /
+    /// perspective / keyword / similar. `nil` (never an empty array) when IGDB
+    /// returned nothing, so the guard treats "no traits" as "leave the field
+    /// untouched" rather than wiping the table.
+    static func applyTraits(_ meta: IGDBGameMetadata, into patch: inout MetadataPatch) {
+        let traits = meta.traits
+        patch.traits = traits.isEmpty ? nil : traits
+    }
+
+    /// The §7b crowd prior: IGDB aggregated rating + its sample count.
+    static func applyRating(_ meta: IGDBGameMetadata, into patch: inout MetadataPatch) {
+        patch.igdbRating = meta.igdbRating
+        patch.igdbRatingCount = meta.igdbRatingCount
     }
 }

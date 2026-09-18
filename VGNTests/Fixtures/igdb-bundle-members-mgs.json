@@ -33,33 +33,6 @@
   },
   {
     "cover" : {
-      "id" : 79916,
-      "image_id" : "co1pnw"
-    },
-    "first_release_date" : 1150156800,
-    "game_type" : 0,
-    "genres" : [
-      {
-        "id" : 31,
-        "name" : "Adventure"
-      },
-      {
-        "id" : 34,
-        "name" : "Visual Novel"
-      }
-    ],
-    "id" : 77232,
-    "name" : "Metal Gear Solid: Digital Graphic Novel",
-    "platforms" : [
-      {
-        "abbreviation" : "PSP",
-        "id" : 38
-      }
-    ],
-    "slug" : "metal-gear-solid-digital-graphic-novel"
-  },
-  {
-    "cover" : {
       "id" : 430391,
       "image_id" : "co983b"
     },
@@ -182,18 +155,12 @@
     "slug" : "metal-gear-solid-vr-missions"
   },
   {
-    "alternative_names" : [
-      {
-        "id" : 215209,
-        "name" : "launcher.exe"
-      }
-    ],
     "cover" : {
-      "id" : 430915,
-      "image_id" : "co98hv"
+      "id" : 393789,
+      "image_id" : "co8ful"
     },
-    "first_release_date" : 1320710400,
-    "game_type" : 9,
+    "first_release_date" : 1092787200,
+    "game_type" : 10,
     "genres" : [
       {
         "id" : 5,
@@ -208,78 +175,20 @@
         "name" : "Adventure"
       }
     ],
-    "id" : 99821,
-    "name" : "Metal Gear Solid 3: Snake Eater - HD Edition",
-    "parent_game" : 479,
+    "id" : 307493,
+    "name" : "Metal Gear",
+    "parent_game" : 374,
     "platforms" : [
       {
-        "abbreviation" : "PS3",
-        "id" : 9
+        "abbreviation" : "PC",
+        "id" : 6
       },
       {
-        "abbreviation" : "Android",
-        "id" : 34
-      },
-      {
-        "abbreviation" : "Vita",
-        "id" : 46
-      },
-      {
-        "abbreviation" : "X360",
-        "id" : 12
+        "abbreviation" : "Mobile",
+        "id" : 55
       }
     ],
-    "slug" : "metal-gear-solid-3-snake-eater-hd-edition"
-  },
-  {
-    "alternative_names" : [
-      {
-        "id" : 264821,
-        "name" : "launcher.exe"
-      }
-    ],
-    "cover" : {
-      "id" : 430365,
-      "image_id" : "co982l"
-    },
-    "first_release_date" : 1320710400,
-    "game_type" : 9,
-    "genres" : [
-      {
-        "id" : 5,
-        "name" : "Shooter"
-      },
-      {
-        "id" : 24,
-        "name" : "Tactical"
-      },
-      {
-        "id" : 31,
-        "name" : "Adventure"
-      }
-    ],
-    "id" : 55041,
-    "name" : "Metal Gear Solid 2: Sons of Liberty - HD Edition",
-    "parent_game" : 474,
-    "platforms" : [
-      {
-        "abbreviation" : "PS3",
-        "id" : 9
-      },
-      {
-        "abbreviation" : "Android",
-        "id" : 34
-      },
-      {
-        "abbreviation" : "Vita",
-        "id" : 46
-      },
-      {
-        "abbreviation" : "X360",
-        "id" : 12
-      }
-    ],
-    "slug" : "metal-gear-solid-2-sons-of-liberty-hd-edition"
+    "slug" : "metal-gear--3"
   },
   {
     "alternative_names" : [
@@ -340,11 +249,44 @@
   },
   {
     "cover" : {
-      "id" : 393789,
-      "image_id" : "co8ful"
+      "id" : 79916,
+      "image_id" : "co1pnw"
     },
-    "first_release_date" : 1092787200,
-    "game_type" : 10,
+    "first_release_date" : 1150156800,
+    "game_type" : 0,
+    "genres" : [
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      },
+      {
+        "id" : 34,
+        "name" : "Visual Novel"
+      }
+    ],
+    "id" : 77232,
+    "name" : "Metal Gear Solid: Digital Graphic Novel",
+    "platforms" : [
+      {
+        "abbreviation" : "PSP",
+        "id" : 38
+      }
+    ],
+    "slug" : "metal-gear-solid-digital-graphic-novel"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 264821,
+        "name" : "launcher.exe"
+      }
+    ],
+    "cover" : {
+      "id" : 430365,
+      "image_id" : "co982l"
+    },
+    "first_release_date" : 1320710400,
+    "game_type" : 9,
     "genres" : [
       {
         "id" : 5,
@@ -359,19 +301,77 @@
         "name" : "Adventure"
       }
     ],
-    "id" : 307493,
-    "name" : "Metal Gear",
-    "parent_game" : 374,
+    "id" : 55041,
+    "name" : "Metal Gear Solid 2: Sons of Liberty - HD Edition",
+    "parent_game" : 474,
     "platforms" : [
       {
-        "abbreviation" : "PC",
-        "id" : 6
+        "abbreviation" : "PS3",
+        "id" : 9
       },
       {
-        "abbreviation" : "Mobile",
-        "id" : 55
+        "abbreviation" : "Android",
+        "id" : 34
+      },
+      {
+        "abbreviation" : "Vita",
+        "id" : 46
+      },
+      {
+        "abbreviation" : "X360",
+        "id" : 12
       }
     ],
-    "slug" : "metal-gear--3"
+    "slug" : "metal-gear-solid-2-sons-of-liberty-hd-edition"
+  },
+  {
+    "alternative_names" : [
+      {
+        "id" : 215209,
+        "name" : "launcher.exe"
+      }
+    ],
+    "cover" : {
+      "id" : 430915,
+      "image_id" : "co98hv"
+    },
+    "first_release_date" : 1320710400,
+    "game_type" : 9,
+    "genres" : [
+      {
+        "id" : 5,
+        "name" : "Shooter"
+      },
+      {
+        "id" : 24,
+        "name" : "Tactical"
+      },
+      {
+        "id" : 31,
+        "name" : "Adventure"
+      }
+    ],
+    "id" : 99821,
+    "name" : "Metal Gear Solid 3: Snake Eater - HD Edition",
+    "parent_game" : 479,
+    "platforms" : [
+      {
+        "abbreviation" : "PS3",
+        "id" : 9
+      },
+      {
+        "abbreviation" : "Android",
+        "id" : 34
+      },
+      {
+        "abbreviation" : "Vita",
+        "id" : 46
+      },
+      {
+        "abbreviation" : "X360",
+        "id" : 12
+      }
+    ],
+    "slug" : "metal-gear-solid-3-snake-eater-hd-edition"
   }
 ]

@@ -1,0 +1,98 @@
+[
+  {
+    "completely" : 247125,
+    "count" : 9,
+    "game_id" : 26758,
+    "hastily" : 34200,
+    "id" : 1001,
+    "normally" : 66908
+  },
+  {
+    "completely" : 414000,
+    "count" : 8,
+    "game_id" : 11397,
+    "hastily" : 108000,
+    "id" : 1072,
+    "normally" : 178740
+  },
+  {
+    "completely" : 702000,
+    "count" : 9,
+    "game_id" : 9927,
+    "hastily" : 360000,
+    "id" : 1236,
+    "normally" : 429206
+  },
+  {
+    "completely" : 420300,
+    "count" : 6,
+    "game_id" : 418,
+    "hastily" : 117000,
+    "id" : 465,
+    "normally" : 180720
+  },
+  {
+    "completely" : 206244,
+    "count" : 16,
+    "game_id" : 7334,
+    "hastily" : 99000,
+    "id" : 340,
+    "normally" : 136107
+  },
+  {
+    "completely" : 66600,
+    "count" : 15,
+    "game_id" : 493,
+    "hastily" : 28800,
+    "id" : 152,
+    "normally" : 39872
+  },
+  {
+    "completely" : 625976,
+    "count" : 25,
+    "game_id" : 119133,
+    "hastily" : 160200,
+    "id" : 2585,
+    "normally" : 433575
+  },
+  {
+    "completely" : 381600,
+    "count" : 12,
+    "game_id" : 11133,
+    "hastily" : 96300,
+    "id" : 663,
+    "normally" : 185370
+  },
+  {
+    "completely" : 61200,
+    "count" : 14,
+    "game_id" : 7331,
+    "hastily" : 52820,
+    "id" : 630,
+    "normally" : 61058
+  },
+  {
+    "completely" : 147975,
+    "count" : 15,
+    "game_id" : 1009,
+    "hastily" : 54760,
+    "id" : 12,
+    "normally" : 71621
+  },
+  {
+    "completely" : 263537,
+    "count" : 31,
+    "game_id" : 14593,
+    "hastily" : 60102,
+    "id" : 936,
+    "normally" : 129814
+  },
+  {
+    "completely" : 108000,
+    "count" : 19,
+    "game_id" : 19686,
+    "hastily" : 23250,
+    "id" : 1237,
+    "normally" : 46517
+  }
+]

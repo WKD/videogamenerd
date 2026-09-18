@@ -112,6 +112,52 @@ enum Migrations {
         }
     }
 
+    // MARK: - v4 — Play Next: traits, IGDB rating, feedback, user-edited marker
+
+    /// v4 adds the §7b recommendation schema (PLAN §4/§7b):
+    ///  - `game_traits` — generic taste features (franchise / series / developer /
+    ///    theme / mode / perspective / keyword / similar), filled by enrichment.
+    ///    `similar` values are IGDB game ids as strings. Indexed on `(kind, value)`
+    ///    for the affinity/direct-link lookups.
+    ///  - `games.igdb_rating` / `igdb_rating_count` — the crowd prior for unranked
+    ///    candidates.
+    ///  - `rec_feedback` — the "not this one" memory (snooze / never / picked).
+    ///  - `games.user_edited` — a compact text set of user-edited field names
+    ///    (e.g. `"cover,summary"`) so enrichment can refresh untouched fields while
+    ///    never overwriting an edited one (requested by the enrichment lane).
+    ///
+    /// Pure `ALTER TABLE ADD COLUMN` + `CREATE TABLE`, so no table rebuild and no
+    /// deferred foreign-key checks are needed.
+    static func registerV4(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v4") { db in
+            try db.execute(sql: """
+                CREATE TABLE game_traits (
+                    game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+                    kind    TEXT    NOT NULL CHECK (kind IN
+                                ('franchise','series','developer','theme',
+                                 'mode','perspective','keyword','similar')),
+                    value   TEXT    NOT NULL,
+                    PRIMARY KEY (game_id, kind, value)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX game_traits_kind_value_idx ON game_traits(kind, value);")
+
+            try db.execute(sql: "ALTER TABLE games ADD COLUMN igdb_rating REAL;")
+            try db.execute(sql: "ALTER TABLE games ADD COLUMN igdb_rating_count INTEGER;")
+            try db.execute(sql: "ALTER TABLE games ADD COLUMN user_edited TEXT NOT NULL DEFAULT '';")
+
+            try db.execute(sql: """
+                CREATE TABLE rec_feedback (
+                    id         INTEGER PRIMARY KEY,
+                    game_id    INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+                    action     TEXT    NOT NULL CHECK (action IN ('snooze','never','picked')),
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX rec_feedback_game_idx ON rec_feedback(game_id, created_at);")
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {
