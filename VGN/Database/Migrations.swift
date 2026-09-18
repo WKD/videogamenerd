@@ -28,6 +28,47 @@ enum Migrations {
         }
     }
 
+    // MARK: - v2 — search depth + sort_title shape
+
+    /// v2 deepens search and refreshes sort keys (Data lane, wave 2):
+    ///  - recompute `sort_title` for every existing game to the new
+    ///    ``SortTitle`` shape (article/numeral-normalised, zero-padded), since the
+    ///    stored value's shape changed;
+    ///  - rebuild `games_fts` with a **diacritics-insensitive** tokenizer
+    ///    (`unicode61 remove_diacritics 2`) so "pokemon" finds "Pokémon"
+    ///    (PLAN §8). Rebuilding the FTS table requires re-creating it and its
+    ///    triggers, then repopulating from the content table.
+    static func registerV2(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v2") { db in
+            // (a) Recompute sort_title (shape changed). This fires games_au, which
+            // is harmless — the FTS is rebuilt from scratch just below anyway.
+            for row in try Row.fetchAll(db, sql: "SELECT id, title FROM games") {
+                let id: Int64 = row["id"]
+                let title: String = row["title"]
+                try db.execute(sql: "UPDATE games SET sort_title = ? WHERE id = ?",
+                               arguments: [SortTitle.make(from: title), id])
+            }
+
+            // (b) Rebuild games_fts with the diacritics-insensitive tokenizer.
+            try db.execute(sql: "DROP TRIGGER IF EXISTS games_ai;")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS games_ad;")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS games_au;")
+            try db.execute(sql: "DROP TABLE IF EXISTS games_fts;")
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE games_fts USING fts5(
+                    title,
+                    alt_titles,
+                    content='games',
+                    content_rowid='id',
+                    tokenize='unicode61 remove_diacritics 2'
+                );
+                """)
+            try createGamesFTSTriggers(db)
+            // Repopulate from the external content table.
+            try db.execute(sql: "INSERT INTO games_fts(games_fts) VALUES('rebuild');")
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {
@@ -283,6 +324,12 @@ enum Migrations {
                 content_rowid='id'
             );
             """)
+        try createGamesFTSTriggers(db)
+    }
+
+    /// The three sync triggers that keep `games_fts` in step with `games`. Shared
+    /// by v1 and by v2's FTS rebuild so both produce identical triggers.
+    private static func createGamesFTSTriggers(_ db: Database) throws {
         try db.execute(sql: """
             CREATE TRIGGER games_ai AFTER INSERT ON games BEGIN
                 INSERT INTO games_fts(rowid, title, alt_titles)

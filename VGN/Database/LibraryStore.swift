@@ -255,26 +255,13 @@ struct LibraryStore: Sendable {
     }
 
     /// Set (or clear, with `nil`) the tier for played games. Unplayed games are
-    /// skipped and reported. Setting a tier clears the fine-rank key (unplaced).
+    /// skipped and reported. A genuine tier *change* clears the fine-rank key
+    /// (→ unplaced); re-setting the tier a game already has is a no-op that keeps
+    /// its rank. Delegates to ``RankingStore/applySetTier(_:tierID:_:)`` so this
+    /// and the ranking views share one implementation (PLAN §7).
     @discardableResult
     func setTier(_ gameIDs: [Int64], tierID: Int64?) async throws -> SetTierOutcome {
-        try await dbWriter.write { db in
-            var applied: [Int64] = []
-            var skipped: [Int64] = []
-            for id in gameIDs {
-                if let tierID {
-                    let played = try Self.isPlayed(id, db)
-                    if !played { skipped.append(id); continue }
-                    try Self.setTierRow(gameID: id, tierID: tierID, db: db)
-                } else {
-                    try db.execute(sql: """
-                        UPDATE games SET tier_id = NULL, rank_key = NULL, updated_at = ? WHERE id = ?
-                        """, arguments: [Date(), id])
-                }
-                applied.append(id)
-            }
-            return SetTierOutcome(applied: applied, skippedUnplayed: skipped)
-        }
+        try await dbWriter.write { db in try RankingStore.applySetTier(gameIDs, tierID: tierID, db) }
     }
 
     /// Set the optional completion status (PLAN §12). `nil` clears it.

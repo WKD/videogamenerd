@@ -49,6 +49,18 @@ enum LibraryQuery {
         return (sql, StatementArguments(args))
     }
 
+    /// Grid query for the Tier Board (PLAN §7): every played, tiered game, ordered
+    /// by tier then placed-first (fine rank), then the unplaced tail in queue
+    /// order. Reuses the same slim `GameSummary` row shape.
+    static func tierBoardSQL() -> (sql: String, arguments: StatementArguments) {
+        let sql = selectClause + """
+
+            WHERE g.tier_id IS NOT NULL AND g.played = 1
+            ORDER BY t.sort, (g.rank_key IS NULL), g.rank_key, g.updated_at, g.id
+            """
+        return (sql, StatementArguments())
+    }
+
     // MARK: - Scope
 
     private static func appendScope(
@@ -149,15 +161,28 @@ enum LibraryQuery {
 
     // MARK: - FTS
 
-    /// Builds a prefix MATCH query: each whitespace token becomes a quoted
-    /// prefix term, ANDed together. Returns nil for empty/blank input.
+    /// Builds a safe multi-token prefix MATCH query (PLAN §8: "prefix match on
+    /// title + alt titles, results as you type").
+    ///
+    /// Each whitespace-separated token becomes a **double-quoted string literal**
+    /// with a trailing `*`, ANDed together — e.g. `met gear sol` →
+    /// `"met"* "gear"* "sol"*`. Quoting makes the query immune to FTS5 syntax:
+    /// inside a `"…"` string every character is literal except `"`, which is
+    /// escaped by doubling, so punctuation in the user's input (`NieR:Automata`,
+    /// `"`, `*`, `-`, `'`, `(`) can never produce a syntax error. Tokens that
+    /// carry no letters/digits at all (e.g. a lone `-` or `*`) are dropped; if
+    /// nothing tokenizable remains, returns nil (no text constraint).
     static func ftsMatch(_ text: String) -> String? {
-        let tokens = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        guard !tokens.isEmpty else { return nil }
-        return tokens.map { token in
-            let escaped = token.replacingOccurrences(of: "\"", with: "\"\"")
-            return "\"\(escaped)\"*"
-        }.joined(separator: " ")
+        let terms = text
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+            .filter { token in token.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) } }
+            .map { token -> String in
+                let escaped = token.replacingOccurrences(of: "\"", with: "\"\"")
+                return "\"\(escaped)\"*"
+            }
+        guard !terms.isEmpty else { return nil }
+        return terms.joined(separator: " ")
     }
 
     private static func placeholders(_ n: Int) -> String {
