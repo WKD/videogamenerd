@@ -111,7 +111,7 @@ struct SettingsView: View {
         TabView {
             AccountsTab(model: model)
                 .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
-            PhotoScanTab()
+            PhotoScanSettingsTab()
                 .tabItem { Label("Photo Scan", systemImage: "camera") }
             GeneralTab()
                 .tabItem { Label("General", systemImage: "gearshape") }

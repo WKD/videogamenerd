@@ -26,6 +26,7 @@ struct VGNApp: App {
                 )
                 .frame(minWidth: 900, minHeight: 600)
                 .environment(\.rankingEnvironment, env.ranking)
+                .photoScanPresentation(env.photoScan)
             } else if let failure = env.failure {
                 DatabaseErrorView(failure: failure)
             } else {
@@ -34,7 +35,10 @@ struct VGNApp: App {
         }
         .defaultSize(width: 1200, height: 780)
         .windowToolbarStyle(.unified)
-        .commands { LibraryCommands() }
+        .commands {
+            LibraryCommands()
+            PhotoScanCommands()
+        }
 
         Settings {
             SettingsView(model: env.settings)

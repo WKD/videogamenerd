@@ -30,6 +30,8 @@ final class AppEnvironment {
     let enrichment: EnrichmentStatusModel?
     /// Stores + cover loader for the ranking destinations (Duel, Triage, Tier Board, The Top).
     let ranking: RankingEnvironment?
+    /// Presents the photo-scan sheet (PLAN §6.2); nil without services (tests).
+    let photoScan: PhotoScanPresenter?
 
     struct DatabaseOpenFailure: Sendable {
         var message: String
@@ -45,7 +47,8 @@ final class AppEnvironment {
         quickAdd: QuickAddModel? = nil,
         quickAddController: QuickAddPanelController? = nil,
         enrichment: EnrichmentStatusModel? = nil,
-        ranking: RankingEnvironment? = nil
+        ranking: RankingEnvironment? = nil,
+        photoScan: PhotoScanPresenter? = nil
     ) {
         self.settings = settings
         self.library = library
@@ -56,6 +59,7 @@ final class AppEnvironment {
         self.quickAddController = quickAddController
         self.enrichment = enrichment
         self.ranking = ranking
+        self.photoScan = photoScan
     }
 
     /// Build the environment. Never throws — a DB failure becomes `failure`.
@@ -101,7 +105,11 @@ final class AppEnvironment {
                 quickAddController: wiring.controller, enrichment: wiring.enrichment,
                 ranking: RankingEnvironment(
                     ranking: RankingStore(database), library: store, coverLoader: coverLoader
-                )
+                ),
+                photoScan: built.map {
+                    PhotoScanPresenter(services: $0.graph, platformCatalog: $0.platformCatalog,
+                                       store: store, library: vm)
+                }
             )
         } catch {
             let path = (try? AppPaths.databaseURL().path) ?? "~/Library/Application Support/VGN/vgn.sqlite"
