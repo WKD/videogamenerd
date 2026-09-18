@@ -60,6 +60,7 @@ struct PlayNextBracketBar: View {
                 } label: {
                     Label("Re-roll", systemImage: "dice")
                 }
+                .accessibilityIdentifier(A11yID.playNextReroll)
                 .help("Re-roll among near-ties (R)")
 
                 Button {
@@ -69,6 +70,7 @@ struct PlayNextBracketBar: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(candidateCount == 0)
+                .accessibilityIdentifier(A11yID.playNextAskClaude)
                 .help("Sends only your tier list and this shortlist — nothing else")
             }
 

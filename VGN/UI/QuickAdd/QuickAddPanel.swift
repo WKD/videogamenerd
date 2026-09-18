@@ -71,6 +71,9 @@ final class QuickAddPanelController {
         panel.hasShadow = true
         panel.animationBehavior = .utilityWindow
         panel.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
+        // So the on-demand UI smoke suite can find and window-screenshot the
+        // floating palette (its own app window, never the owner's).
+        panel.setAccessibilityIdentifier(A11yID.quickAddPanel)
         panel.delegate = panelDelegate
         // Keep the top edge pinned as the content grows/shrinks with the results.
         resizeObserver = NotificationCenter.default.addObserver(

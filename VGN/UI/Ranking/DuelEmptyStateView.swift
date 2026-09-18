@@ -10,6 +10,10 @@ struct DuelEmptyStateView: View {
     var onOpenDisputes: () -> Void = {}
 
     var body: some View {
+        content.accessibilityIdentifier(A11yID.duelEmpty)
+    }
+
+    private var content: some View {
         VStack(spacing: 22) {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 44)).foregroundStyle(.green)

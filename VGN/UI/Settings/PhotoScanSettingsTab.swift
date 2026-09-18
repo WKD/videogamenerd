@@ -20,10 +20,13 @@ struct PhotoScanSettingsTab: View {
                         Text(model.detectedSummary).foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityIdentifier(A11yID.settingsClaudePath)
+                .accessibilityValue(model.detectedSummary)
                 TextField("Binary override", text: $model.binaryOverride, prompt: Text("Auto-detect (leave blank)"))
                     .onSubmit { model.persist() }
                 HStack {
                     Button("Check") { model.check() }
+                        .accessibilityIdentifier(A11yID.settingsCheck)
                     if let result = model.checkResult {
                         Text(result).font(.caption).foregroundStyle(.secondary)
                     }

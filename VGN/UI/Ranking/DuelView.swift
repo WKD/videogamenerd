@@ -126,6 +126,11 @@ struct DuelView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // Progress ("Placing X · 3 of ~6") as one queryable element for the
+            // UI smoke suite: it must advance after each answer (PLAN §7).
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier(A11yID.duelProgress)
+            .accessibilityValue([h.text, h.stepText].compactMap { $0 }.joined(separator: " "))
             if let progress = h.progress {
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
@@ -193,6 +198,7 @@ struct DuelView: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(key == .left ? A11yID.duelLeft : A11yID.duelRight)
         .help(key == .left ? "Pick \(side.title)  (←)" : "Pick \(side.title)  (→)")
     }
 

@@ -64,6 +64,22 @@ struct GameCell: View {
         )
         .task(id: coverTaskID) { await loadCover() }
         .help(game.title)
+        // Collapse the tile into one accessible element carrying the visual-only
+        // state (tier / owned / played / ROM) as its value, so the UI smoke suite
+        // can assert e.g. "Tier A" without a pixel read — and VoiceOver reads it.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(game.title)
+        .accessibilityValue(a11yStateValue)
+    }
+
+    /// The tile's visual-only state as a spoken/queried value (PLAN §8 badges).
+    private var a11yStateValue: String {
+        var parts: [String] = []
+        if let letter = game.tierLetter { parts.append("Tier \(letter)") }
+        if game.owned { parts.append("Owned") }
+        if game.played { parts.append("Played") }
+        if game.hasROM { parts.append("ROM") }
+        return parts.isEmpty ? "Unranked" : parts.joined(separator: ", ")
     }
 
     // The task re-runs (and cancels the previous load) whenever the game id or

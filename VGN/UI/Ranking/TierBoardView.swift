@@ -30,6 +30,7 @@ struct TierBoardView: View {
             tray
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier(A11yID.tierBoard)
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
@@ -74,6 +75,7 @@ struct TierBoardView: View {
             LazyVStack(spacing: 0) {
                 ForEach(model.rows) { row in
                     TierRowView(row: row, model: model, loader: loader)
+                        .accessibilityIdentifier(A11yID.tierBoardRow(row.tier.letter))
                     Divider()
                 }
             }

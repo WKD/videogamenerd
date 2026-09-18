@@ -110,10 +110,13 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             AccountsTab(model: model)
+                .accessibilityIdentifier(A11yID.settingsTabAccounts)
                 .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
             PhotoScanSettingsTab()
+                .accessibilityIdentifier(A11yID.settingsTabPhotoScan)
                 .tabItem { Label("Photo Scan", systemImage: "camera") }
             GeneralTab()
+                .accessibilityIdentifier(A11yID.settingsTabGeneral)
                 .tabItem { Label("General", systemImage: "gearshape") }
         }
         .frame(width: 500, height: 380)

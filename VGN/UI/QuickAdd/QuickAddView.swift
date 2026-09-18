@@ -34,6 +34,7 @@ struct QuickAddView: View {
                 .textFieldStyle(.plain)
                 .font(.title2)
                 .focused($fieldFocused)
+                .accessibilityIdentifier(A11yID.quickAddField)
             if model.isSearchingRemote {
                 ProgressView().controlSize(.small)
             }
@@ -61,6 +62,7 @@ struct QuickAddView: View {
                             coverLoader: coverLoader
                         )
                         .id(result.id)
+                        .accessibilityIdentifier(A11yID.quickAddRow(index))
                         .contentShape(Rectangle())
                         .onTapGesture { model.select(index) }
                     }
@@ -87,6 +89,7 @@ struct QuickAddView: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier(A11yID.quickAddOfflineHint)
     }
 
     private var manualRow: some View {
@@ -104,6 +107,7 @@ struct QuickAddView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(A11yID.quickAddManualRow)
     }
 
     // MARK: Footer (flags + confirmation + shortcut hints)
@@ -118,13 +122,14 @@ struct QuickAddView: View {
             HStack(spacing: 12) {
                 flagChip(model.flags.owned ? "Owned" : "Not owned",
                          system: model.flags.owned ? "shippingbox.fill" : "shippingbox",
-                         on: model.flags.owned, help: "⌘O")
+                         on: model.flags.owned, help: "⌘O", identifier: A11yID.quickAddOwnedState)
                 if model.flags.owned {
-                    flagChip(model.flags.format.label, system: formatIcon, on: true, help: "⌘D cycles format")
+                    flagChip(model.flags.format.label, system: formatIcon, on: true,
+                             help: "⌘D cycles format", identifier: A11yID.quickAddFormatState)
                 }
                 flagChip(model.flags.played ? "Played" : "Backlog",
                          system: model.flags.played ? "gamecontroller.fill" : "tray.full",
-                         on: model.flags.played, help: "⌘P")
+                         on: model.flags.played, help: "⌘P", identifier: A11yID.quickAddPlayedState)
                 if let tier = model.tierLetter {
                     flagChip("Tier \(tier)", system: "star.fill", on: true, help: "⌃0 clears")
                 }
@@ -145,13 +150,18 @@ struct QuickAddView: View {
         .padding(.horizontal, 14).padding(.vertical, 8)
     }
 
-    private func flagChip(_ text: String, system: String, on: Bool, help: String) -> some View {
+    private func flagChip(_ text: String, system: String, on: Bool, help: String,
+                          identifier: String? = nil) -> some View {
         Label(text, systemImage: system)
             .font(.caption)
             .foregroundStyle(on ? Color.primary : Color.secondary)
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 6).fill(on ? Color.accentColor.opacity(0.15) : Color.clear))
             .help(help)
+            // The chip conveys state visually only; expose it as a queryable value
+            // (owned/played/format) for the UI smoke suite and VoiceOver.
+            .accessibilityIdentifier(identifier ?? "")
+            .accessibilityValue(text)
     }
 
     private var formatIcon: String {

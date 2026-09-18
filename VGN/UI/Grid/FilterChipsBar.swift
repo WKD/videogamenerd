@@ -14,11 +14,14 @@ struct FilterChipsBar: View {
                 HStack(spacing: 6) {
                     ForEach(chips) { chip in
                         ChipView(chip: chip) { vm.removeFilterChip(chip) }
+                            // e.g. "filter.chip.tier:1", "filter.chip.status:finished".
+                            .accessibilityIdentifier(A11yID.filterChip(chip.id))
                     }
                     Button("Clear all") { vm.clearAllFilters() }
                         .buttonStyle(.borderless)
                         .font(.caption)
                         .padding(.leading, 4)
+                        .accessibilityIdentifier(A11yID.filterClearAll)
                         .help("Remove every active filter")
                     // One-click escape from a scoped search to the whole library.
                     if vm.selection != .all,
@@ -35,6 +38,7 @@ struct FilterChipsBar: View {
             .scrollIndicators(.hidden)
             .background(.bar)
             .overlay(alignment: .bottom) { Divider() }
+            .accessibilityIdentifier(A11yID.filterChips)
         }
     }
 }
