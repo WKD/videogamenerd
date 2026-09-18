@@ -1,11 +1,15 @@
 import Foundation
 
-/// One row of `VGN/Resources/platforms.json`. Fields per docs/EXECUTION.md §Shared.
-/// This is a *services-side* decoder used to map IGDB platform ids → VGN slugs and to
-/// look up a platform's libretro repo. The Database lane has its own seed decoder for
-/// the same file; the orchestrator should dedupe these into one next wave (noted in
-/// the handoff).
-struct PlatformCatalogEntry: Decodable, Sendable, Equatable {
+/// One row of `VGN/Resources/platforms.json` (fields per docs/EXECUTION.md
+/// §Shared: `id, name, short, manufacturer, group, kind, generation?, igdbIDs,
+/// libretroRepo?, sort`).
+///
+/// This is the **single** Foundation-only decoded model for the platform
+/// catalogue — the DB seed, the services layer (IGDB id → slug, libretro repo)
+/// and the UI labels all read from it. It replaces the three former decoders
+/// (`PlatformSeed`, the services `PlatformCatalogEntry`, and `PlatformLabels`'s
+/// direct `PlatformInfo` decode).
+struct PlatformCatalogEntry: Codable, Sendable, Equatable {
     let id: String              // slug
     let name: String
     let short: String
@@ -16,11 +20,22 @@ struct PlatformCatalogEntry: Decodable, Sendable, Equatable {
     let igdbIDs: [Int]
     let libretroRepo: String?
     let sort: Int
+
+    /// The `kind` string as the typed enum (defaults to `.console`).
+    var kindEnum: PlatformKind { PlatformKind(rawValue: kind) ?? .console }
+
+    /// The Foundation-only value type the UI consumes (chips, labels, previews).
+    var info: PlatformInfo {
+        PlatformInfo(
+            id: id, name: name, short: short, manufacturer: manufacturer,
+            group: group, kind: kindEnum, generation: generation, sort: sort
+        )
+    }
 }
 
-/// In-memory index over the platform catalogue. Cheap to build; construct once and
-/// share. Injectable for tests (pass entries directly); the default loads the bundled
-/// JSON.
+/// In-memory index over the platform catalogue. Cheap to build; construct once
+/// and share. Injectable for tests (pass entries directly); the default loads the
+/// bundled JSON.
 struct PlatformCatalog: Sendable {
     let entries: [PlatformCatalogEntry]
     private let slugByIGDBID: [Int: String]
@@ -61,22 +76,34 @@ struct PlatformCatalog: Sendable {
     /// libretro-thumbnails repo for a VGN platform slug (nil = no retro repo).
     func libretroRepo(forSlug slug: String) -> String? { entryBySlug[slug]?.libretroRepo }
 
+    /// The catalogue as UI value types, in file order.
+    var platformInfos: [PlatformInfo] { entries.map(\.info) }
+
     // MARK: - Loading
 
     enum LoadError: Error, Sendable { case resourceMissing }
 
     /// Decode a catalogue from raw JSON bytes.
     static func load(from data: Data) throws -> PlatformCatalog {
-        let entries = try JSONDecoder().decode([PlatformCatalogEntry].self, from: data)
-        return PlatformCatalog(entries: entries)
+        PlatformCatalog(entries: try decodeEntries(from: data))
+    }
+
+    /// Decode just the entries (the DB seed maps these straight to records).
+    static func decodeEntries(from data: Data) throws -> [PlatformCatalogEntry] {
+        try JSONDecoder().decode([PlatformCatalogEntry].self, from: data)
     }
 
     /// Load from the app bundle's `platforms.json`. Hosted test bundles see the app
     /// as `Bundle.main`, so this also works under test.
     static func loadFromBundle(_ bundle: Bundle = .main) throws -> PlatformCatalog {
+        PlatformCatalog(entries: try entriesFromBundle(bundle))
+    }
+
+    /// The bundled catalogue's entries.
+    static func entriesFromBundle(_ bundle: Bundle = .main) throws -> [PlatformCatalogEntry] {
         guard let url = bundle.url(forResource: "platforms", withExtension: "json") else {
             throw LoadError.resourceMissing
         }
-        return try load(from: try Data(contentsOf: url))
+        return try decodeEntries(from: try Data(contentsOf: url))
     }
 }

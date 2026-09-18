@@ -1,53 +1,38 @@
 import Foundation
 import GRDB
 
-/// The Codable shape of one entry in `Resources/platforms.json` (EXECUTION
-/// contract): `id, name, short, manufacturer, group, kind, generation?,
-/// igdbIDs, libretroRepo?, sort`.
-struct PlatformSeed: Codable, Sendable {
-    var id: String
-    var name: String
-    var short: String
-    var manufacturer: String
-    var group: String
-    var kind: String
-    var generation: Int?
-    var igdbIDs: [Int]
-    var libretroRepo: String?
-    var sort: Int
-}
-
 extension AppDatabase {
     // MARK: - Platform seeding
 
-    /// Upsert every platform from the decoded `platforms.json` (PLAN §5.6).
+    /// Upsert every platform from the shared ``PlatformCatalogEntry`` model
+    /// (decoded from `platforms.json`, PLAN §5.6).
     ///
     /// Runs on every launch so editing the JSON updates names/short/group/sort
     /// without a migration. Never deletes a platform — in particular one that
     /// still has games — it only inserts new rows and refreshes existing ones.
     /// Idempotent.
     @discardableResult
-    func seedPlatforms(from seeds: [PlatformSeed]) async throws -> Int {
+    func seedPlatforms(from entries: [PlatformCatalogEntry]) async throws -> Int {
         try await dbWriter.write { db in
             var inserted = 0
-            for seed in seeds {
+            for entry in entries {
                 let igdbJSON = String(
-                    data: (try? JSONEncoder().encode(seed.igdbIDs)) ?? Data("[]".utf8),
+                    data: (try? JSONEncoder().encode(entry.igdbIDs)) ?? Data("[]".utf8),
                     encoding: .utf8
                 ) ?? "[]"
                 let record = PlatformRecord(
-                    id: seed.id,
-                    name: seed.name,
-                    short: seed.short,
-                    manufacturer: seed.manufacturer,
-                    group: seed.group,
-                    kind: seed.kind,
-                    generation: seed.generation,
+                    id: entry.id,
+                    name: entry.name,
+                    short: entry.short,
+                    manufacturer: entry.manufacturer,
+                    group: entry.group,
+                    kind: entry.kind,
+                    generation: entry.generation,
                     igdbIDsJSON: igdbJSON,
-                    libretroRepo: seed.libretroRepo,
-                    sort: seed.sort
+                    libretroRepo: entry.libretroRepo,
+                    sort: entry.sort
                 )
-                let existed = try PlatformRecord.exists(db, key: seed.id)
+                let existed = try PlatformRecord.exists(db, key: entry.id)
                 // save() = insert or update on the primary key. Preserves games.
                 try record.save(db)
                 if !existed { inserted += 1 }
@@ -61,12 +46,11 @@ extension AppDatabase {
     /// the bundle root.
     @discardableResult
     func seedPlatformsFromBundle(_ bundle: Bundle = .main) async throws -> Int {
-        guard let url = bundle.url(forResource: "platforms", withExtension: "json") else {
+        do {
+            return try await seedPlatforms(from: PlatformCatalog.entriesFromBundle(bundle))
+        } catch PlatformCatalog.LoadError.resourceMissing {
             throw AppDatabaseError.resourceMissing("platforms.json")
         }
-        let data = try Data(contentsOf: url)
-        let seeds = try JSONDecoder().decode([PlatformSeed].self, from: data)
-        return try await seedPlatforms(from: seeds)
     }
 
     /// Re-apply the default tier ladder if it is missing (idempotent). Tiers are

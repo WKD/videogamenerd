@@ -60,7 +60,11 @@ import GRDB
 
         // …but refreshes an edited display name without a migration.
         var edited = TestDB.platforms
-        edited[0].name = "PlayStation 5 Pro"
+        let e = edited[0]
+        edited[0] = PlatformCatalogEntry(
+            id: e.id, name: "PlayStation 5 Pro", short: e.short, manufacturer: e.manufacturer,
+            group: e.group, kind: e.kind, generation: e.generation, igdbIDs: e.igdbIDs,
+            libretroRepo: e.libretroRepo, sort: e.sort)
         _ = try await db.seedPlatforms(from: edited)
         let store = LibraryStore(db)
         let ps5 = try await store.allPlatforms().first { $0.id == "ps5" }
@@ -69,7 +73,7 @@ import GRDB
 
     @Test func bundledPlatformsJSONDecodesAndSeeds() async throws {
         // The real Resources/platforms.json (61 platforms) must decode into
-        // PlatformSeed and upsert. Hosted tests see the app bundle as main.
+        // PlatformCatalogEntry and upsert. Hosted tests see the app bundle as main.
         let db = try AppDatabase.inMemory()
         let inserted = try await db.seedPlatformsFromBundle(.main)
         #expect(inserted >= 40, "expected the full platform list, got \(inserted)")

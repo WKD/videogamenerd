@@ -1,23 +1,12 @@
 import Foundation
 
-/// Decodes the bundled `platforms.json` (owned by lane B) into `PlatformInfo`
-/// value types, for UI labels/chips and previews. `PlatformInfo` is `Codable`
-/// and its keys are a subset of the JSON's, so extra keys (`igdbIDs`,
-/// `libretroRepo`) are ignored on decode.
-///
-/// Named `PlatformLabels` (not `PlatformCatalog`) to avoid colliding with the
-/// services lane's own `PlatformCatalog` in the same module. This is a read-only
-/// convenience for the UI; the live sidebar gets its in-use platforms from
-/// `LibraryDataSource.platformsInUse()`.
+/// UI labels/chips/previews for platforms, read from the one shared
+/// ``PlatformCatalog`` model (which decodes the bundled `platforms.json`). A
+/// read-only convenience for the UI; the live sidebar gets its in-use platforms
+/// from `LibraryDataSource.platformsInUse()`.
 enum PlatformLabels {
     /// Every platform in the catalog, in file order.
-    static let all: [PlatformInfo] = {
-        guard let url = Bundle.main.url(forResource: "platforms", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode([PlatformInfo].self, from: data)
-        else { return [] }
-        return decoded
-    }()
+    static let all: [PlatformInfo] = (try? PlatformCatalog.loadFromBundle())?.platformInfos ?? []
 
     /// Slug → platform, for chip/label lookups.
     static let bySlug: [String: PlatformInfo] = {
