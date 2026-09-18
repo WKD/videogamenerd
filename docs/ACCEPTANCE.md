@@ -39,8 +39,18 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 - [ ] **Continuity Camera** "Take Photo" from the scan sheet — needs your iPhone nearby; cannot be tested any other way.
 - [ ] Settings ▸ Photo Scan: detected `claude` path + version, **Check** button, model and parallelism settings persist.
 
+## Hardening pass (wave 6, lane C) — needs owner eyes on the new UI hooks
+- **Cover "Remove custom cover" re-fetch** — once the orchestrator wires
+  `CoverStore.clearNegativeCache(gameID:)` into `AppEnvironment.onRemoveCover`, confirm
+  that removing a custom cover set *before* metadata arrived re-fetches promptly.
+- **File ▸ Export Library…** — once wired, confirm the JSON/CSV files open and look complete.
+- **Restore from backup** — a destructive action; confirm the confirmation copy and that
+  it restores at next launch. `AppDatabase.restore` never clobbers from a bad file, but the
+  UI should still confirm and ideally snapshot first.
+
 ## Known issues / watch list
-- **Title normaliser over-strips budget labels**: the `.articleless` level strips trailing "Platinum / Essentials / Greatest Hits / Player's Choice", so *Pokémon Platinum* collapses to "pokemon". Exact `.canonical` matching protects precision; only bites if two real titles collapse to the same form. Fix if seen: gate budget-label stripping behind a flag in `TitleNormalizer`.
+- ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
+  labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
 - **Fuzzy thresholds** (`FuzzyMatch.confidentThreshold = 0.90`, `plausibleThreshold = 0.74`) were tuned on a hand-made table; re-check against real IGDB / libretro names once covers and photo scan run on the real library.
 - **LibretroIndex** debug-build timing: 10 k names index ≈ 620 ms, 1 k lookups ≈ 950 ms. Fine off the main thread; revisit if cover matching feels slow.
 - App icon and accent colour are placeholders (milestone 9).

@@ -40,28 +40,48 @@ IGDB credentials for fixture recording / live smoke tests: `~/.config/vgn/igdb.e
 - **Bundle resources are flattened.** Synchronised groups copy every non-Swift file into the bundle's `Resources/` root regardless of subfolder. So resource/fixture **file names must be unique per bundle** (app: `VGN/**`, tests: `VGNTests/**`) — prefix fixtures by topic (`igdb-search-bloodborne.json`, not `igdb/search.json`). Already taken in the test bundle: `platforms.json` (IGDB platform dump), `IMG_368x.jpg`, `tile*.jpg`. Load with `Bundle.main.url(forResource:withExtension:)` in the app; in tests use a `Bundle(for:)`-style lookup on a class defined in the test target.
 - `VGN/Resources/platforms.json` (61 platforms) fields: `id, name, short, manufacturer, group, kind, generation?, igdbIDs [Int], libretroRepo?, sort`. The sidebar groups by **`group`** (Sony, Nintendo, Sega, Microsoft, Atari, NEC, SNK, Computer, Arcade, Other), `sort` ascending within group. `libretroRepo` is read straight from the platform — there is no separate plist.
 
-## Waves
+## How this was built
 
-| Wave | Agent A | Agent B | Agent C | Tags |
-|---|---|---|---|---|
-| 0 Skeleton | `VGN.xcodeproj` (hand-written, synchronised groups, GRDB 7, Swift 6, macOS 15.0, sandbox off, hardened runtime, Sign to Run Locally, shared scheme), minimal app + 1 test green from CLI, `CLAUDE.md`, shared value types in `VGN/Model/` | `VGN/Resources/platforms.json` (+ IGDB ids, libretro repos), `LibretroRepoMapping.plist` from romlord, downsized JPEG fixtures + tiles in `VGNTests/Fixtures/` | Pure logic + exhaustive tests: `VGN/Ranking/` (RankingEngine: binary insertion, sparse keys, renumber, invariants), `VGN/Matching/` (normalisation, fuzzy, libretro tag ladder), `PlaytimeParser` | — |
-| 1 M0 finish + M1 foundations | Database: pool, v1 full schema, FTS5 + triggers, seeds, `LibraryStore` writes w/ invariants incl. compilation transactions, observations (sidebar counts, grid rows), launch snapshots | IGDB client (token actor, rate limiter, search / games / bundles / time-to-beat, recorded fixtures); `CoverStore` actor + IGDB & libretro providers | App shell: split view, sidebar, grid + cell, inspector skeleton, Settings + `KeychainStore` | `m0` |
-| 2 M1 | (started early, as soon as the DB merged) `RankingStore`: snapshot + mutation applier, persisted/resumable duels with undo, refine + border duels, tier board / Top observations; `sort_title`; FTS v2 (diacritics, multi-token prefix, safe escaping) | After services merge: Quick Add palette (full keyboard flow) | After shell merge: live wiring of sidebar/grid/inspector to `LibraryStore`, cover loading + prefetch via `CoverStore`, `O`/`P`/tier keys, inspector on `GameDetail`. Then: persisted enrichment queue (metadata, covers, DB-backed `catalog_cache`, backoff/resume) — goes to whichever lane frees up first | `m1` |
-| 3 M2 + M3 | TTB enrichment job, status/playtime ops, whatever M2/M3 need from the data layer | M2 UI: search, filters + chips, sort, size slider, multi-select, tier keys | M3 UI: compilation editor, "Add as compilation", stack marker, all-or-nothing ownership UX | `m2` `m3` |
-| 4 M4 + M5 UI, M6 engine | M6 pipeline: tiler, `ClaudeCLIRecognizer`, Vision OCR + serial codes, overlap merge, IGDB match scoring | Triage + Duel views; playtime/status inspector UI, me-vs-average bar | Tier Board (drag), The Top (dividers, podium, filters, CSV export) | `m4` `m5` |
-| 5 M6 + hardening | Scan review sheet, photo input, scan Settings, single-transaction add | Accuracy harness over the 6 real samples + prompt/tiling tuning | Hardening: concurrency warnings, debug seed for perf, review of the merged whole, CLAUDE.md refresh | `m6` |
+Milestones 0–6 (plus 5b Play Next) were built by an orchestrator + up to 3 parallel
+Opus subagents, one worktree each, sequenced by the lane rule above rather than by a
+fixed wave plan (a lane never idled at a wave boundary). Rough order:
 
-**Milestone 5b — Play Next + ROM format** (added 2026-09-18, PLAN §7b) is woven into the waves: ROM format → data lane now (migration + `ProductFormat.rom` + format filter), Quick Add `⌘D` and the ROM badge with the Quick Add / M2 UI work; `VGN/Recommendation/` pure engine + backtest → data lane once `RankingStore` is merged (it only needs plain values); `game_traits` / IGDB rating / `rec_feedback` schema + enrichment fields → with the enrichment queue; Play Next view → wave 4–5 UI. Tag `m5b`. "Ask Claude" second opinion: confirmed by the owner 2026-09-18 — built with the Play Next view, reusing the photo-scan CLI runner (wave 4 builds that runner; Play Next consumes it).
+- **Skeleton:** hand-written `VGN.xcodeproj` (synchronised groups, GRDB 7, Swift 6,
+  macOS 15, sandbox off), the pure logic layers (`Ranking/`, `Matching/`,
+  `Recommendation/`) with exhaustive tests, `platforms.json`, and the downsized shelf
+  fixtures — all before any UI.
+- **Data + services:** the v1 schema + `LibraryStore` (invariants, compilation
+  transactions, observations, launch snapshots); the IGDB client (token actor, rate
+  limiter, recorded fixtures); the `CoverStore` actor + provider chain; the persisted
+  enrichment queue.
+- **UI verticals:** shell/sidebar/grid/inspector wiring, Quick Add palette, search +
+  filters, compilation editor, the ranking views (Tier Board, The Top, Duel/Triage),
+  playtime UI, Play Next + "Ask Claude", and the photo-scan review sheet.
+- **Hardening (wave 6):** UI lanes A/B add off-screen **snapshot** render tests and a
+  `VGNUITests` XCUITest smoke target (window-only screenshots, run on demand — not part
+  of the normal gate, it takes over the keyboard and needs a permission grant). Lane C
+  (this file's author) did the non-UI engineering review: concurrency + data-safety
+  audit, real bug fixes with tests, the LIMITATIONS closers, perf at 2 k/10 k, and docs.
 
-**Hardening pass — scope decided 2026-09-18** (starts when the three wave-5 UI branches are merged, because accessibility identifiers touch most views):
-1. **Snapshot rendering in the unit tests** — every screen rendered off-screen (sample data; light + dark; two sizes) to PNGs under a git-ignored output folder, plus committed reference images for diffing. No permissions, no session takeover; agents review the PNGs. Covers layout/appearance only.
-2. **XCUITest smoke suite** — a `VGNUITests` target (one deliberate `project.pbxproj` edit, owned by the hardening agent) with ~10 flows: Quick Add keyboard path, Duel/Triage keys not leaking, search keyboard flow, tier keys vs typing, sidebar navigation, inspector edits, filter chips, Play Next bracket switch, scan sheet opening, Settings. **Window-only screenshots** as attachments (never the full screen). Runs on demand (`xcodebuild test -only-testing:VGNUITests`) — it takes over keyboard and mouse in the live session and needs a one-time macOS permission grant by the owner, so it is NOT part of agents' normal gates; the orchestrator runs it at milestones when the owner is away from the Mac.
-3. The original hardening items: concurrency audit, real-cover scroll check, dead-code removal, whole-app review, CLAUDE.md refresh.
-Drag feel, animation and taste stay on the owner's checklist (`docs/ACCEPTANCE.md`).
+Milestone tags `m0`…`m6` (+ `m5b`) were pushed in completion order. Treat git history +
+`docs/LIMITATIONS.md` as the record; PLAN §10 has the milestone definitions.
 
-HLTB optional provider: skipped in this run.
+## How to continue
 
-The table is a plan, not a contract: the orchestrator re-sequences as lanes free up (a lane never idles waiting for a wave boundary), keeping at most 3 agents running and the owned-paths rule intact.
+- **What's left** is in `docs/LIMITATIONS.md` §2 (PLAN milestones 7–9: PSN/GOG import,
+  the stats view, Liquid Glass polish, the icon's Dark/Tinted appearances) and the small
+  UI hooks the hardening pass left for the menu/`AppEnvironment` owner (cover-sentinel
+  clear, Export Library…, Restore from backup).
+- **Adding a source** (PSN/GOG): implement the `LibraryImporter` protocol → it lands rows
+  in the `import_titles` staging table → the shared review sheet. Nothing else changes.
+- **Schema change:** a new numbered migration in `VGN/Database/Migrations.swift`
+  (lane A only) — never edit an existing one. Add a "created at v1 with data → vN" test.
+- **New pure logic** (ranking/matching/recommendation): keep it Foundation-only and
+  unit-test it directly on plain values, no DB/UI.
+
+The rules above (owned paths, one migration owner, Swift 6 strict concurrency, no network
+/ real Keychain / real Application Support dir in tests, feature-sized green commits) still
+hold for any further work.
 
 ## Integration (orchestrator)
 
