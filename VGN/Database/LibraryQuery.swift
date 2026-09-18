@@ -23,7 +23,9 @@ enum LibraryQuery {
             SELECT pg.game_id AS game_id,
                    1                                AS owned,
                    MAX(p.kind = 'compilation')      AS is_comp,
-                   MAX(p.format = 'rom')            AS has_rom
+                   MAX(p.format = 'rom')            AS has_rom,
+                   MAX(CASE WHEN p.kind = 'compilation' THEN p.id END)    AS comp_id,
+                   MAX(CASE WHEN p.kind = 'compilation' THEN p.title END) AS comp_title
             FROM product_games pg JOIN products p ON p.id = pg.product_id
             GROUP BY pg.game_id
         ),
@@ -49,6 +51,8 @@ enum LibraryQuery {
             COALESCE(own.owned, 0)                           AS owned,
             COALESCE(own.is_comp, 0)                         AS is_comp,
             COALESCE(own.has_rom, 0)                         AS has_rom,
+            own.comp_id                                      AS comp_id,
+            own.comp_title                                   AS comp_title,
             plat.ids                                         AS platform_ids
         FROM games g
         LEFT JOIN tiers t ON t.id = g.tier_id
@@ -251,6 +255,8 @@ enum LibraryQuery {
             played: row["played"],
             owned: row["owned"],
             isCompilationMember: row["is_comp"],
+            compilationTitle: row["comp_title"],
+            compilationProductID: row["comp_id"],
             platformIDs: platformIDs,
             status: statusRaw.flatMap(PlayStatus.init(rawValue:)),
             hasROM: row["has_rom"]

@@ -22,6 +22,11 @@ struct GameSummary: Hashable, Sendable, Identifiable {
     var owned: Bool
     /// True when this game is a member of a compilation product (stack marker).
     var isCompilationMember: Bool
+    /// The compilation product's title, for the stack-marker tooltip (nil when not
+    /// a compilation member, or the compilation has no title).
+    var compilationTitle: String?
+    /// The compilation product id, so "Show compilation" can select every member.
+    var compilationProductID: Int64?
 
     /// Platform slugs this game exists on (badges / chips).
     var platformIDs: [String]
@@ -43,6 +48,8 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         played: Bool = false,
         owned: Bool = false,
         isCompilationMember: Bool = false,
+        compilationTitle: String? = nil,
+        compilationProductID: Int64? = nil,
         platformIDs: [String] = [],
         status: PlayStatus? = nil,
         hasROM: Bool = false
@@ -58,6 +65,8 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         self.played = played
         self.owned = owned
         self.isCompilationMember = isCompilationMember
+        self.compilationTitle = compilationTitle
+        self.compilationProductID = compilationProductID
         self.platformIDs = platformIDs
         self.status = status
         self.hasROM = hasROM

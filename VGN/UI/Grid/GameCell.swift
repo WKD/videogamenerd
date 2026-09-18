@@ -116,7 +116,7 @@ struct GameCell: View {
                         .foregroundStyle(.white)
                         .padding(4)
                         .background(.black.opacity(0.45), in: Circle())
-                        .help("Part of a compilation")
+                        .help(game.compilationTitle.map { "Part of \($0)" } ?? "Part of a compilation")
                 }
             }
             Spacer()

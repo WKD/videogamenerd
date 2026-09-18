@@ -217,6 +217,10 @@ final class AppEnvironment {
         // Test connection is available whenever a graph exists (user-initiated).
         settings.connectionTester = built?.graph.connectionTester
 
+        // Compilation editor (PLAN §5.1): built with the store + the same catalogue
+        // searcher Quick Add uses, so its member picker searches library then IGDB.
+        wireCompilations(vm: vm, store: store, searcher: searcher)
+
         // Manual cover from a dropped image (both modes; sample writes to temp).
         // A hand-picked cover is sacred: `setUserCover` marks the `cover` field
         // user-edited so background enrichment (even an explicit refresh) never
@@ -249,6 +253,53 @@ final class AppEnvironment {
         }
 
         return Wiring(quickAdd: quickAdd, controller: controller, enrichment: enrichment)
+    }
+
+    /// Wire the compilation editor + "Group as compilation…" hooks (PLAN §5.1/§8).
+    private static func wireCompilations(
+        vm: LibraryViewModel, store: LibraryStore, searcher: any CatalogSearching
+    ) {
+        vm.onEditCompilation = { [weak vm] productID in
+            guard let vm else { return }
+            let editor = CompilationEditorModel(
+                productID: productID, writer: store, catalog: searcher,
+                localSearch: { text in
+                    let rows = (try? await store.gamesOnce(
+                        filter: LibraryFilter(searchText: text, scope: .all))) ?? []
+                    return rows.map(QuickAddLibraryMatch.init(from:))
+                },
+                platforms: PlatformLabels.all)
+            editor.onSelectGame = { [weak vm] id in vm?.selectOnly(id) }
+            editor.onClose = { [weak vm] in vm?.compilationEditor = nil }
+            vm.compilationEditor = editor
+        }
+
+        vm.onGroupAsCompilation = { [weak vm] ids in
+            guard let vm, !ids.isEmpty else { return }
+            let games = vm.games.filter { ids.contains($0.id) }.map { (id: $0.id, title: $0.title) }
+            guard !games.isEmpty else { return }
+            Task { [weak vm] in
+                guard let vm else { return }
+                let all = (try? await store.allPlatforms()) ?? PlatformLabels.all
+                let slugs = Set(vm.games.filter { ids.contains($0.id) }.flatMap(\.platformIDs))
+                let choices = all.filter { slugs.contains($0.id) }
+                vm.groupCompilationRequest = GroupCompilationRequest(
+                    games: games,
+                    platforms: choices.isEmpty ? all : choices,
+                    perform: { [weak vm] title, platformID, format, merge in
+                        Task { [weak vm] in
+                            do {
+                                let productID = try await store.groupAsCompilation(
+                                    gameIDs: games.map(\.id), title: title.isEmpty ? nil : title,
+                                    platformID: platformID, format: format, mergeExistingSingles: merge)
+                                vm?.editCompilation(productID: productID)
+                            } catch {
+                                vm?.showBanner("Couldn't group the games.", kind: .error)
+                            }
+                        }
+                    })
+            }
+        }
     }
 
     /// Off-launch-path work: seed platforms, (sample mode) seed the sample

@@ -66,6 +66,15 @@ struct InspectorView: View {
                     Task { await vm.actions?.setStatus(ids: ids, status: status) }
                 }
 
+                if games.count > 1 {
+                    Divider()
+                    Button {
+                        vm.onGroupAsCompilation(ids)
+                    } label: {
+                        Label("Group as compilation…", systemImage: "square.stack.3d.up")
+                    }
+                }
+
                 Spacer()
             }
             .padding(16)
@@ -214,27 +223,68 @@ private struct SingleGameInspector: View {
         }
     }
 
+    @ViewBuilder
     private func copyRow(_ copy: GameDetail.Copy) -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(copyPrimaryLine(copy)).font(.callout)
-                if copy.isCompilation {
-                    Text("Part of \(copy.title ?? "a compilation") (\(copy.memberCount) games)")
-                        .font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(copyPrimaryLine(copy)).font(.callout)
+                    if copy.isCompilation {
+                        // PLAN §8: "Part of *Metal Gear Solid: The Legacy Collection* (PS3) · n games".
+                        (Text("Part of ")
+                         + Text(copy.title ?? "a compilation").italic()
+                         + Text(" (\(PlatformLabels.short(copy.platformID))) · ^[\(copy.memberCount) game](inflect: true)"))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
+                Spacer()
+                Button {
+                    vm.actions?.removeCopy(productID: copy.productID, gameTitle: detail.title)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help(copy.isCompilation ? "Remove the whole compilation" : "Remove this copy")
+                .disabled(vm.actions == nil)
             }
-            Spacer()
-            Button {
-                vm.actions?.removeCopy(productID: copy.productID, gameTitle: detail.title)
-            } label: {
-                Image(systemName: "trash")
+
+            if copy.isCompilation {
+                compilationMembers(copy)
+                Button {
+                    vm.editCompilation(productID: copy.productID)
+                } label: {
+                    Label("Edit compilation…", systemImage: "square.stack.3d.up")
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
             }
-            .buttonStyle(.borderless)
-            .help(copy.isCompilation ? "Remove the whole compilation" : "Remove this copy")
-            .disabled(vm.actions == nil)
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.4)))
+    }
+
+    /// The inline member list of a compilation copy — click a member to select it
+    /// (PLAN §8). The currently-shown game is highlighted, not clickable.
+    private func compilationMembers(_ copy: GameDetail.Copy) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(zip(copy.memberIDs, copy.memberTitles)), id: \.0) { id, title in
+                if id == detail.id {
+                    Text("• \(title)")
+                        .font(.caption).fontWeight(.semibold)
+                } else {
+                    Button {
+                        vm.selectOnly(id)
+                    } label: {
+                        Text("• \(title)")
+                            .font(.caption)
+                            .foregroundStyle(.tint)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.leading, 4)
     }
 
     private func copyPrimaryLine(_ copy: GameDetail.Copy) -> String {

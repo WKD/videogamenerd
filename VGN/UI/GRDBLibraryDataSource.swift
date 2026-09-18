@@ -48,6 +48,10 @@ struct GRDBLibraryDataSource: LibraryDataSource {
         Self.bridge(store.gameDetailObservation(id: id))
     }
 
+    func compilationMemberIDs(productID: Int64) async -> [Int64] {
+        ((try? await store.compilationMembers(productID: productID)) ?? []).map(\.gameID)
+    }
+
     /// Republish a GRDB `ValueObservation` async sequence (itself `Sendable`) as
     /// a non-throwing `AsyncStream`. Cancelling the stream cancels the consuming
     /// task, which ends the observation — no leaks when the grid re-subscribes on

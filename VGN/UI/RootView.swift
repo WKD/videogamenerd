@@ -39,6 +39,14 @@ struct RootView: View {
         .sheet(item: $vm.copyRemovalRequest) { request in
             CopyRemovalSheet(request: request) { vm.copyRemovalRequest = nil }
         }
+        .sheet(item: $vm.groupCompilationRequest) { request in
+            GroupCompilationSheet(request: request) { vm.groupCompilationRequest = nil }
+        }
+        .sheet(isPresented: compilationEditorPresented) {
+            if let editor = vm.compilationEditor {
+                CompilationEditorView(model: editor, loader: vm.coverLoader)
+            }
+        }
         .alert(
             vm.pendingConfirmation?.title ?? "",
             isPresented: confirmationPresented,
@@ -89,6 +97,13 @@ struct RootView: View {
         Binding(
             get: { vm.pendingConfirmation != nil },
             set: { if !$0 { vm.pendingConfirmation = nil } }
+        )
+    }
+
+    private var compilationEditorPresented: Binding<Bool> {
+        Binding(
+            get: { vm.compilationEditor != nil },
+            set: { if !$0 { vm.compilationEditor = nil } }
         )
     }
 

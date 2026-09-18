@@ -114,9 +114,20 @@ extension LibraryStore {
             FROM product_games pg JOIN products p ON p.id = pg.product_id
             WHERE pg.game_id = ? ORDER BY p.id
             """, arguments: [id])
-        let copies: [GameDetail.Copy] = copyRows.map { r in
-            GameDetail.Copy(
-                productID: r["product_id"],
+        let copies: [GameDetail.Copy] = try copyRows.map { r in
+            let productID: Int64 = r["product_id"]
+            let memberCount: Int = r["member_count"]
+            var memberTitles: [String] = []
+            var memberIDs: [Int64] = []
+            // Only a compilation copy needs its full member list (PLAN §8 — the
+            // all-or-nothing ownership names every affected game).
+            if memberCount > 1 {
+                let members = try Self.fetchCompilationMembers(productID, db)
+                memberTitles = members.map(\.title)
+                memberIDs = members.map(\.gameID)
+            }
+            return GameDetail.Copy(
+                productID: productID,
                 platformID: r["platform_id"],
                 format: ProductFormat(rawValue: r["format"]) ?? .physical,
                 kind: ProductKind(rawValue: r["kind"]) ?? .single,
@@ -125,7 +136,9 @@ extension LibraryStore {
                 region: r["region"],
                 source: ProductSource(rawValue: r["source"]) ?? .manual,
                 position: r["position"],
-                memberCount: r["member_count"]
+                memberCount: memberCount,
+                memberTitles: memberTitles,
+                memberIDs: memberIDs
             )
         }
 

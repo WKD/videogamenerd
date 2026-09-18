@@ -166,6 +166,7 @@ struct LibraryStore: Sendable {
             try db.execute(sql: "DELETE FROM product_games WHERE product_id = ? AND game_id = ?",
                            arguments: [productID, gameID])
             try Self.purgeEmptyProduct(productID, db)
+            try Self.normalizeProductKind(productID, db)
             return try Self.resolveOrphans([gameID], confirmOrphanDelete: confirmOrphanDelete, db: db)
         }
     }

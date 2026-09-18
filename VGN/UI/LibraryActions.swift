@@ -332,7 +332,8 @@ final class LibraryActions {
     }
 
     private func compilationMemberTitles(_ copy: GameDetail.Copy) -> [String] {
-        // The member titles aren't on the Copy; show the product title + count.
+        // Name every affected game (PLAN §8 — all-or-nothing ownership lists them).
+        if !copy.memberTitles.isEmpty { return copy.memberTitles }
         if let title = copy.title { return ["\(title) (\(copy.memberCount) games)"] }
         return ["\(copy.memberCount) games"]
     }

@@ -34,6 +34,15 @@ protocol LibraryDataSource: Sendable {
     /// Live full detail for one game — the inspector subscribes so it updates
     /// itself after any write to the shown game (PLAN §8/§9).
     func gameDetailStream(id: Int64) -> AsyncStream<GameDetail?>
+
+    /// The member game ids of a compilation product ("Show compilation" selects
+    /// them all — PLAN §8).
+    func compilationMemberIDs(productID: Int64) async -> [Int64]
+}
+
+extension LibraryDataSource {
+    // Default so existing preview sources need not implement it explicitly.
+    func compilationMemberIDs(productID: Int64) async -> [Int64] { [] }
 }
 
 /// Emits a single value then finishes — the shape a static/preview source uses.

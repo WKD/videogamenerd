@@ -108,6 +108,11 @@ final class LibraryViewModel {
     /// Inspector "Remove custom cover" — clears the hand-picked cover + marker and
     /// re-enqueues the cover job (wired by the app).
     var onRemoveCover: (Int64) -> Void = { _ in }
+    /// Open the compilation editor for a product (wired by the app to build a
+    /// ``CompilationEditorModel`` and present it — PLAN §5.1).
+    var onEditCompilation: (Int64) -> Void = { _ in }
+    /// "Group as compilation…" from the current selection (wired by the app).
+    var onGroupAsCompilation: (Set<Int64>) -> Void = { _ in }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
@@ -118,6 +123,11 @@ final class LibraryViewModel {
     var ownershipRequest: OwnershipRequest?
     /// A pending "remove which copies?" flow.
     var copyRemovalRequest: CopyRemovalRequest?
+    /// The compilation editor sheet's model, or nil (PLAN §5.1). Set by the app's
+    /// `onEditCompilation` hook, which builds the model with the store + catalog.
+    var compilationEditor: CompilationEditorModel?
+    /// A pending "Group as compilation…" flow (title + platform + format).
+    var groupCompilationRequest: GroupCompilationRequest?
 
     // MARK: Inspector live detail (single selection)
     /// Full detail for the single selected game, kept live by an observation so
@@ -641,6 +651,22 @@ final class LibraryViewModel {
 
     /// Remove a hand-picked cover and let enrichment fetch one again (PLAN §5.2).
     func removeCustomCover(gameID: Int64) { onRemoveCover(gameID) }
+
+    /// Open the compilation editor for a product (PLAN §5.1).
+    func editCompilation(productID: Int64) { onEditCompilation(productID) }
+
+    /// "Group as compilation…" from the current multi-selection (PLAN §8).
+    func groupSelectionAsCompilation() { onGroupAsCompilation(selectedGameIDs) }
+
+    /// "Show compilation" — select every member of a compilation product (PLAN §8).
+    func showCompilation(productID: Int64) {
+        Task { [dataSource] in
+            let ids = await dataSource.compilationMemberIDs(productID: productID)
+            guard !ids.isEmpty else { return }
+            self.selectedGameIDs = Set(ids)
+            self.selectionAnchor = ids.first
+        }
+    }
 
     // MARK: Empty states
     var isEmptyLibrary: Bool { counts.all == 0 }
