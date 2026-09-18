@@ -69,8 +69,21 @@ enum SnapshotHarness {
     /// Git-ignored generated output.
     static let outputDir = repoRoot.appendingPathComponent(".build/snapshots")
 
-    static var isRecording: Bool { ProcessInfo.processInfo.environment["VGN_SNAPSHOT_RECORD"] == "1" }
-    static var isVerifying: Bool { ProcessInfo.processInfo.environment["VGN_SNAPSHOT_VERIFY"] == "1" }
+    // A macOS unit-test host does NOT inherit xcodebuild's shell environment, so
+    // recording/verifying is signalled by a sentinel FILE that the test process
+    // (which reads the disk anyway) checks. `scripts/snapshots.sh` creates and
+    // removes them; the env vars remain as a fallback for direct invocations.
+    private static var recordSentinel: URL { repoRoot.appendingPathComponent(".build/snapshot-record") }
+    private static var verifySentinel: URL { repoRoot.appendingPathComponent(".build/snapshot-verify") }
+
+    static var isRecording: Bool {
+        ProcessInfo.processInfo.environment["VGN_SNAPSHOT_RECORD"] == "1"
+            || FileManager.default.fileExists(atPath: recordSentinel.path)
+    }
+    static var isVerifying: Bool {
+        ProcessInfo.processInfo.environment["VGN_SNAPSHOT_VERIFY"] == "1"
+            || FileManager.default.fileExists(atPath: verifySentinel.path)
+    }
 
     // MARK: Contact-sheet registry (rebuilt on disk after every capture)
 
@@ -120,8 +133,12 @@ enum SnapshotHarness {
             writeOutput(png, name: name, appearance: appearance)
             record(Entry(group: group, name: name, appearance: appearance))
 
-            if isRecording { writeReference(png, name: name, appearance: appearance) }
-            if isVerifying { verify(rep, name: name, appearance: appearance, sourceLocation: sourceLocation) }
+            // The smoke suite is a harness self-test whose screens are also
+            // captured by the real suites, so it is left out of the committed
+            // reference set (it still writes PNGs for the contact sheet).
+            let referenced = group != "smoke"
+            if isRecording && referenced { writeReference(rep, name: name, appearance: appearance) }
+            if isVerifying && referenced { verify(rep, name: name, appearance: appearance, sourceLocation: sourceLocation) }
         }
         writeContactSheet()
     }
@@ -240,10 +257,31 @@ enum SnapshotHarness {
         try? png.write(to: url)
     }
 
-    private static func writeReference(_ png: Data, name: String, appearance: SnapAppearance) {
+    /// References are downscaled to this max width so the committed set stays
+    /// small (≈ 3.5× fewer bytes than full 1× at 1200 pt); comparison downscales
+    /// the current capture to match, and the perceptual tolerance absorbs the
+    /// resampling. Full-resolution captures still land in `.build/snapshots`.
+    private static let referenceMaxWidth: CGFloat = 560
+
+    private static func writeReference(_ rep: NSBitmapImageRep, name: String, appearance: SnapAppearance) {
         try? FileManager.default.createDirectory(at: referenceDir, withIntermediateDirectories: true)
         let url = referenceDir.appendingPathComponent("snap-\(name)@\(appearance.rawValue).png")
-        try? png.write(to: url)
+        try? pngData(from: downscaled(rep, maxWidth: referenceMaxWidth)).write(to: url)
+    }
+
+    /// Draw a bitmap into a smaller canvas (no-op when already within `maxWidth`).
+    private static func downscaled(_ rep: NSBitmapImageRep, maxWidth: CGFloat) -> NSBitmapImageRep {
+        let w = CGFloat(rep.pixelsWide), h = CGFloat(rep.pixelsHigh)
+        guard w > maxWidth else { return rep }
+        let scale = maxWidth / w
+        let size = CGSize(width: (w * scale).rounded(), height: (h * scale).rounded())
+        guard let out = makeCanvas(size) else { return rep }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: out)
+        NSGraphicsContext.current?.imageInterpolation = .high
+        rep.draw(in: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+        return out
     }
 
     // MARK: Reference comparison (opt-in)
@@ -257,7 +295,8 @@ enum SnapshotHarness {
                          sourceLocation: sourceLocation)
             return
         }
-        guard let current = canonicalize(pngData(from: rep)) else { return }
+        // Downscale the current capture to the reference's width before comparing.
+        guard let current = canonicalize(pngData(from: downscaled(rep, maxWidth: referenceMaxWidth))) else { return }
         let result = compare(current, refRep)
         if result.changedFraction > SnapThresholds.maxChangedFraction {
             if let diff = result.diff {

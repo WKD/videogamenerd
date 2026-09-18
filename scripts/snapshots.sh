@@ -26,20 +26,24 @@ case "${1:-}" in
   * ) echo "usage: scripts/snapshots.sh [--record|--generate]"; exit 2 ;;
 esac
 
-ENV_ARGS=()
+# A macOS unit-test host does not inherit this shell's environment, so the mode
+# is signalled to the test process by a sentinel file under .build/ (removed on
+# exit) that SnapshotHarness checks.
+mkdir -p .build
+rm -f .build/snapshot-record .build/snapshot-verify
+cleanup() { rm -f .build/snapshot-record .build/snapshot-verify; }
+trap cleanup EXIT
+
 if [[ "$MODE" == "record" ]]; then
-  ENV_ARGS+=(VGN_SNAPSHOT_RECORD=1)
+  touch .build/snapshot-record
   echo "Recording reference snapshots into VGNTests/Snapshots/Reference …"
 elif [[ "$MODE" == "verify" ]]; then
-  ENV_ARGS+=(VGN_SNAPSHOT_VERIFY=1)
+  touch .build/snapshot-verify
   echo "Verifying snapshots against committed references …"
 else
   echo "Generating snapshots (no verify) …"
 fi
 
-# The host-app unit tests inherit xcodebuild's environment, so the flags reach
-# ProcessInfo inside the test process.
-env "${ENV_ARGS[@]}" \
   xcodebuild -project VGN.xcodeproj -scheme VGN -destination 'platform=macOS' \
     -derivedDataPath .build/dd \
     test \
