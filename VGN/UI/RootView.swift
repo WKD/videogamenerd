@@ -62,6 +62,8 @@ struct RootView: View {
         ZStack(alignment: .bottom) {
             if vm.isRankingSelection {
                 RankingPlaceholderView(selection: vm.selection)
+            } else if vm.isPlayNextSelection {
+                PlayNextPlaceholderView()
             } else {
                 LibraryGridView(vm: vm)
             }

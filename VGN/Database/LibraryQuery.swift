@@ -71,7 +71,8 @@ enum LibraryQuery {
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         switch scope {
-        case .all, .tierBoard, .theTop:
+        case .all, .tierBoard, .theTop, .playNext:
+            // Play Next renders its own recommendation view, not the grid.
             break
         case .owned:
             wheres.append("EXISTS(SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)")

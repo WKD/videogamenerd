@@ -44,7 +44,7 @@ struct SidebarCounts: Hashable, Sendable {
         case .backlog: return backlog
         case .unranked: return unranked
         case .duel: return duelQueue
-        case .tierBoard, .theTop: return nil
+        case .tierBoard, .theTop, .playNext: return nil
         case .platform(let slug): return perPlatform[slug] ?? 0
         }
     }

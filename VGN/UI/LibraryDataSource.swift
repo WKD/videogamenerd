@@ -60,6 +60,7 @@ enum LibraryFilterEvaluator {
         case .backlog: if !game.isBacklog { return false }
         case .unranked: if !game.isUnranked { return false }
         case .platform(let slug): if !game.platformIDs.contains(slug) { return false }
+        case .playNext: break   // renders its own recommendation view
         case .tierBoard, .theTop, .duel:
             // Ranking destinations render a placeholder, not the grid; scope to
             // played games so any incidental query is still sensible.

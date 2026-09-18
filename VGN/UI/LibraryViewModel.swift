@@ -286,6 +286,10 @@ final class LibraryViewModel {
         }
     }
 
+    /// True when the sidebar has Play Next selected (grid is replaced by the
+    /// recommendation view — a placeholder until a later wave, PLAN §7b).
+    var isPlayNextSelection: Bool { selection == .playNext }
+
     // MARK: Filter
 
     func setFilter(_ new: LibraryFilter) {
