@@ -9,17 +9,21 @@ struct ClaudeShelfRecognizer: ShelfRecognizer {
     private let model: String?
     private let maxConcurrent: Int
     private let options: ClaudeRunOptions
+    private let onMetrics: (@Sendable (Int, ClaudeRunMetrics) -> Void)?
 
     /// - Parameters:
     ///   - runner: the generic CLI runner (injectable stub for tests).
     ///   - model: model override, or nil for the CLI default (PLAN: default unless
     ///     clearly insufficient).
     ///   - maxConcurrent: bound on simultaneous CLI calls (default 3).
+    ///   - onMetrics: optional per-tile cost/usage/timing sink (for a progress UI's
+    ///     running cost display, and the accuracy harness).
     init(
         runner: ClaudeCLIRunning,
         model: String? = nil,
         maxConcurrent: Int = 3,
-        options: ClaudeRunOptions = .imageRecognition
+        options: ClaudeRunOptions = .imageRecognition,
+        onMetrics: (@Sendable (Int, ClaudeRunMetrics) -> Void)? = nil
     ) {
         self.runner = runner
         self.model = model
@@ -27,6 +31,7 @@ struct ClaudeShelfRecognizer: ShelfRecognizer {
         var options = options
         options.model = model
         self.options = options
+        self.onMetrics = onMetrics
     }
 
     func recognize(
@@ -51,7 +56,8 @@ struct ClaudeShelfRecognizer: ShelfRecognizer {
                         schema: ShelfRecognitionPrompt.jsonSchema,
                         options: options,
                         semaphore: semaphore,
-                        onEvent: onEvent
+                        onEvent: onEvent,
+                        onMetrics: onMetrics
                     )
                     return (tile.id, detections)
                 }
@@ -74,7 +80,8 @@ struct ClaudeShelfRecognizer: ShelfRecognizer {
         schema: String,
         options: ClaudeRunOptions,
         semaphore: AsyncSemaphore,
-        onEvent: @escaping @Sendable (ShelfRecognitionEvent) -> Void
+        onEvent: @escaping @Sendable (ShelfRecognitionEvent) -> Void,
+        onMetrics: (@Sendable (Int, ClaudeRunMetrics) -> Void)?
     ) async -> [AnchoredDetection] {
         do {
             return try await semaphore.withPermit {
@@ -88,6 +95,7 @@ struct ClaudeShelfRecognizer: ShelfRecognizer {
                     files: [tile.fileURL],
                     options: options
                 )
+                onMetrics?(tile.id, result.metrics)
                 let anchored = anchor(result.value.items, to: tile)
                 onEvent(.done(tileID: tile.id, items: anchored.count))
                 return anchored
