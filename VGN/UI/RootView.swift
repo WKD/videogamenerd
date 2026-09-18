@@ -252,7 +252,7 @@ struct RootView: View {
 
     private var sortMenu: some View {
         Menu {
-            Picker("Sort by", selection: vm.filterBinding(\.sort)) {
+            Picker("Sort by", selection: vm.sortBinding) {
                 ForEach(LibrarySort.allCases) { Text($0.label).tag($0) }
             }
             Divider()

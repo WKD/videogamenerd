@@ -70,6 +70,8 @@ final class LibraryViewModel {
     // MARK: Seams
     let dataSource: any LibraryDataSource
     let coverLoader: any CoverLoading
+    /// Per-sidebar-selection sort persistence (PLAN §8).
+    private let sortPreferences: any SortPreferenceStoring
 
     /// The write-orchestration object (tier/owned/played/status/playtime/delete,
     /// banners, confirmations, undo). Nil in previews/tests that drive the
@@ -132,12 +134,19 @@ final class LibraryViewModel {
     init(
         dataSource: any LibraryDataSource,
         coverLoader: any CoverLoading = NoopCoverLoader(),
-        selection: SidebarSelection = .all
+        selection: SidebarSelection = .all,
+        sortPreferences: any SortPreferenceStoring = UserDefaultsSortPreferences()
     ) {
         self.dataSource = dataSource
         self.coverLoader = coverLoader
+        self.sortPreferences = sortPreferences
         self.selection = selection
-        self.filter = LibraryFilter(scope: selection)
+        let initialSort = sortPreferences.sortSetting(for: selection.id)
+        self.filter = LibraryFilter(
+            scope: selection,
+            sort: initialSort?.sort ?? .title,
+            ascending: initialSort?.ascending ?? LibrarySort.title.defaultAscending
+        )
         // Default intent hooks log so the keyboard/context-menu wiring is
         // observable in DEBUG without any DB. Replaced by the app next wave.
         self.onSetTier = { ids, letter in
@@ -272,8 +281,11 @@ final class LibraryViewModel {
         selection = newValue
         var f = filter
         f.scope = newValue
-        // Scope change clears the independent platform facet and text so the
-        // new list starts clean (matches romlord's behaviour).
+        // Restore this selection's persisted sort (PLAN §8: "sort … persisted per
+        // sidebar selection"); fall back to title / its default direction.
+        let setting = sortPreferences.sortSetting(for: newValue.id)
+        f.sort = setting?.sort ?? .title
+        f.ascending = setting?.ascending ?? (setting?.sort ?? .title).defaultAscending
         filter = f
         selectedGameIDs.removeAll()
         selectionAnchor = nil
@@ -297,7 +309,13 @@ final class LibraryViewModel {
 
     func setFilter(_ new: LibraryFilter) {
         guard new != filter else { return }
+        let sortChanged = new.sort != filter.sort || new.ascending != filter.ascending
         filter = new
+        // Persist the sort choice for the current selection (PLAN §8).
+        if sortChanged {
+            sortPreferences.setSortSetting(
+                SortSetting(sort: new.sort, ascending: new.ascending), for: selection.id)
+        }
         // Keep the search field in sync when the filter's text is set
         // programmatically (e.g. "Clear filters"). The guard in the didSet
         // prevents a commit loop (text already equals the filter).
@@ -335,6 +353,22 @@ final class LibraryViewModel {
     /// Clear every active facet (search included), keeping scope + sort.
     func clearAllFilters() {
         setFilter(LibraryFilterChips.cleared(filter))
+    }
+
+    /// Choose the sort field. Changing the field resets the direction to that
+    /// field's natural default (e.g. Playtime → most-played first); the direction
+    /// toggle then overrides it. Both persist per selection.
+    func setSort(_ sort: LibrarySort) {
+        guard sort != filter.sort else { return }
+        var f = filter
+        f.sort = sort
+        f.ascending = sort.defaultAscending
+        setFilter(f)
+    }
+
+    /// Binding for the sort Picker (resets direction to the field's default).
+    var sortBinding: Binding<LibrarySort> {
+        Binding(get: { self.filter.sort }, set: { self.setSort($0) })
     }
 
     /// A binding to one field of the filter that re-runs the query on change.

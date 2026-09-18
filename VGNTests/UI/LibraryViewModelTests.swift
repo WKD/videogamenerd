@@ -165,6 +165,41 @@ struct LibraryViewModelCellCacheTests {
 }
 
 @MainActor
+@Suite(.serialized)
+struct SortPersistenceTests {
+
+    @Test func setSortResetsDirectionToTheFieldDefault() {
+        let vm = LibraryViewModel(dataSource: PreviewLibraryDataSource.empty,
+                                  sortPreferences: InMemorySortPreferences())
+        vm.setSort(.playtime)
+        #expect(vm.filter.sort == .playtime)
+        #expect(vm.filter.ascending == false)          // most-played first
+        vm.setSort(.title)
+        #expect(vm.filter.ascending == true)           // A→Z
+    }
+
+    @Test func sortPersistsPerSelectionAndSurvivesRelaunch() {
+        let prefs = InMemorySortPreferences()
+        let vm = LibraryViewModel(dataSource: PreviewLibraryDataSource.empty, sortPreferences: prefs)
+
+        vm.setSort(.year)                               // All → year
+        vm.select(.owned)
+        #expect(vm.filter.sort == .title)               // a fresh selection defaults to title
+        vm.setSort(.playtime)                           // Owned → playtime desc
+
+        vm.select(.all)
+        #expect(vm.filter.sort == .year)                // restored
+        vm.select(.owned)
+        #expect(vm.filter.sort == .playtime)
+        #expect(vm.filter.ascending == false)
+
+        // A new model over the same store restores the last "All" sort at launch.
+        let relaunched = LibraryViewModel(dataSource: PreviewLibraryDataSource.empty, sortPreferences: prefs)
+        #expect(relaunched.filter.sort == .year)
+    }
+}
+
+@MainActor
 struct SidebarCountsTests {
 
     @Test func countLookupPerRow() {

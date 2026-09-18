@@ -103,16 +103,24 @@ enum LibraryFilterEvaluator {
     }
 
     static func sorted(_ games: [GameSummary], by sort: LibrarySort, ascending: Bool) -> [GameSummary] {
+        // A secondary id tiebreak keeps equal keys from jittering between emissions
+        // (mirrors the live query's `… , g.id ASC`).
         let ordered: [GameSummary]
         switch sort {
         case .title:
-            ordered = games.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            ordered = games.sorted { a, b in
+                let c = a.title.localizedCaseInsensitiveCompare(b.title)
+                return c == .orderedSame ? a.id < b.id : c == .orderedAscending
+            }
         case .year:
-            ordered = games.sorted { ($0.year ?? Int.min) < ($1.year ?? Int.min) }
+            ordered = games.sorted { a, b in
+                let (ya, yb) = (a.year ?? Int.min, b.year ?? Int.min)
+                return ya == yb ? a.id < b.id : ya < yb
+            }
         case .tierRank:
             ordered = games.sorted { lhs, rhs in
-                let l = (lhs.tierID ?? Int64.max, lhs.rankKey ?? Int64.max)
-                let r = (rhs.tierID ?? Int64.max, rhs.rankKey ?? Int64.max)
+                let l = (lhs.tierID ?? Int64.max, lhs.rankKey ?? Int64.max, lhs.id)
+                let r = (rhs.tierID ?? Int64.max, rhs.rankKey ?? Int64.max, rhs.id)
                 return l < r
             }
         case .dateAdded, .playtime:

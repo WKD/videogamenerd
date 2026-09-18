@@ -145,6 +145,21 @@ import GRDB
             == ["Chrono Trigger", "Journey"])
     }
 
+    @Test func sortIsStableOnEqualKeys() async throws {
+        let store = try await TestDB.makeStore()
+        // Two games with identical sort keys → the id tiebreak keeps a stable order.
+        let a = try await store.addGame(GameDraft(
+            title: "Twin", igdbID: 1, year: 2000, platformIDs: ["ps4"], owned: true)).gameID
+        let b = try await store.addGame(GameDraft(
+            title: "Twin", igdbID: 2, year: 2000, platformIDs: ["ps4"], owned: true)).gameID
+        let byYear = try await store.gamesOnce(filter: LibraryFilter(sort: .year)).map(\.id)
+        #expect(byYear == [a, b])                                       // ascending id tiebreak
+        // Re-fetching yields the identical order (never jitters between emissions).
+        #expect(try await store.gamesOnce(filter: LibraryFilter(sort: .year)).map(\.id) == byYear)
+        // Same for title (equal titles → id order).
+        #expect(try await store.gamesOnce(filter: LibraryFilter(sort: .title)).map(\.id) == [a, b])
+    }
+
     @Test func ftsFindsByTitlePrefixAndAltTitle() async throws {
         let store = try await TestDB.makeStore()
         _ = try await buildLibrary(store)
