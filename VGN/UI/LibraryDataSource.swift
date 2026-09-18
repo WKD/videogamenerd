@@ -19,12 +19,21 @@ protocol LibraryDataSource: Sendable {
     /// The tier definitions (S A B C D F, editable), best-first.
     func tiers() -> AsyncStream<[TierInfo]>
 
+    /// Genre names present in the library (for the Genre ▾ menu). Re-yields.
+    func genresInUse() -> AsyncStream<[String]>
+
+    /// Decades present in the library (for the Decade ▾ menu). Re-yields.
+    func decadesInUse() -> AsyncStream<[Int]>
+
     /// The slim grid rows for a given filter/scope/sort. Re-yields on change.
     func games(filter: LibraryFilter) -> AsyncStream<[GameSummary]>
 
-    /// Full detail for one game. `GameSummary` for now; a richer `GameDetail`
-    /// value type arrives from the DB lane next wave (swap the return type).
-    func gameDetail(id: Int64) async -> GameSummary?
+    /// Full detail for one game, one-shot.
+    func gameDetail(id: Int64) async -> GameDetail?
+
+    /// Live full detail for one game — the inspector subscribes so it updates
+    /// itself after any write to the shown game (PLAN §8/§9).
+    func gameDetailStream(id: Int64) -> AsyncStream<GameDetail?>
 }
 
 /// Emits a single value then finishes — the shape a static/preview source uses.

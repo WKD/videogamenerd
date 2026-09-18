@@ -50,12 +50,51 @@ struct PreviewLibraryDataSource: LibraryDataSource {
         onceStream(sampleTiers)
     }
 
+    func genresInUse() -> AsyncStream<[String]> {
+        // GameSummary carries no genre facet; previews list none.
+        onceStream([])
+    }
+
+    func decadesInUse() -> AsyncStream<[Int]> {
+        let decades = Set(sampleGames.compactMap { $0.year.map { ($0 / 10) * 10 } })
+        return onceStream(decades.sorted())
+    }
+
     func games(filter: LibraryFilter) -> AsyncStream<[GameSummary]> {
         onceStream(LibraryFilterEvaluator.apply(filter, to: sampleGames))
     }
 
-    func gameDetail(id: Int64) async -> GameSummary? {
-        sampleGames.first { $0.id == id }
+    func gameDetail(id: Int64) async -> GameDetail? {
+        sampleGames.first { $0.id == id }.map(GameDetail.init(previewFrom:))
+    }
+
+    func gameDetailStream(id: Int64) -> AsyncStream<GameDetail?> {
+        onceStream(sampleGames.first { $0.id == id }.map(GameDetail.init(previewFrom:)))
+    }
+}
+
+extension GameDetail {
+    /// Build a plausible `GameDetail` from a slim `GameSummary` for previews and
+    /// the in-memory preview data source (the live app builds it in lane A).
+    init(previewFrom s: GameSummary) {
+        let copies: [Copy] = s.owned
+            ? [Copy(productID: s.id, platformID: s.platformIDs.first ?? "",
+                    format: .physical, kind: s.isCompilationMember ? .compilation : .single,
+                    title: s.isCompilationMember ? "Sample Collection" : nil,
+                    edition: nil, region: nil, source: .manual,
+                    position: 0, memberCount: s.isCompilationMember ? 3 : 1)]
+            : []
+        self.init(
+            id: s.id, igdbID: nil, title: s.title, sortTitle: s.title, summary: nil,
+            releaseDate: nil, year: s.year, decade: s.year.map { ($0 / 10) * 10 },
+            played: s.played, owned: s.owned, status: s.status,
+            tierID: s.tierID, tierLetter: s.tierLetter, tierLabel: nil, tierColorHex: s.tierColorHex,
+            rankKey: s.rankKey, coverFile: s.coverFile, igdbCoverImageID: nil,
+            genres: [], platformIDs: s.platformIDs,
+            myPlaytimeS: nil, psnPlaytimeS: nil, ttbHastilyS: nil, ttbNormallyS: nil,
+            ttbCompletelyS: nil, ttbSource: nil, addedAt: Date(), updatedAt: Date(),
+            copies: copies
+        )
     }
 }
 
