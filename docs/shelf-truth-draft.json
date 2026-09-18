@@ -1,6 +1,14 @@
 {
   "status": "draft — needs human verification",
-  "notes": "Produced by Agent B (Wave 0) by reading the downsized JPEGs + full-res tiles + extra temporary zoom crops. The 5 shelf photos (3681-3685) pan left-to-right across the same wall unit, so the SAME games recur across consecutive frames — each photo below lists what is identifiable IN THAT FRAME, so cross-photo duplicates are expected and correct. Platform is taken from the spine banner (PS4 blue / PS5 white / PS3 black / XBOX 360 / Nintendo Switch red). 'printedTitle' is filled only when the box text differs from the canonical English title (mostly French editions). Confidence is honest: low/medium items and anything at a frame edge or in shadow need a human pass. Serial codes (CUSA/PPSA/BLES/BCES) are visible on many spines and could pin exact regional editions but were not transcribed here.",
+  "updated": "2026-09-18",
+  "sampleSet": [
+    "IMG_3683",
+    "IMG_3684",
+    "IMG_3685",
+    "IMG_3686",
+    "IMG_3687"
+  ],
+  "notes": "Produced by reading the downsized JPEGs + full-res tiles + extra temporary zoom crops. Sample set updated 2026-09-18: IMG_3681 and IMG_3682 were retired (empty ELDEN RING sleeve made one game look like two) and IMG_3687 added. IMG_3683-3685 still pan left-to-right across the same wall unit, and IMG_3687 is a single wide frame covering the same two shelves as the retired 3681/3682, so the SAME games recur across frames — each photo below lists what is identifiable IN THAT FRAME, so cross-photo duplicates are expected and correct. Platform is taken from the spine banner (PS4 blue / PS5 white / PS3 black / XBOX 360 / Nintendo Switch red). 'printedTitle' is filled only when the box text differs from the canonical English title (mostly French editions). Confidence is honest: low/medium items and anything at a frame edge or in shadow need a human pass. Serial codes (CUSA/PPSA/BLES/BCES) are visible on many spines and could pin exact regional editions but were not transcribed here.",
   "platformSlugs": [
     "ps5",
     "ps4",
@@ -9,568 +17,6 @@
     "switch"
   ],
   "photos": [
-    {
-      "photo": "IMG_3681",
-      "frame": "Top two shelves, left end. Upper shelf = PS5 row (+ one PS4) starting at left; lower shelf = PS4 row then start of PS3.",
-      "items": [
-        {
-          "title": "Until Dawn",
-          "platform": "ps4",
-          "notes": "leftmost spine, banner reads PS4 (not the PS5 remake)",
-          "confidence": "high"
-        },
-        {
-          "title": "The Quarry",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "The Dark Pictures Anthology: House of Ashes",
-          "platform": "ps5",
-          "printedTitle": "HOUSE OF ASHES",
-          "confidence": "high"
-        },
-        {
-          "title": "Silent Hill 2",
-          "platform": "ps5",
-          "notes": "2024 remake",
-          "confidence": "high"
-        },
-        {
-          "title": "Bramble: The Mountain King",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "LEGO Star Wars: The Skywalker Saga",
-          "platform": "ps5",
-          "printedTitle": "LEGO STAR WARS - LA SAGA SKYWALKER",
-          "notes": "French edition",
-          "confidence": "high"
-        },
-        {
-          "title": "The Medium",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Demon's Souls",
-          "platform": "ps5",
-          "notes": "2020 remake",
-          "confidence": "high"
-        },
-        {
-          "title": "Lies of P",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Black Myth: Wukong",
-          "platform": "ps5",
-          "confidence": "medium"
-        },
-        {
-          "title": "Elden Ring",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Elden Ring",
-          "platform": "ps5",
-          "notes": "two adjacent 'ELDEN RING' spines — second may be Shadow of the Erdtree Edition or a duplicate; unsure",
-          "confidence": "low"
-        },
-        {
-          "title": "Resident Evil Village",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Returnal",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Dead Space",
-          "platform": "ps5",
-          "notes": "2023 remake",
-          "confidence": "high"
-        },
-        {
-          "title": "The Callisto Protocol",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Marvel's Spider-Man: Miles Morales",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "The Last of Us Part I",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "The Last of Us Part II Remastered",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Final Fantasy VII Remake",
-          "platform": "ps5",
-          "notes": "spine reads 'FINAL FANTASY VII REMAKE'; could be Intergrade",
-          "confidence": "medium"
-        },
-        {
-          "title": "Final Fantasy VII Rebirth",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Final Fantasy XVI",
-          "platform": "ps5",
-          "printedTitle": "FINAL FANTASY XVI EDITION DELUXE",
-          "notes": "Deluxe edition, taller box",
-          "confidence": "high"
-        },
-        {
-          "title": "Broken Sword: Shadow of the Templars - Reforged",
-          "platform": "ps5",
-          "printedTitle": "Les Chevaliers de Baphomet - L'ombre des Templiers: Reforged",
-          "notes": "French edition",
-          "confidence": "high"
-        },
-        {
-          "title": "Alan Wake Remastered",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Syberia Remastered",
-          "platform": "ps5",
-          "notes": "unsure exact edition",
-          "confidence": "medium"
-        },
-        {
-          "title": "Death Stranding",
-          "platform": "ps5",
-          "notes": "faint; likely Director's Cut",
-          "confidence": "medium"
-        },
-        {
-          "title": "Terminator 2D: No Fate",
-          "platform": "ps5",
-          "printedTitle": "TERMINATOR 2D NO FATE",
-          "notes": "right edge of upper shelf",
-          "confidence": "high"
-        },
-        {
-          "title": "Resident Evil 7 Biohazard",
-          "platform": "ps4",
-          "notes": "lower shelf begins; Gold Edition",
-          "confidence": "high"
-        },
-        {
-          "title": "Batman: Arkham Knight",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Prey",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Yooka-Laylee",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Uncharted 4: A Thief's End",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "The Evil Within",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Death Stranding",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Dark Souls III",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Final Fantasy XII: The Zodiac Age",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Deponia",
-          "platform": "ps4",
-          "confidence": "medium"
-        },
-        {
-          "title": "Astro Bot Rescue Mission",
-          "platform": "ps4",
-          "notes": "PSVR",
-          "confidence": "high"
-        },
-        {
-          "title": "Ni no Kuni II: Revenant Kingdom",
-          "platform": "ps4",
-          "printedTitle": "Ni no Kuni II",
-          "confidence": "high"
-        },
-        {
-          "title": "Star Ocean: Integrity and Faithlessness",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Kingdom Come: Deliverance",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "The Last Guardian",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Sekiro: Shadows Die Twice",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Shadow of the Colossus",
-          "platform": "ps4",
-          "notes": "2018 remake",
-          "confidence": "high"
-        },
-        {
-          "title": "Fallout 76",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "The Last of Us Remastered",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Bloodborne",
-          "platform": "ps4",
-          "printedTitle": "Bloodborne Collector's Edition",
-          "notes": "collector edition",
-          "confidence": "high"
-        },
-        {
-          "title": "Bloodstained: Ritual of the Night",
-          "platform": "ps4",
-          "printedTitle": "BLOODSTAINED - RITUAL OF THE NIGHT",
-          "notes": "tall backer/artbook-style box",
-          "confidence": "medium"
-        },
-        {
-          "title": "Final Fantasy XV",
-          "platform": "ps4",
-          "printedTitle": "FINAL FANTASY XV DELUXE EDITION",
-          "notes": "Deluxe (incl. Kingsglaive)",
-          "confidence": "high"
-        },
-        {
-          "title": "Castlevania: Lords of Shadow",
-          "platform": "ps3",
-          "notes": "lower shelf transitions to PS3",
-          "confidence": "high"
-        },
-        {
-          "title": "LEGO The Lord of the Rings",
-          "platform": "ps3",
-          "printedTitle": "LEGO Le Seigneur des Anneaux",
-          "notes": "French edition",
-          "confidence": "high"
-        },
-        {
-          "title": "Silent Hill HD Collection",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Fallout 3",
-          "platform": "ps3",
-          "printedTitle": "Fallout 3 Game of the Year Edition",
-          "confidence": "high"
-        },
-        {
-          "title": "LittleBigPlanet",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "L.A. Noire",
-          "platform": "ps3",
-          "confidence": "high"
-        }
-      ]
-    },
-    {
-      "photo": "IMG_3682",
-      "frame": "Same two shelves as 3681, panned right. Upper shelf = tail of PS5 row then the PS4 row (Yakuza/Witcher/FF...God of War). Lower shelf = tail of PS4 + PS3 row. Heavy overlap with 3681 and 3683.",
-      "items": [
-        {
-          "title": "The Medium",
-          "platform": "ps5",
-          "notes": "left edge, overlaps 3681",
-          "confidence": "high"
-        },
-        {
-          "title": "Demon's Souls",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Lies of P",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Elden Ring",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Returnal",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Dead Space",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "The Callisto Protocol",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Marvel's Spider-Man: Miles Morales",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "The Last of Us Part II Remastered",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Final Fantasy XVI",
-          "platform": "ps5",
-          "printedTitle": "FINAL FANTASY XVI EDITION DELUXE",
-          "confidence": "high"
-        },
-        {
-          "title": "Broken Sword: Shadow of the Templars - Reforged",
-          "platform": "ps5",
-          "printedTitle": "Les Chevaliers de Baphomet - L'ombre des Templiers: Reforged",
-          "notes": "French edition",
-          "confidence": "high"
-        },
-        {
-          "title": "Alan Wake Remastered",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "Syberia Remastered",
-          "platform": "ps5",
-          "confidence": "medium"
-        },
-        {
-          "title": "Death Stranding",
-          "platform": "ps5",
-          "confidence": "medium"
-        },
-        {
-          "title": "Terminator 2D: No Fate",
-          "platform": "ps5",
-          "confidence": "high"
-        },
-        {
-          "title": "The Dark Pictures Anthology: Man of Medan",
-          "platform": "ps4",
-          "printedTitle": "MAN OF MEDAN",
-          "confidence": "high"
-        },
-        {
-          "title": "Yakuza Kiwami",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "The Yakuza Remastered Collection",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Yakuza 0",
-          "platform": "ps4",
-          "printedTitle": "Yakuza Zero",
-          "confidence": "medium"
-        },
-        {
-          "title": "The Witcher 3: Wild Hunt",
-          "platform": "ps4",
-          "printedTitle": "THE WITCHER 3: WILD HUNT - GAME OF THE YEAR EDITION",
-          "confidence": "high"
-        },
-        {
-          "title": "Final Fantasy X / X-2 HD Remaster",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Uncharted: The Lost Legacy",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Shenmue I & II",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "The Dark Pictures Anthology: Little Hope",
-          "platform": "ps4",
-          "printedTitle": "LITTLE HOPE",
-          "confidence": "high"
-        },
-        {
-          "title": "Red Dead Redemption II",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Metal Gear Solid V",
-          "platform": "ps4",
-          "notes": "Konami white box, spine text hard to read; likely The Phantom Pain or Definitive Experience",
-          "confidence": "low"
-        },
-        {
-          "title": "Detroit: Become Human",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Final Fantasy VII Remake",
-          "platform": "ps4",
-          "notes": "large deluxe/steelbook box",
-          "confidence": "high"
-        },
-        {
-          "title": "The Elder Scrolls V: Skyrim Special Edition",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "Horizon Zero Dawn",
-          "platform": "ps4",
-          "printedTitle": "Horizon Zero Dawn Complete Edition",
-          "confidence": "high"
-        },
-        {
-          "title": "Monster Hunter: World",
-          "platform": "ps4",
-          "confidence": "high"
-        },
-        {
-          "title": "God of War",
-          "platform": "ps4",
-          "notes": "2018",
-          "confidence": "high"
-        },
-        {
-          "title": "Dark Souls III",
-          "platform": "ps4",
-          "notes": "lower shelf, overlaps 3681",
-          "confidence": "high"
-        },
-        {
-          "title": "Bloodborne",
-          "platform": "ps4",
-          "printedTitle": "Bloodborne Collector's Edition",
-          "confidence": "high"
-        },
-        {
-          "title": "Castlevania: Lords of Shadow",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Silent Hill HD Collection",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "LittleBigPlanet",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "L.A. Noire",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Folklore",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Eternal Sonata",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Beyond: Two Souls",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Final Fantasy XIII-2",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Batman: Arkham City",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Resident Evil 5",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Resident Evil 6",
-          "platform": "ps3",
-          "confidence": "high"
-        },
-        {
-          "title": "Mass Effect Trilogy",
-          "platform": "ps3",
-          "confidence": "high"
-        }
-      ]
-    },
     {
       "photo": "IMG_3683",
       "frame": "Same shelves panned further right; near-duplicate of 3682 for the upper shelf. Lower shelf shows the PS3 row (right portion) ending, plus SEGA Mega Drive Ultimate Collection / Skyrim / Oblivion / Star Ocean.",
@@ -1005,13 +451,533 @@
         }
       ],
       "illegible": "Background shelves are out of focus. Faintly visible: a Harry Potter Blu-ray/box and assorted PS/retro cases; a French sticker 'AUCUN AUTRE CHOIX'. Not transcribed."
+    },
+    {
+      "photo": "IMG_3687",
+      "frame": "Single wide frame (5699x3452 — wider and shorter than the retired 4:3 photos) capturing two full shelves of the same wall unit the retired IMG_3681/IMG_3682 covered. Upper shelf = the PS5 row (left) running into the PS4 row (right); lower shelf = the PS4 row (left) running into the PS3 row (right). Most games from the retired 3681/3682 recur here; a few not previously listed are now visible (Persona 5, Resident Evil 2, Lollipop Chainsaw, LEGO Pirates des Caraïbes) and Clair Obscur: Expedition 33 is now shelved as a spine.",
+      "items": [
+        {
+          "title": "Until Dawn",
+          "platform": "ps4",
+          "notes": "leftmost spine, blue PS4 banner (not the PS5 remake)",
+          "confidence": "high"
+        },
+        {
+          "title": "The Quarry",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "The Dark Pictures Anthology: House of Ashes",
+          "platform": "ps5",
+          "printedTitle": "HOUSE OF ASHES",
+          "confidence": "high"
+        },
+        {
+          "title": "Silent Hill 2",
+          "platform": "ps5",
+          "notes": "2024 remake",
+          "confidence": "high"
+        },
+        {
+          "title": "Bramble: The Mountain King",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "LEGO Star Wars: The Skywalker Saga",
+          "platform": "ps5",
+          "printedTitle": "LEGO STAR WARS - LA SAGA SKYWALKER",
+          "notes": "French edition",
+          "confidence": "high"
+        },
+        {
+          "title": "The Medium",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "Demon's Souls",
+          "platform": "ps5",
+          "notes": "2020 remake",
+          "confidence": "high"
+        },
+        {
+          "title": "Lies of P",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "Black Myth: Wukong",
+          "platform": "ps5",
+          "confidence": "medium"
+        },
+        {
+          "title": "Clair Obscur: Expedition 33",
+          "platform": "ps5",
+          "printedTitle": "EXPEDITION 33",
+          "notes": "now shelved as a spine here; also the front-cover close-up in IMG_3686",
+          "confidence": "high"
+        },
+        {
+          "title": "Elden Ring",
+          "platform": "ps5",
+          "notes": "single copy — owner confirmed the second 'ELDEN RING' seen in the retired frames was an empty sleeve; the box is back inside, so exactly one Elden Ring",
+          "confidence": "high"
+        },
+        {
+          "title": "Resident Evil Village",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "Returnal",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "Dead Space",
+          "platform": "ps5",
+          "notes": "2023 remake",
+          "confidence": "high"
+        },
+        {
+          "title": "The Callisto Protocol",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "Marvel's Spider-Man: Miles Morales",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "The Last of Us Part I",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "The Last of Us Part II Remastered",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "Final Fantasy VII Remake",
+          "platform": "ps5",
+          "notes": "spine reads 'FINAL FANTASY VII REMAKE'; could be Intergrade",
+          "confidence": "medium"
+        },
+        {
+          "title": "Final Fantasy VII Rebirth",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "Final Fantasy XVI",
+          "platform": "ps5",
+          "printedTitle": "FINAL FANTASY XVI EDITION DELUXE",
+          "notes": "Deluxe edition, taller white box",
+          "confidence": "high"
+        },
+        {
+          "title": "Broken Sword: Shadow of the Templars - Reforged",
+          "platform": "ps5",
+          "printedTitle": "Les Chevaliers de Baphomet - L'ombre des Templiers: Reforged",
+          "notes": "French edition",
+          "confidence": "high"
+        },
+        {
+          "title": "Alan Wake Remastered",
+          "platform": "ps5",
+          "confidence": "high"
+        },
+        {
+          "title": "Syberia Remastered",
+          "platform": "ps5",
+          "notes": "unsure exact edition",
+          "confidence": "medium"
+        },
+        {
+          "title": "Death Stranding",
+          "platform": "ps5",
+          "notes": "faint; subtitle reads 'Director's Cut'",
+          "confidence": "medium"
+        },
+        {
+          "title": "Terminator 2D: No Fate",
+          "platform": "ps5",
+          "printedTitle": "TERMINATOR 2D NO FATE",
+          "notes": "Reef Entertainment; tall SteelBook-style box",
+          "confidence": "high"
+        },
+        {
+          "title": "The Dark Pictures Anthology: Man of Medan",
+          "platform": "ps4",
+          "printedTitle": "MAN OF MEDAN",
+          "confidence": "high"
+        },
+        {
+          "title": "Yakuza Kiwami",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "The Yakuza Remastered Collection",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Yakuza 0",
+          "platform": "ps4",
+          "printedTitle": "Yakuza Zero",
+          "confidence": "medium"
+        },
+        {
+          "title": "The Witcher 3: Wild Hunt - Game of the Year Edition",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Final Fantasy X / X-2 HD Remaster",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Uncharted: The Lost Legacy",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Shenmue I & II",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "The Dark Pictures Anthology: Little Hope",
+          "platform": "ps4",
+          "printedTitle": "LITTLE HOPE",
+          "confidence": "high"
+        },
+        {
+          "title": "Red Dead Redemption II",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Metal Gear Solid V",
+          "platform": "ps4",
+          "notes": "Owner-confirmed: special vendor SteelBook collector's edition (white Konami box). Exact game (The Phantom Pain vs Ground Zeroes) still to confirm — the spine lettering on this frame is stylised and not legible enough to decide.",
+          "confidence": "medium"
+        },
+        {
+          "title": "Detroit: Become Human",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Final Fantasy VII Remake",
+          "platform": "ps4",
+          "notes": "large deluxe/steelbook box",
+          "confidence": "high"
+        },
+        {
+          "title": "The Elder Scrolls V: Skyrim Special Edition",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Horizon Zero Dawn",
+          "platform": "ps4",
+          "printedTitle": "Horizon Zero Dawn Complete Edition",
+          "confidence": "high"
+        },
+        {
+          "title": "Monster Hunter: World",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "God of War",
+          "platform": "ps4",
+          "notes": "2018",
+          "confidence": "high"
+        },
+        {
+          "title": "Resident Evil 7 Biohazard",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Batman: Arkham Knight",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Prey",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Yooka-Laylee",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Uncharted 4: A Thief's End",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "The Evil Within",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Death Stranding",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Dark Souls III",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Final Fantasy XII: The Zodiac Age",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Deponia",
+          "platform": "ps4",
+          "notes": "dark spine, title barely legible; matches the Deponia case from the retired frames",
+          "confidence": "low"
+        },
+        {
+          "title": "Ni no Kuni II: Revenant Kingdom",
+          "platform": "ps4",
+          "printedTitle": "Ni no Kuni II",
+          "confidence": "high"
+        },
+        {
+          "title": "Astro Bot Rescue Mission",
+          "platform": "ps4",
+          "notes": "PSVR",
+          "confidence": "high"
+        },
+        {
+          "title": "Persona 5",
+          "platform": "ps4",
+          "notes": "reddish spine; not present in the retired frames' lists",
+          "confidence": "high"
+        },
+        {
+          "title": "Star Ocean: Integrity and Faithlessness",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Kingdom Come: Deliverance",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "The Last Guardian",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Sekiro: Shadows Die Twice",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Shadow of the Colossus",
+          "platform": "ps4",
+          "notes": "2018 remake",
+          "confidence": "high"
+        },
+        {
+          "title": "Fallout 76",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "The Last of Us Remastered",
+          "platform": "ps4",
+          "confidence": "high"
+        },
+        {
+          "title": "Resident Evil 2",
+          "platform": "ps4",
+          "notes": "2019 remake; not present in the retired frames' lists",
+          "confidence": "high"
+        },
+        {
+          "title": "Bloodborne",
+          "platform": "ps4",
+          "printedTitle": "Bloodborne Collector's Edition",
+          "notes": "collector edition",
+          "confidence": "high"
+        },
+        {
+          "title": "Bloodstained: Ritual of the Night",
+          "platform": "ps4",
+          "printedTitle": "BLOODSTAINED - RITUAL OF THE NIGHT",
+          "notes": "tall backer/artbook-style box",
+          "confidence": "medium"
+        },
+        {
+          "title": "Final Fantasy XV",
+          "platform": "ps4",
+          "printedTitle": "FINAL FANTASY XV DELUXE EDITION",
+          "notes": "Deluxe (incl. Kingsglaive)",
+          "confidence": "high"
+        },
+        {
+          "title": "Castlevania: Lords of Shadow",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "LEGO The Lord of the Rings",
+          "platform": "ps3",
+          "printedTitle": "LEGO Le Seigneur des Anneaux",
+          "notes": "French edition",
+          "confidence": "high"
+        },
+        {
+          "title": "Silent Hill HD Collection",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Fallout 3",
+          "platform": "ps3",
+          "printedTitle": "Fallout 3 Game of the Year Edition",
+          "confidence": "high"
+        },
+        {
+          "title": "LittleBigPlanet",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "L.A. Noire",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "God of War Collection",
+          "platform": "ps3",
+          "notes": "compilation",
+          "confidence": "high"
+        },
+        {
+          "title": "Final Fantasy XIII",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Brutal Legend",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Folklore",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "LEGO Pirates of the Caribbean: The Video Game",
+          "platform": "ps3",
+          "printedTitle": "LEGO Pirates des Caraïbes - Le Jeu Vidéo",
+          "notes": "French edition; not in the retired frames' lists",
+          "confidence": "high"
+        },
+        {
+          "title": "Eternal Sonata",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Beyond: Two Souls",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Final Fantasy XIII-2",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Batman: Arkham City",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Resident Evil 5",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Resident Evil 6",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Lollipop Chainsaw",
+          "platform": "ps3",
+          "notes": "not in the retired frames' lists",
+          "confidence": "high"
+        },
+        {
+          "title": "Mass Effect Trilogy",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Heavy Rain",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "Demon's Souls",
+          "platform": "ps3",
+          "notes": "Chinese import (中英文合版)",
+          "confidence": "high"
+        },
+        {
+          "title": "Sega Mega Drive Ultimate Collection",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "The Elder Scrolls V: Skyrim",
+          "platform": "ps3",
+          "confidence": "high"
+        },
+        {
+          "title": "The Elder Scrolls IV: Oblivion",
+          "platform": "ps3",
+          "printedTitle": "Game of the Year Edition",
+          "confidence": "high"
+        },
+        {
+          "title": "Star Ocean: The Last Hope International",
+          "platform": "ps3",
+          "confidence": "high"
+        }
+      ]
     }
   ],
   "illegibleAreas": [
-    "IMG_3681 upper shelf: the two adjacent 'ELDEN RING' spines — cannot tell if the second is Shadow of the Erdtree, a duplicate, or a different edition.",
-    "The Konami white box on the PS4 shelf (3682/3683): spine text too faint to confirm which Metal Gear Solid V edition.",
+    "IMG_3687 upper shelf: a slim all-black spine sits between Death Stranding (PS5) and Terminator 2D: No Fate — it carries no title (possibly a SteelBook slipcase); not identified and not listed as a game.",
+    "IMG_3687 upper PS4 row: a plain dark-grey spine sits between the Metal Gear Solid V SteelBook and Detroit: Become Human with no legible text — possibly the MGS SteelBook's outer slipcase; not listed as a separate game.",
+    "The white Konami Metal Gear Solid V SteelBook (visible in IMG_3683 and IMG_3687): owner-confirmed as a special vendor collector's edition, but the spine lettering is stylised and could not be read to decide The Phantom Pain vs Ground Zeroes.",
+    "IMG_3687 lower PS4 row: the dark spine between Final Fantasy XII and Ni no Kuni II is barely legible; listed as Deponia (low confidence) to match the retired frames.",
     "IMG_3685 far right: two music DVDs (appear to read 'MY DYING BRIDE - For Darkest Eyes' and a Sopor Aeternus-style black case) — NOT video games; excluded.",
-    "Many spines in 3684/3685 have legible serial codes (BLES/BCES/CUSA) that were not transcribed but could disambiguate regional editions.",
+    "Many spines in IMG_3684/3685/3687 have legible serial codes (BLES/BCES/CUSA/PPSA) that were not transcribed but could disambiguate regional editions.",
     "IMG_3686 background shelves are out of focus and mostly unreadable."
   ]
 }
