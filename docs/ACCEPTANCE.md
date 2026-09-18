@@ -11,6 +11,16 @@ Things machines can't judge (or that need the owner's data/eyes). Updated by the
   - **Lesson for the M6 recogniser/harness** (from the draft's IMG_3683 failure): a vision model reading several overlapping shelf photos in one context (a) silently skips most of a dense row when working from a downsized image and (b) pattern-completes from neighbouring photos (it listed *Darksiders* / *Alice* in a frame where they don't appear). The app's design already isolates each tile in its own `claude -p` call with full-resolution crops; the accuracy harness must measure **recall per row** and **false positives per photo** separately, not just overall precision.
 - [ ] `VGN/Resources/platforms.json` — skim the 61 platforms: slugs are forever (DB primary keys), sidebar `group` assignments, anything you own that is missing.
 
+### M1 — Library core (code merged 2026-09-18; tag `m1` follows the loose-ends merge)
+The agents cannot drive the GUI, so the keyboard palette has only been exercised through its model tests. **Main runtime risk: the Quick Add `NSPanel` key handling on macOS 15.** With the real app and real credentials:
+- [ ] Settings ▸ Accounts: enter the IGDB client id/secret → **Test connection** says it is connected.
+- [ ] `⌘N` opens the palette; typing streams results (library instantly, IGDB ~200 ms later); `↑↓` select, `Tab`/`⇧Tab` cycle platform, `⌘O` owned, `⌘P` played, `⌘D` physical → digital → ROM, `⌃S…⌃F` tier (`⌃0` clears), `↩` adds and stays open, `⌘↩` opens the inspector, `esc` clears then closes.
+- [ ] **50 games by keyboard in < 5 minutes**, the palette never waiting on the network.
+- [ ] Covers appear in the grid within seconds; the sidebar footer shows "Fetching metadata · n left"; quit mid-fetch and relaunch → the queue resumes; relaunch is instant and covers persist.
+- [ ] "metal gear solid legacy" offers **Add as compilation** and creates the member games; "bloodb" and "chevaliers de baphomet" both find their game (search fallback).
+- [ ] Drop an image on a cell / the inspector cover → custom cover; **Refresh metadata** must not replace it.
+- [ ] Bulk **Mark Owned** adds a physical copy on each game's primary platform — acceptable default, or do you want a picker?
+
 ## Known issues / watch list
 - **Title normaliser over-strips budget labels**: the `.articleless` level strips trailing "Platinum / Essentials / Greatest Hits / Player's Choice", so *Pokémon Platinum* collapses to "pokemon". Exact `.canonical` matching protects precision; only bites if two real titles collapse to the same form. Fix if seen: gate budget-label stripping behind a flag in `TitleNormalizer`.
 - **Fuzzy thresholds** (`FuzzyMatch.confidentThreshold = 0.90`, `plausibleThreshold = 0.74`) were tuned on a hand-made table; re-check against real IGDB / libretro names once covers and photo scan run on the real library.
