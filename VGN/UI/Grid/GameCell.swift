@@ -127,6 +127,9 @@ struct GameCell: View {
                 if game.played {
                     statusBadge(system: "gamecontroller.fill", tint: .green, help: "Played")
                 }
+                if game.hasROM {
+                    statusBadge(system: "memorychip.fill", tint: .purple, help: "Owned as a ROM")
+                }
                 Spacer(minLength: 0)
             }
         }
