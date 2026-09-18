@@ -39,6 +39,8 @@ final class TierBoardModel {
     private(set) var tiers: [TierInfo] = []
     /// Played games with no tier at all — the collapsed tray at the bottom.
     private(set) var unrankedTray: [GameSummary] = []
+    /// Rank-derived 1–10 scores per game (tooltip only — PLAN §7 extension).
+    private(set) var scores: [Int64: DerivedScoreValue] = [:]
     private(set) var isLoading = true
 
     /// The selected game ids (multi-select; drags move the whole set).
@@ -83,6 +85,7 @@ final class TierBoardModel {
         if tiers.isEmpty { await loadTiers() }
         rows = (try? await backend.tierBoardOnce()) ?? []
         unrankedTray = (try? await backend.unrankedPlayedGames()) ?? []
+        scores = (try? await backend.derivedScores()) ?? [:]
         isLoading = false
         subscribeLive()
     }
@@ -178,6 +181,39 @@ final class TierBoardModel {
     private func reconcile() async {
         if let board = try? await backend.tierBoardOnce() { rows = board; latestBoard = board }
         if let tray = try? await backend.unrankedPlayedGames() { unrankedTray = tray; latestTray = tray }
+        if let s = try? await backend.derivedScores() { scores = s }
+    }
+
+    /// Tooltip text for a tile (title + derived score).
+    func tooltip(for game: GameSummary) -> String {
+        guard let score = scores[game.id] else { return game.title }
+        return "\(game.title)  ·  \(score.formatted())"
+    }
+
+    // MARK: Divider moves via the row context menu (PLAN §7 extension)
+
+    func nextTierID(after tierID: Int64) -> Int64? {
+        guard let i = tiers.firstIndex(where: { $0.id == tierID }), i + 1 < tiers.count else { return nil }
+        return tiers[i + 1].id
+    }
+
+    /// "Pull up": move the first placed game of the tier below into this tier.
+    func pullUpFromBelow(_ tierID: Int64) async {
+        guard let lower = nextTierID(after: tierID) else { return }
+        await moveDivider(upperTierID: tierID, lowerTierID: lower, by: 1)
+    }
+
+    /// "Push down": move the last placed game of this tier into the tier below.
+    func pushDownToBelow(_ tierID: Int64) async {
+        guard let lower = nextTierID(after: tierID) else { return }
+        await moveDivider(upperTierID: tierID, lowerTierID: lower, by: -1)
+    }
+
+    private func moveDivider(upperTierID: Int64, lowerTierID: Int64, by k: Int) async {
+        inFlight += 1
+        _ = try? await backend.moveDivider(between: upperTierID, and: lowerTierID, by: k)
+        inFlight -= 1
+        if inFlight == 0 { await reconcile() }
     }
 
     // MARK: Pure planner (unit-tested)

@@ -26,6 +26,7 @@ struct TheTopView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            distributionStrip
             Divider()
             content
         }
@@ -69,6 +70,31 @@ struct TheTopView: View {
         .padding(.horizontal, 16).padding(.vertical, 8)
     }
 
+    // MARK: Distribution strip (games per tier, placed / unplaced)
+
+    @ViewBuilder
+    private var distributionStrip: some View {
+        if !model.rows.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(model.distribution) { div in
+                        HStack(spacing: 4) {
+                            TierChip(letter: div.tier.letter, colorHex: div.tier.colorHex, size: 16)
+                            Text("\(div.placedCount)").font(.caption.monospacedDigit())
+                            if div.unplacedCount > 0 {
+                                Text("+\(div.unplacedCount)")
+                                    .font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(.quaternary, in: Capsule())
+                    }
+                }
+                .padding(.horizontal, 16).padding(.bottom, 6)
+            }
+        }
+    }
+
     // MARK: Content
 
     @ViewBuilder
@@ -87,7 +113,7 @@ struct TheTopView: View {
                     ForEach(model.items) { item in
                         switch item {
                         case .divider(let divider):
-                            TopDividerView(divider: divider)
+                            TopDividerView(divider: divider, model: model)
                         case .game(let row):
                             TopRowView(row: row, model: model, loader: loader)
                         }
@@ -105,13 +131,20 @@ struct TheTopView: View {
         let command = press.modifiers.contains(.command)
         if command, press.key == KeyEquivalent("z") { Task { await model.undo() }; return .handled }
         if command, press.key == KeyEquivalent("e") { export(); return .handled }
+        let dividerFocused = model.focusedDividerLower != nil
         switch press.key {
         case .upArrow:
-            if option { Task { await model.moveFocusedByOne(up: true) } } else { model.moveFocus(up: true) }
+            if option, dividerFocused { Task { await model.nudgeFocusedDivider(down: false) } }
+            else if option { Task { await model.moveFocusedByOne(up: true) } }
+            else { model.moveFocus(up: true) }
             return .handled
         case .downArrow:
-            if option { Task { await model.moveFocusedByOne(up: false) } } else { model.moveFocus(up: false) }
+            if option, dividerFocused { Task { await model.nudgeFocusedDivider(down: true) } }
+            else if option { Task { await model.moveFocusedByOne(up: false) } }
+            else { model.moveFocus(up: false) }
             return .handled
+        case .escape:
+            model.cancelDividerDrag(); return .handled
         case .return:
             model.inspectFocused(); return .handled
         default:
@@ -139,9 +172,21 @@ struct TheTopView: View {
 
 private struct TopDividerView: View {
     let divider: TopDivider
+    let model: TheTopModel
+
+    /// A divider can be dragged only when it has a tier above it and no filter.
+    private var draggable: Bool { divider.upperTierID != nil && !model.filterActive }
+    private var isDragging: Bool {
+        model.dividerDrag?.lowerTierID == divider.tier.id && (model.dividerDrag?.k ?? 0) != 0
+    }
+    private var isFocused: Bool { model.focusedDividerLower == divider.tier.id }
 
     var body: some View {
         HStack(spacing: 8) {
+            if draggable {
+                Image(systemName: "line.3.horizontal")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
             TierChip(letter: divider.tier.letter, colorHex: divider.tier.colorHex, size: 20)
             Text(divider.tier.label).font(.subheadline.weight(.semibold))
             Text("^[\(divider.placedCount) game](inflect: true)")
@@ -149,11 +194,31 @@ private struct TopDividerView: View {
             if divider.unplacedCount > 0 {
                 Text("· \(divider.unplacedCount) unplaced").font(.caption).foregroundStyle(.tertiary)
             }
+            if isDragging, let preview = model.dividerPreviewText() {
+                Text(preview)
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.tint.opacity(0.2), in: Capsule())
+            }
             Rectangle()
                 .fill(Color(hex: divider.tier.colorHex) ?? .secondary)
-                .frame(height: 2)
+                .frame(height: isFocused || isDragging ? 3 : 2)
         }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+        .contentShape(Rectangle())
+        .onTapGesture { if draggable { model.focusDivider(lowerTierID: divider.tier.id) } }
+        .gesture(draggable ? dragGesture : nil)
+        .help(draggable ? "Drag to move the S/A boundary; ⌥↑/⌥↓ when focused" : "")
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                guard let upper = divider.upperTierID else { return }
+                model.updateDividerDrag(upperTierID: upper, lowerTierID: divider.tier.id,
+                                        pixels: value.translation.height)
+            }
+            .onEnded { _ in Task { await model.commitDividerDrag() } }
     }
 }
 

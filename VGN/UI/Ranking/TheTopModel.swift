@@ -276,6 +276,91 @@ final class TheTopModel {
         focusedID = id
     }
 
+    // MARK: Movable dividers (PLAN §7 extension)
+
+    /// The boundary currently being dragged, with its live step `k` (for preview).
+    private(set) var dividerDrag: DividerDragState?
+    /// The focused divider (its lower tier id) for `⌥↑/⌥↓` keyboard moves.
+    private(set) var focusedDividerLower: Int64?
+
+    struct DividerDragState: Equatable, Sendable {
+        var upperTierID: Int64
+        var lowerTierID: Int64
+        var k: Int
+    }
+
+    /// Approximate row height used to translate a divider drag into `k` games.
+    static let dividerStepHeight: CGFloat = 44
+
+    static func dividerSteps(pixels: CGFloat, stepHeight: CGFloat = dividerStepHeight) -> Int {
+        guard stepHeight > 0 else { return 0 }
+        return Int((pixels / stepHeight).rounded())
+    }
+
+    /// Clamp `k` to the games available on each side (downward ≤ lower placed,
+    /// upward ≤ upper placed).
+    static func clampDividerK(_ k: Int, upperPlaced: Int, lowerPlaced: Int) -> Int {
+        if k > 0 { return min(k, lowerPlaced) }
+        if k < 0 { return max(k, -upperPlaced) }
+        return 0
+    }
+
+    /// New placed counts after a (clamped) divider move.
+    static func previewCounts(upperPlaced: Int, lowerPlaced: Int, k: Int) -> (upper: Int, lower: Int) {
+        let kc = clampDividerK(k, upperPlaced: upperPlaced, lowerPlaced: lowerPlaced)
+        return (upperPlaced + kc, lowerPlaced - kc)
+    }
+
+    private func placedCount(_ tierID: Int64?) -> Int {
+        guard let tierID else { return 0 }
+        return rows.filter { $0.tierID == tierID && $0.isPlaced }.count
+    }
+
+    /// Begin / update a divider drag (raw pixels since it started). No-op when filtered.
+    func updateDividerDrag(upperTierID: Int64, lowerTierID: Int64, pixels: CGFloat) {
+        guard !filterActive else { return }
+        // Dragging down (positive pixels) pushes the boundary down = games move up
+        // into the upper tier (k > 0).
+        let raw = Self.dividerSteps(pixels: pixels)
+        let k = Self.clampDividerK(raw, upperPlaced: placedCount(upperTierID), lowerPlaced: placedCount(lowerTierID))
+        dividerDrag = DividerDragState(upperTierID: upperTierID, lowerTierID: lowerTierID, k: k)
+    }
+
+    /// Preview label, e.g. "S 12 → 14 · A 3 → 1".
+    func dividerPreviewText() -> String? {
+        guard let d = dividerDrag, d.k != 0,
+              let upper = tier(d.upperTierID), let lower = tier(d.lowerTierID) else { return nil }
+        let (u, l) = Self.previewCounts(upperPlaced: placedCount(d.upperTierID),
+                                        lowerPlaced: placedCount(d.lowerTierID), k: d.k)
+        return "\(upper.letter) \(placedCount(d.upperTierID)) → \(u) · \(lower.letter) \(placedCount(d.lowerTierID)) → \(l)"
+    }
+
+    func commitDividerDrag() async {
+        defer { dividerDrag = nil }
+        guard let d = dividerDrag, d.k != 0 else { return }
+        await moveDivider(upperTierID: d.upperTierID, lowerTierID: d.lowerTierID, by: d.k)
+    }
+
+    func cancelDividerDrag() { dividerDrag = nil }
+
+    func focusDivider(lowerTierID: Int64?) { focusedDividerLower = lowerTierID; if lowerTierID != nil { focusedID = nil } }
+
+    /// `⌥↑/⌥↓` on a focused divider — move it by one placed game.
+    func nudgeFocusedDivider(down: Bool) async {
+        guard !filterActive, let lower = focusedDividerLower,
+              let idx = tiers.firstIndex(where: { $0.id == lower }), idx > 0 else { return }
+        let upper = tiers[idx - 1].id
+        await moveDivider(upperTierID: upper, lowerTierID: lower, by: down ? 1 : -1)
+    }
+
+    func moveDivider(upperTierID: Int64, lowerTierID: Int64, by k: Int) async {
+        guard !filterActive else { return }
+        inFlight += 1
+        _ = try? await backend.moveDivider(between: upperTierID, and: lowerTierID, by: k)
+        inFlight -= 1
+        if inFlight == 0 { await reload() }
+    }
+
     // MARK: Keyboard focus (↑ ↓)
 
     func moveFocus(up: Bool) {

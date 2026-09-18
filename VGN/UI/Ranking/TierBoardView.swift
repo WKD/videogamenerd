@@ -222,6 +222,7 @@ private struct TierRowView: View {
         TierTileView(game: game, width: model.tileWidth,
                      selected: model.isSelected(game.id),
                      focused: model.focusedID == game.id,
+                     tooltip: model.tooltip(for: game),
                      loader: loader)
             .onTapGesture { model.select(game.id) }
             .highPriorityGesture(
@@ -235,6 +236,11 @@ private struct TierRowView: View {
             .contextMenu {
                 Button("Re-place (run duels)") { Task { await model.rePlace(game.id) } }
                 Button("Remove from tier") { Task { await model.clearGame(game.id) } }
+                if model.nextTierID(after: row.tier.id) != nil {
+                    Divider()
+                    Button("Pull up first of next tier") { Task { await model.pullUpFromBelow(row.tier.id) } }
+                    Button("Push down last to next tier") { Task { await model.pushDownToBelow(row.tier.id) } }
+                }
             }
     }
 
@@ -274,6 +280,7 @@ private struct TierTileView: View {
     let width: Double
     let selected: Bool
     let focused: Bool
+    var tooltip: String = ""
     let loader: any CoverLoading
 
     var body: some View {
@@ -285,7 +292,7 @@ private struct TierTileView: View {
                     .strokeBorder(selected ? Color.accentColor : (focused ? Color.secondary : .clear),
                                   lineWidth: selected || focused ? 2.5 : 0)
             }
-            .help(game.title)
+            .help(tooltip.isEmpty ? game.title : tooltip)
     }
 }
 

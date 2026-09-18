@@ -123,6 +123,43 @@ struct RankingTheTopModelTests {
         #expect(b.moves.first?.atIndex == 0)
     }
 
+    // MARK: Movable divider preview maths
+
+    @Test func dividerStepsFromPixels() {
+        #expect(TheTopModel.dividerSteps(pixels: 90, stepHeight: 44) == 2)
+        #expect(TheTopModel.dividerSteps(pixels: -50, stepHeight: 44) == -1)
+        #expect(TheTopModel.dividerSteps(pixels: 10, stepHeight: 44) == 0)
+    }
+
+    @Test func clampAndPreviewCounts() {
+        #expect(TheTopModel.clampDividerK(5, upperPlaced: 7, lowerPlaced: 3) == 3)   // downward clamp
+        #expect(TheTopModel.clampDividerK(-9, upperPlaced: 7, lowerPlaced: 3) == -7) // upward clamp
+        #expect(TheTopModel.clampDividerK(0, upperPlaced: 7, lowerPlaced: 3) == 0)
+        let (u, l) = TheTopModel.previewCounts(upperPlaced: 7, lowerPlaced: 3, k: 2)
+        #expect(u == 9)
+        #expect(l == 1)
+    }
+
+    @Test func dividerNudgeIssuesMoveWhenUnfiltered() async {
+        let b = unfilteredBackend()
+        let m = TheTopModel(backend: b)
+        await m.start()
+        m.focusDivider(lowerTierID: aTier.id)
+        await m.nudgeFocusedDivider(down: true)
+        #expect(b.dividerMoves.count == 1)
+        #expect(b.dividerMoves.first?.upper == sTier.id)
+        #expect(b.dividerMoves.first?.lower == aTier.id)
+        #expect(b.dividerMoves.first?.k == 1)
+    }
+
+    @Test func dividerMoveDisabledWhenFiltered() async {
+        let b = unfilteredBackend()
+        let m = TheTopModel(backend: b, filter: LibraryFilter(scope: .platform("ps2")))
+        await m.start()
+        await m.moveDivider(upperTierID: sTier.id, lowerTierID: aTier.id, by: 1)
+        #expect(b.dividerMoves.isEmpty)
+    }
+
     // MARK: CSV
 
     @Test func csvEscapesAndFormats() {
