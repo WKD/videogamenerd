@@ -227,6 +227,12 @@ Its one weakness — a single wrong answer misplaces a game — is covered by:
 
 Mechanics: `rank_key` is a sparse sortable key per tier (insert = midpoint of neighbours, renumber the tier in one transaction when gaps run out — trivial at this scale). A game with a tier but no key is **unplaced**: shown dimmed at the end of its tier, unnumbered in the Top, and queued for duels. Changing tier clears the key (unless dropped at an exact position).
 
+### Tuning the buckets: movable tier dividers *(added 2026-09-18)*
+Because tiers are slices of one ordered list, a tier boundary is just a **position** in that list — so it can be dragged. In The Top (and as a handle between rows on the Tier Board) the S/A, A/B… dividers are draggable: sliding the S/A line down by three turns the top three A games into the bottom three S games, order untouched; sliding it up does the reverse. Live counts while dragging ("S: 7 → 9"), one transaction, one undo step. Only *placed* games move with a divider; unplaced tails stay with their tier. This is how the ultimate Top gets tuned: rank first, decide afterwards how exclusive S should be. A small distribution strip (games per tier) sits above The Top.
+
+### Scores are derived, never typed *(added 2026-09-18)*
+A 1–10 score is an **output** of the ranking, not an input (absolute scores drift and cluster; pairwise duels don't). Every placed game gets a score from its tier's band and its position inside the tier: **S 9.0–10 · A 8.0–8.9 · B 7.0–7.9 · C 5.5–6.9 · D 3.0–5.4 · F 1.0–2.9**, interpolated linearly from the top of the tier to the bottom (a lone game sits mid-band); unplaced games show their band's midpoint with a "~". Bands are constants in one place (pure, in `VGN/Ranking/`). Shown in the inspector ("9.6 · #4 overall"), in The Top, on the Tier Board tooltip, and in the CSV export; it moves by itself when I re-rank or drag a divider. Never stored.
+
 ### The three ranking views
 1. **Tier Board** — classic tier-list rows (coloured letter + label, wrapping covers). Drag between rows = change tier; drag within a row = fine order. Unplaced games sit in a dimmed tail with a "Place n games" button.
 2. **The Top** — numbered #1…#N list, podium treatment for the top 10, tier dividers inline. **Respects the library filters**, which gives derived charts for free: *Top PS2*, *Top 90s*, *Top RPGs*. Export as image/CSV.
@@ -367,4 +373,5 @@ Order rationale: 0–4 deliver the whole core loop (add → browse → rank) wit
 | Sample photos | Originals git-ignored; **downsized JPEG fixtures committed**. |
 | Persistence | GRDB stays even with Xcode available (see §1). |
 | ROMs *(added 2026-09-18)* | Third ownership format next to physical/digital. Manual entry only for now — no romlord/emulator import. |
+| 1–10 scores *(decided 2026-09-18)* | Not an input. Tiers + duels stay the way rankings are entered; a 1–10 score is **derived** from tier band + position, and tier **dividers are draggable** to tune bucket sizes (§7). |
 | Recommendations *(added 2026-09-18)* | **Play Next** (§7b): local, explainable, driven by my own rankings + a time bracket; only suggests owned, not-yet-completed games. Built as milestone 5b. **\"Ask Claude\" second opinion: yes** — on-demand re-ranking of the shortlist through the local `claude` CLI, never the default path. |
