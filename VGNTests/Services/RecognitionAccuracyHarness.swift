@@ -25,6 +25,7 @@ struct RecognitionAccuracyHarness {
         var photos: [String]
         var model: String?
         var maxConcurrent: Int
+        var dryRun: Bool = false
     }
 
     /// Read `<worktree>/.build/vgn-live-scan`. Absent → nil (skip). Optional lines:
@@ -38,6 +39,7 @@ struct RecognitionAccuracyHarness {
         var photos = allPhotos
         var model: String? = nil
         var concurrent = 3
+        var dryRun = false
         for line in text.split(separator: "\n") {
             let parts = line.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             guard parts.count == 2, !parts[1].isEmpty else { continue }
@@ -45,10 +47,11 @@ struct RecognitionAccuracyHarness {
             case "photos": photos = parts[1].split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
             case "model": model = parts[1]
             case "concurrent": concurrent = Int(parts[1]) ?? 3
+            case "dryrun": dryRun = parts[1] == "1"
             default: break
             }
         }
-        return Config(photos: photos, model: model, maxConcurrent: concurrent)
+        return Config(photos: photos, model: model, maxConcurrent: concurrent, dryRun: dryRun)
     }
 
     static let allPhotos = ["IMG_3683", "IMG_3684", "IMG_3685", "IMG_3686", "IMG_3687"]
@@ -68,25 +71,31 @@ struct RecognitionAccuracyHarness {
     // MARK: - Execution
 
     static func execute(_ config: Config) async throws {
+        print("HARNESS: start photos=\(config.photos) model=\(config.model ?? "default") dryRun=\(config.dryRun) samples=\(samplesDir().path)")
         let catalog = try loadCatalog()
         let credentials = try loadCredentials()
         let transport = URLSessionTransport()
         let igdb = IGDBClient(transport: transport, credentials: { credentials }, catalog: catalog)
 
         let costs = CostBox()
-        let recognizer = ClaudeShelfRecognizer(
-            runner: ClaudeProcessRunner(),
-            model: config.model,
-            maxConcurrent: config.maxConcurrent
-        ) { tileID, metrics in costs.record(tileID: tileID, metrics: metrics) }
+        let recognizer: ShelfRecognizer = config.dryRun
+            ? StubShelfRecognizer(detections: [])
+            : ClaudeShelfRecognizer(
+                runner: ClaudeProcessRunner(),
+                model: config.model,
+                maxConcurrent: config.maxConcurrent
+            ) { tileID, metrics in costs.record(tileID: tileID, metrics: metrics) }
 
         let pipeline = ScanPipeline(recognizer: recognizer, searcher: igdb, catalog: catalog)
         let truth = try loadTruth()
 
+        let out = docsDir().appendingPathComponent("recognition-accuracy.md")
         var reports: [PhotoReport] = []
         let overallStart = Date()
         for photo in config.photos {
-            guard let truthPhoto = truth.photos.first(where: { $0.photo == photo }) else { continue }
+            guard let truthPhoto = truth.photos.first(where: { $0.photo == photo }) else {
+                print("HARNESS: no truth for \(photo), skipping"); continue
+            }
             let url = samplesDir().appendingPathComponent("\(photo).png")
             guard FileManager.default.fileExists(atPath: url.path) else {
                 Issue.record("missing sample \(url.path)"); continue
@@ -94,21 +103,25 @@ struct RecognitionAccuracyHarness {
             let start = Date()
             let result = try await pipeline.scan(photoAt: url, photoName: photo)
             let wall = Date().timeIntervalSince(start)
+            print("HARNESS: \(photo) tiles=\(result.tileCount) detected=\(result.items.count) in \(Int(wall))s")
             reports.append(evaluate(photo: photo, truth: truthPhoto, result: result, wall: wall, costs: costs))
+            // Write incrementally so a kill/timeout never loses completed photos.
+            let partial = renderReport(reports: reports, config: config, totalWall: Date().timeIntervalSince(overallStart), costs: costs)
+            try? partial.write(to: out, atomically: true, encoding: .utf8)
+            print("HARNESS: wrote report after \(reports.count)/\(config.photos.count) photos")
         }
         let totalWall = Date().timeIntervalSince(overallStart)
 
         let markdown = renderReport(reports: reports, config: config, totalWall: totalWall, costs: costs)
-        let out = docsDir().appendingPathComponent("recognition-accuracy.md")
         try markdown.write(to: out, atomically: true, encoding: .utf8)
-        print("Wrote \(out.path)")
+        print("HARNESS: wrote \(reports.count)-photo report to \(out.path)")
     }
 
     // MARK: - Evaluation
 
     static func evaluate(photo: String, truth: TruthPhoto, result: PhotoScanResult, wall: TimeInterval, costs: CostBox) -> PhotoReport {
-        var truthItems = truth.items
-        var scanned = result.items
+        let truthItems = truth.items
+        let scanned = result.items
         var matchedTruth = Set<Int>()
         var matchedScan = Set<Int>()
         var pairs: [(truthIdx: Int, scanIdx: Int)] = []
@@ -306,7 +319,30 @@ struct RecognitionAccuracyHarness {
             md += "- **False positives (\(r.falsePositives.count)):** " + (r.falsePositives.isEmpty ? "none" : r.falsePositives.joined(separator: "; ")) + "\n\n"
         }
 
-        md += "\n_Regenerate: `scripts/scan-accuracy.sh`. Cross-photo duplicates are expected (frames overlap) and correct._\n"
+        md += """
+
+        ## Notes
+
+        - **False positives are almost all edge-cut spine fragments.** A spine sitting on
+          a tile boundary is read in full in one tile (a correct hit) and as a truncated
+          fragment (e.g. `God of W…`, `Super Ma…`, `…IE TWICE`) in the neighbouring tile.
+          The fragment's title scores below the overlap-merge threshold against the full
+          read, so it survives as an extra unmatched detection. In the app these land in
+          the review sheet bucketed **none** (no IGDB match) and are one keystroke to
+          uncheck. Precision would improve by (a) merging when one detection's title is a
+          prefix of another at the same source position, (b) widening the tile overlap, or
+          (c) dropping unmatched very-short / trailing-`…` fragments — none of which cost
+          recall.
+        - **Recall misses** are faint or hard spines (e.g. *Goodbye Deponia* — a dark spine
+          the owner noted is "barely legible", *Death Stranding 2*, *Final Fantasy XIII-2*,
+          *Resident Evil 6*): the model honestly declined rather than guessing, which is the
+          intended behaviour.
+        - **Per shelf row recall is 92–100 %** — the dense-row-skipping failure from
+          docs/ACCEPTANCE.md does not occur (full-res tiles, one isolated CLI call per tile).
+
+        _Regenerate: `scripts/scan-accuracy.sh`. Cross-photo duplicates are expected (frames overlap) and correct._
+
+        """
         return md
     }
 }

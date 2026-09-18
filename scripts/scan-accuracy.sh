@@ -35,8 +35,11 @@ xcodebuild -project "$WT/VGN.xcodeproj" -scheme VGN -destination 'platform=macOS
 trap 'rm -f "$SENTINEL"' EXIT INT TERM
 
 echo "Running live accuracy harness (this spends Claude usage)…"
+# Timeouts disabled: a full 5-photo run makes ~40+ live `claude` calls and exceeds
+# xctest's default 600 s per-test limit. Each tile call is itself bounded
+# (SIGTERM→SIGKILL) so the run can't hang, and the report is written incrementally.
 xcodebuild -project "$WT/VGN.xcodeproj" -scheme VGN -destination 'platform=macOS' \
-  -derivedDataPath "$WT/.build/dd" \
+  -derivedDataPath "$WT/.build/dd" -test-timeouts-enabled NO \
   test-without-building -only-testing:VGNTests/RecognitionAccuracyHarness 2>&1 | \
-  grep -E "Wrote |error:|Test .* (passed|failed)|Issue" || true
+  grep -E "HARNESS:|error:|Test .* (passed|failed)|Issue" || true
 echo "Done. See docs/recognition-accuracy.md"
