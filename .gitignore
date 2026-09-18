@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Xcode / SwiftPM
+.build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# Claude Code
+.claude/settings.local.json
+.claude/worktrees/
+
+# Original shelf photos live outside the repo (../samples); guard anyway
+samples/

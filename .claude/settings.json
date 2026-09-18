@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit(/**)",
+      "Bash(xcodebuild *)",
+      "Bash(xcrun *)",
+      "Bash(xcode-select -p)",
+      "Bash(swift *)",
+      "Bash(swiftc *)",
+      "Bash(git *)",
+      "Bash(sips *)",
+      "Bash(plutil *)",
+      "Bash(sqlite3 *)",
+      "Bash(claude -p *)",
+      "Bash(claude --version)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "Bash(cp *)",
+      "Bash(find *)",
+      "Bash(open *)",
+      "Bash(pgrep *)",
+      "Bash(pkill VGN)",
+      "Bash(pkill -x VGN)",
+      "WebFetch(domain:api-docs.igdb.com)",
+      "WebFetch(domain:swiftpackageindex.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:developer.apple.com)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)"
+    ]
+  },
+  "worktree": {
+    "baseRef": "head"
+  }
+}
