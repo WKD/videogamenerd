@@ -78,6 +78,8 @@ struct AppDatabase: Sendable {
         migrator.eraseDatabaseOnSchemaChange = true
         #endif
         Migrations.registerV1(in: &migrator)
+        Migrations.registerV2(in: &migrator)
+        Migrations.registerV3(in: &migrator)
         return migrator
     }
 }

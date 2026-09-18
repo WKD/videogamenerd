@@ -25,6 +25,9 @@ enum LibraryQuery {
             EXISTS(SELECT 1 FROM product_games pg
                    JOIN products p ON p.id = pg.product_id
                    WHERE pg.game_id = g.id AND p.kind = 'compilation') AS is_comp,
+            EXISTS(SELECT 1 FROM product_games pgr
+                   JOIN products pr ON pr.id = pgr.product_id
+                   WHERE pgr.game_id = g.id AND pr.format = 'rom') AS has_rom,
             (SELECT group_concat(pid) FROM (
                 SELECT platform_id AS pid FROM game_platforms WHERE game_id = g.id
                 UNION
@@ -47,6 +50,18 @@ enum LibraryQuery {
         if !wheres.isEmpty { sql += "\nWHERE " + wheres.joined(separator: "\n  AND ") }
         sql += "\n" + orderBy(filter)
         return (sql, StatementArguments(args))
+    }
+
+    /// Grid query for the Tier Board (PLAN §7): every played, tiered game, ordered
+    /// by tier then placed-first (fine rank), then the unplaced tail in queue
+    /// order. Reuses the same slim `GameSummary` row shape.
+    static func tierBoardSQL() -> (sql: String, arguments: StatementArguments) {
+        let sql = selectClause + """
+
+            WHERE g.tier_id IS NOT NULL AND g.played = 1
+            ORDER BY t.sort, (g.rank_key IS NULL), g.rank_key, g.updated_at, g.id
+            """
+        return (sql, StatementArguments())
     }
 
     // MARK: - Scope
@@ -111,6 +126,16 @@ enum LibraryQuery {
             wheres.append("g.status IN (\(placeholders(ss.count)))")
             args.append(contentsOf: ss.map { $0 as DatabaseValueConvertible })
         }
+        if !filter.formats.isEmpty {
+            // A game matches if it has ≥ 1 owned product in one of the formats
+            // (PLAN §4 — physical / digital / rom).
+            let fs = filter.formats.map(\.rawValue).sorted()
+            wheres.append("""
+                EXISTS(SELECT 1 FROM product_games pg JOIN products p ON p.id = pg.product_id
+                       WHERE pg.game_id = g.id AND p.format IN (\(placeholders(fs.count))))
+                """)
+            args.append(contentsOf: fs.map { $0 as DatabaseValueConvertible })
+        }
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
             wheres.append("""
@@ -149,15 +174,28 @@ enum LibraryQuery {
 
     // MARK: - FTS
 
-    /// Builds a prefix MATCH query: each whitespace token becomes a quoted
-    /// prefix term, ANDed together. Returns nil for empty/blank input.
+    /// Builds a safe multi-token prefix MATCH query (PLAN §8: "prefix match on
+    /// title + alt titles, results as you type").
+    ///
+    /// Each whitespace-separated token becomes a **double-quoted string literal**
+    /// with a trailing `*`, ANDed together — e.g. `met gear sol` →
+    /// `"met"* "gear"* "sol"*`. Quoting makes the query immune to FTS5 syntax:
+    /// inside a `"…"` string every character is literal except `"`, which is
+    /// escaped by doubling, so punctuation in the user's input (`NieR:Automata`,
+    /// `"`, `*`, `-`, `'`, `(`) can never produce a syntax error. Tokens that
+    /// carry no letters/digits at all (e.g. a lone `-` or `*`) are dropped; if
+    /// nothing tokenizable remains, returns nil (no text constraint).
     static func ftsMatch(_ text: String) -> String? {
-        let tokens = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        guard !tokens.isEmpty else { return nil }
-        return tokens.map { token in
-            let escaped = token.replacingOccurrences(of: "\"", with: "\"\"")
-            return "\"\(escaped)\"*"
-        }.joined(separator: " ")
+        let terms = text
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+            .filter { token in token.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) } }
+            .map { token -> String in
+                let escaped = token.replacingOccurrences(of: "\"", with: "\"\"")
+                return "\"\(escaped)\"*"
+            }
+        guard !terms.isEmpty else { return nil }
+        return terms.joined(separator: " ")
     }
 
     private static func placeholders(_ n: Int) -> String {
@@ -184,7 +222,8 @@ enum LibraryQuery {
             owned: row["owned"],
             isCompilationMember: row["is_comp"],
             platformIDs: platformIDs,
-            status: statusRaw.flatMap(PlayStatus.init(rawValue:))
+            status: statusRaw.flatMap(PlayStatus.init(rawValue:)),
+            hasROM: row["has_rom"]
         )
     }
 }

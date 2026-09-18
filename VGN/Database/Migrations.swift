@@ -28,6 +28,90 @@ enum Migrations {
         }
     }
 
+    // MARK: - v2 — search depth + sort_title shape
+
+    /// v2 deepens search and refreshes sort keys (Data lane, wave 2):
+    ///  - recompute `sort_title` for every existing game to the new
+    ///    ``SortTitle`` shape (article/numeral-normalised, zero-padded), since the
+    ///    stored value's shape changed;
+    ///  - rebuild `games_fts` with a **diacritics-insensitive** tokenizer
+    ///    (`unicode61 remove_diacritics 2`) so "pokemon" finds "Pokémon"
+    ///    (PLAN §8). Rebuilding the FTS table requires re-creating it and its
+    ///    triggers, then repopulating from the content table.
+    static func registerV2(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v2") { db in
+            // (a) Recompute sort_title (shape changed). This fires games_au, which
+            // is harmless — the FTS is rebuilt from scratch just below anyway.
+            for row in try Row.fetchAll(db, sql: "SELECT id, title FROM games") {
+                let id: Int64 = row["id"]
+                let title: String = row["title"]
+                try db.execute(sql: "UPDATE games SET sort_title = ? WHERE id = ?",
+                               arguments: [SortTitle.make(from: title), id])
+            }
+
+            // (b) Rebuild games_fts with the diacritics-insensitive tokenizer.
+            try db.execute(sql: "DROP TRIGGER IF EXISTS games_ai;")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS games_ad;")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS games_au;")
+            try db.execute(sql: "DROP TABLE IF EXISTS games_fts;")
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE games_fts USING fts5(
+                    title,
+                    alt_titles,
+                    content='games',
+                    content_rowid='id',
+                    tokenize='unicode61 remove_diacritics 2'
+                );
+                """)
+            try createGamesFTSTriggers(db)
+            // Repopulate from the external content table.
+            try db.execute(sql: "INSERT INTO games_fts(games_fts) VALUES('rebuild');")
+        }
+    }
+
+    // MARK: - v3 — ownership format ROM
+
+    /// v3 widens `products.format` to allow `rom` (PLAN §4 — a ROM is a
+    /// first-class, manually-entered way to own a game). SQLite cannot ALTER a
+    /// CHECK constraint, so the table is rebuilt the standard way (create new,
+    /// copy, drop, rename), preserving the `ON DELETE RESTRICT` on `platform_id`,
+    /// the platform index, and `product_games`' foreign key / cascade. Runs with
+    /// deferred foreign-key checks (GRDB's documented table-recreation pattern).
+    static func registerV3(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v3", foreignKeyChecks: .deferred) { db in
+            try db.execute(sql: """
+                CREATE TABLE products_new (
+                    id              INTEGER PRIMARY KEY,
+                    title           TEXT,
+                    platform_id     TEXT    NOT NULL REFERENCES platforms(id) ON DELETE RESTRICT,
+                    kind            TEXT    NOT NULL CHECK (kind   IN ('single','compilation')),
+                    format          TEXT    NOT NULL CHECK (format IN ('physical','digital','rom')),
+                    edition         TEXT,
+                    region          TEXT,
+                    igdb_id         INTEGER,
+                    cover_file      TEXT,
+                    source          TEXT    NOT NULL CHECK (source IN ('manual','photo','psn')),
+                    psn_entitlement TEXT,
+                    acquired_at     DATETIME,
+                    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                """)
+            try db.execute(sql: """
+                INSERT INTO products_new
+                    (id, title, platform_id, kind, format, edition, region, igdb_id,
+                     cover_file, source, psn_entitlement, acquired_at, created_at, updated_at)
+                SELECT
+                    id, title, platform_id, kind, format, edition, region, igdb_id,
+                    cover_file, source, psn_entitlement, acquired_at, created_at, updated_at
+                FROM products;
+                """)
+            try db.execute(sql: "DROP TABLE products;")
+            try db.execute(sql: "ALTER TABLE products_new RENAME TO products;")
+            try db.execute(sql: "CREATE INDEX products_platform_idx ON products(platform_id);")
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {
@@ -283,6 +367,12 @@ enum Migrations {
                 content_rowid='id'
             );
             """)
+        try createGamesFTSTriggers(db)
+    }
+
+    /// The three sync triggers that keep `games_fts` in step with `games`. Shared
+    /// by v1 and by v2's FTS rebuild so both produce identical triggers.
+    private static func createGamesFTSTriggers(_ db: Database) throws {
         try db.execute(sql: """
             CREATE TRIGGER games_ai AFTER INSERT ON games BEGIN
                 INSERT INTO games_fts(rowid, title, alt_titles)
