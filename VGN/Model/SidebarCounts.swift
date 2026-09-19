@@ -13,6 +13,13 @@ struct SidebarCounts: Hashable, Sendable {
     /// Per-platform game counts, keyed by platform slug. Only platforms with
     /// ≥ 1 game are expected to appear (the sidebar hides empty ones).
     var perPlatform: [String: Int]
+    /// Per-length-shelf game counts (PLAN §8). Counts use the time-to-beat
+    /// **estimate only**, never the owner's playtime, and depend on the current
+    /// ``PlayPace`` (the observation re-runs when the pace changes). A shelf with no
+    /// games stays in the sidebar (dimmed), so a missing key reads as 0.
+    var lengthShelves: [LengthShelf: Int]
+    /// Games with no time-to-beat estimate at all (the "Unmeasured" row).
+    var unmeasured: Int
 
     init(
         all: Int = 0,
@@ -21,7 +28,9 @@ struct SidebarCounts: Hashable, Sendable {
         backlog: Int = 0,
         unranked: Int = 0,
         duelQueue: Int = 0,
-        perPlatform: [String: Int] = [:]
+        perPlatform: [String: Int] = [:],
+        lengthShelves: [LengthShelf: Int] = [:],
+        unmeasured: Int = 0
     ) {
         self.all = all
         self.owned = owned
@@ -30,6 +39,8 @@ struct SidebarCounts: Hashable, Sendable {
         self.unranked = unranked
         self.duelQueue = duelQueue
         self.perPlatform = perPlatform
+        self.lengthShelves = lengthShelves
+        self.unmeasured = unmeasured
     }
 
     static let empty = SidebarCounts()
@@ -45,6 +56,8 @@ struct SidebarCounts: Hashable, Sendable {
         case .unranked: return unranked
         case .duel: return duelQueue
         case .tierBoard, .theTop, .playNext: return nil
+        case .length(let shelf): return lengthShelves[shelf] ?? 0
+        case .unmeasured: return unmeasured
         case .platform(let slug): return perPlatform[slug] ?? 0
         }
     }

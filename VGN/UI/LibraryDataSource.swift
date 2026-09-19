@@ -11,7 +11,9 @@ import Foundation
 /// the swap in `LibraryViewModel` is one line.
 protocol LibraryDataSource: Sendable {
     /// Live sidebar aggregate counts (PLAN §8 "one observed aggregate query").
-    func sidebarCounts() -> AsyncStream<SidebarCounts>
+    /// `pace` sets the "By Length" shelf edges; a pace change re-subscribes this one
+    /// observation (never adds a second) so the shelf counts update.
+    func sidebarCounts(pace: PlayPace) -> AsyncStream<SidebarCounts>
 
     /// Platforms with ≥ 1 game, full `PlatformInfo` for grouping/labels.
     func platformsInUse() -> AsyncStream<[PlatformInfo]>
@@ -85,6 +87,11 @@ enum LibraryFilterEvaluator {
         case .unranked: if !game.isUnranked { return false }
         case .platform(let slug): if !game.platformIDs.contains(slug) { return false }
         case .playNext: break   // renders its own recommendation view
+        case .length, .unmeasured:
+            // GameSummary carries no time-to-beat estimate, so the preview/in-memory
+            // evaluator cannot band by length — treat these scopes as "no constraint"
+            // (the live SQL bands them for real). See PreviewLibraryDataSource.
+            break
         case .tierBoard, .theTop, .duel:
             // Ranking destinations render a placeholder, not the grid; scope to
             // played games so any incidental query is still sensible.
@@ -158,8 +165,8 @@ enum LibraryFilterEvaluator {
                 let r = (rhs.tierID ?? Int64.max, rhs.rankKey ?? Int64.max, rhs.id)
                 return l < r
             }
-        case .dateAdded, .playtime:
-            // No date/playtime on GameSummary — keep a stable id order.
+        case .dateAdded, .playtime, .length:
+            // No date/playtime/estimate on GameSummary — keep a stable id order.
             ordered = games.sorted { $0.id < $1.id }
         }
         return ascending ? ordered : ordered.reversed()
@@ -171,6 +178,11 @@ enum LibraryFilterEvaluator {
 extension SidebarCounts {
     /// Derive counts from a full game set — used by the preview source and its
     /// tests. The live counts come from a lane-A aggregate observation.
+    ///
+    /// The "By Length" shelf counts and the "Unmeasured" count are left at 0 here:
+    /// a `GameSummary` carries no time-to-beat estimate, so a preview cannot band by
+    /// length (the live SQL does). In sample mode every shelf therefore reads 0 and
+    /// the Unmeasured row stays hidden — documented, not a bug.
     static func derive(from games: [GameSummary]) -> SidebarCounts {
         var perPlatform: [String: Int] = [:]
         for game in games {
@@ -183,7 +195,9 @@ extension SidebarCounts {
             backlog: games.filter(\.isBacklog).count,
             unranked: games.filter(\.isUnranked).count,
             duelQueue: games.filter { $0.played && $0.rankKey == nil }.count,
-            perPlatform: perPlatform
+            perPlatform: perPlatform,
+            lengthShelves: [:],
+            unmeasured: 0
         )
     }
 }
