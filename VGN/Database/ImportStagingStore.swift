@@ -106,6 +106,37 @@ struct ImportStagingStore: Sendable {
             ])
     }
 
+    // MARK: - Owned-copy snapshot (duplicate rule)
+
+    /// One owned copy already in the library, keyed by IGDB id + platform + format, for
+    /// the Delicious "discard duplicate copies" rule (PLAN §5.5). The owner catalogued
+    /// his shelf by photo scan, so a Delicious row whose match already has an owned copy
+    /// of the **same format on the same platform** is a duplicate and is never re-added.
+    struct OwnedCopy: Sendable, Hashable {
+        var igdbID: Int64
+        var platform: String
+        var format: ProductFormat
+        var gameID: Int64
+    }
+
+    /// Every owned single/compilation copy tied to a game that carries an IGDB id.
+    func ownedCopies() async throws -> [OwnedCopy] {
+        try await dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT g.igdb_id AS igdb_id, p.platform_id AS platform_id,
+                       p.format AS format, g.id AS game_id
+                FROM games g
+                JOIN product_games pg ON pg.game_id = g.id
+                JOIN products p ON p.id = pg.product_id
+                WHERE g.igdb_id IS NOT NULL
+                """).compactMap { row in
+                guard let format = ProductFormat(rawValue: row["format"]) else { return nil }
+                return OwnedCopy(igdbID: row["igdb_id"], platform: row["platform_id"],
+                                 format: format, gameID: row["game_id"])
+            }
+        }
+    }
+
     // MARK: - Reads (review buckets)
 
     /// Every staged title for a source, as review-sheet projections.

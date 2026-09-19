@@ -18,14 +18,25 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     var releaseYear: Int?
     var macAvailable: Bool
     var linuxOnly: Bool
+    /// The matched game already has an owned copy of this format on this platform, or
+    /// another row in the same import already claims it (PLAN §5.5). Shown under
+    /// *Already matched*, unticked, and never committed — never a second copy.
+    var shelfDuplicate: Bool = false
+    /// A one-line duplicate note (e.g. "Already on your shelf", "You already own a
+    /// digital copy") shown on the row.
+    var duplicateNote: String? = nil
+    /// Edition / acquired date carried from the source onto the committed copy (Delicious).
+    var edition: String? = nil
+    var acquiredAt: Date? = nil
 
     var id: String { externalID }
 
     var bucket: ImportReviewBucket {
         if ignored { return .ignored }
+        if shelfDuplicate { return .alreadyMatched }
         return matchedGameID == nil ? .new : .alreadyMatched
     }
-    var isCommittable: Bool { include && !ignored }
+    var isCommittable: Bool { include && !ignored && !shelfDuplicate }
     var matchedTitle: String? { proposedMatch?.name }
     var showsSourceTitle: Bool {
         guard let matched = proposedMatch?.name else { return true }
@@ -46,6 +57,21 @@ final class ImportReviewModel {
     private let onLibraryChanged: () -> Void
 
     let summary: ImportSyncSummary
+    /// The copy format an imported title commits as: `.digital` for GOG, `.physical` for
+    /// Delicious. Used at commit and for the duplicate rule (PLAN §5.5).
+    let productFormat: ProductFormat
+    /// The platform slugs the per-row platform popup offers. GOG offers pc/mac; Delicious
+    /// offers every VGN platform (its games span consoles + hybrid discs).
+    let platformChoices: [String]
+    /// Whether to detect "already on your shelf" duplicates (Delicious only, PLAN §5.5).
+    let detectShelfDuplicates: Bool
+    /// A file source shows a header toggle to use its own cover art where a game has none.
+    let showsSourceCoverToggle: Bool
+    var useSourceCovers: Bool
+    /// Ran after a successful commit (Delicious live: apply the source's covers). The Bool
+    /// is `useSourceCovers`.
+    @ObservationIgnored private let afterCommit: (@Sendable (ImportCommitResult, Bool) async -> Void)?
+
     private(set) var rows: [ImportReviewRow] = []
     var platformPolicy: ImportPlatformPolicy {
         didSet { if platformPolicy != oldValue { remapPlatforms() } }
@@ -58,18 +84,36 @@ final class ImportReviewModel {
 
     @ObservationIgnored private let transientByID: [String: ImportStagingRow]
     @ObservationIgnored private let matchByID: [String: ScanMatchOutcome]
+    /// "igdbID|platform" → existing game id for an owned copy of `productFormat` (shelf
+    /// duplicate); a different format on the same platform lands in `otherFormatKeys`.
+    @ObservationIgnored private var sameFormatKeys: [String: Int64] = [:]
+    @ObservationIgnored private var otherFormatKeys: Set<String> = []
+
+    /// Header line: file source → "N games read from …"; network source → cache/network.
+    var summaryLine: String { summary.summaryLine(sourceLabel: sourceLabel) }
 
     init(source: String,
          sourceLabel: String,
          staging: ImportStagingStore,
          result: ImportSyncResult,
          platformPolicy: ImportPlatformPolicy = .macWhenAvailable,
+         productFormat: ProductFormat = .digital,
+         platformChoices: [String] = ["pc", "mac"],
+         detectShelfDuplicates: Bool = false,
+         showsSourceCoverToggle: Bool = false,
+         afterCommit: (@Sendable (ImportCommitResult, Bool) async -> Void)? = nil,
          onLibraryChanged: @escaping () -> Void = {}) {
         self.source = source
         self.sourceLabel = sourceLabel
         self.staging = staging
         self.summary = result.summary
         self.platformPolicy = platformPolicy
+        self.productFormat = productFormat
+        self.platformChoices = platformChoices
+        self.detectShelfDuplicates = detectShelfDuplicates
+        self.showsSourceCoverToggle = showsSourceCoverToggle
+        self.useSourceCovers = showsSourceCoverToggle
+        self.afterCommit = afterCommit
         self.onLibraryChanged = onLibraryChanged
         self.transientByID = Dictionary(result.rows.map { ($0.externalID, $0) }, uniquingKeysWith: { a, _ in a })
         self.matchByID = Dictionary(
@@ -78,8 +122,16 @@ final class ImportReviewModel {
 
     /// Read the staged titles and build the review rows. Call once when the sheet opens.
     func load() async {
+        if detectShelfDuplicates {
+            for copy in (try? await staging.ownedCopies()) ?? [] {
+                let key = "\(copy.igdbID)|\(copy.platform)"
+                if copy.format == productFormat { sameFormatKeys[key] = copy.gameID }
+                else { otherFormatKeys.insert(key) }
+            }
+        }
         let titles = (try? await staging.titles(source: source)) ?? []
         rows = titles.map { makeRow(from: $0) }
+        if detectShelfDuplicates { markIntraImportDuplicates() }
     }
 
     private func makeRow(from title: ImportStagedTitle) -> ImportReviewRow {
@@ -90,7 +142,7 @@ final class ImportReviewModel {
         let confidence = outcome?.bucket ?? .none
         // Confident, still-New matches are pre-ticked; the rest wait (PLAN §14.3).
         let include = bucket == .new && confidence == .confident
-        return ImportReviewRow(
+        var row = ImportReviewRow(
             externalID: title.externalID,
             sourceTitle: title.name,
             platform: title.platform,
@@ -104,6 +156,46 @@ final class ImportReviewModel {
             releaseYear: transient?.releaseYear ?? outcome?.best?.releaseYear,
             macAvailable: transient?.macAvailable ?? false,
             linuxOnly: transient?.linuxOnly ?? false)
+        row.edition = transient?.edition
+        row.acquiredAt = transient?.acquiredAt
+
+        // Shelf-duplicate rule: a New row whose match already has an owned copy of this
+        // format on this platform is dropped to Already matched, unticked (PLAN §5.5).
+        if detectShelfDuplicates, bucket == .new, let igdbID = row.proposedMatch?.igdbID,
+           let platform = row.platform {
+            let key = "\(igdbID)|\(platform)"
+            if sameFormatKeys[key] != nil {
+                row.shelfDuplicate = true
+                row.include = false
+                row.duplicateNote = "Already on your shelf"
+            } else if otherFormatKeys.contains(key) {
+                row.duplicateNote = "You already own a different copy — this adds your \(productFormat.label.lowercased()) one"
+            }
+        }
+        return row
+    }
+
+    /// Two source rows that resolve to the same game + platform: import one, list the
+    /// rest as duplicates (PLAN §5.5).
+    private func markIntraImportDuplicates() {
+        var seen = Set<String>()
+        for i in rows.indices {
+            guard !rows[i].ignored, !rows[i].shelfDuplicate, rows[i].bucket == .new,
+                  let key = intraImportKey(rows[i]) else { continue }
+            if seen.contains(key) {
+                rows[i].shelfDuplicate = true
+                rows[i].include = false
+                rows[i].duplicateNote = "Another copy of this game is in this import"
+            } else {
+                seen.insert(key)
+            }
+        }
+    }
+
+    private func intraImportKey(_ row: ImportReviewRow) -> String? {
+        guard let platform = row.platform else { return nil }
+        if let igdbID = row.proposedMatch?.igdbID { return "i:\(igdbID)|\(platform)" }
+        return "n:\(row.sourceTitle.lowercased())|\(platform)"
     }
 
     // MARK: Buckets
@@ -151,9 +243,12 @@ final class ImportReviewModel {
         }
     }
 
-    /// Re-map every pending row's platform under the current policy (PLAN §14.3).
+    /// Re-map the PC/Mac rows' platform under the current policy (PLAN §14.3). Only rows
+    /// currently on `pc`/`mac` follow the switch — a Delicious console game (ps3, wii…)
+    /// keeps its slug, and a row still needing a platform pick is left untouched.
     private func remapPlatforms() {
         for i in rows.indices {
+            guard let current = rows[i].platform, current == "pc" || current == "mac" else { continue }
             rows[i].platform = platformPolicy == .alwaysPC ? "pc" : (rows[i].macAvailable ? "mac" : "pc")
         }
     }
@@ -192,7 +287,8 @@ final class ImportReviewModel {
             }
             return ImportCommitItem(
                 source: source, externalID: row.externalID, platformID: platformID,
-                format: .digital, target: target)
+                format: productFormat, target: target,
+                edition: row.edition, acquiredAt: row.acquiredAt)
         }
     }
 
@@ -202,9 +298,14 @@ final class ImportReviewModel {
         commitError = nil
         let items = commitItems()
         let store = staging
+        let after = afterCommit
+        let useCovers = useSourceCovers
         Task {
             do {
                 let result = try await store.commit(items)
+                // File sources (Delicious) can apply their own covers to games left
+                // without one — a background step, never blocking the success banner.
+                if let after { await after(result, useCovers) }
                 successMessage = Self.successMessage(from: result, sourceLabel: sourceLabel)
                 committed = true
                 onLibraryChanged()
@@ -255,10 +356,15 @@ struct ImportReviewSheet: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Import from \(model.sourceLabel)").font(.headline)
-                Text(model.summary.networkSummaryLine).font(.caption).foregroundStyle(.secondary)
+                Text(model.summaryLine).font(.caption).foregroundStyle(.secondary)
                 if let note = model.summary.ownedGapNote {
                     Label(note, systemImage: "exclamationmark.circle")
                         .font(.caption2).foregroundStyle(.secondary)
+                }
+                if model.showsSourceCoverToggle {
+                    Toggle("Use my \(model.sourceLabel) covers when a game has no cover",
+                           isOn: $model.useSourceCovers)
+                        .font(.caption).toggleStyle(.checkbox)
                 }
             }
             Spacer()
@@ -364,7 +470,7 @@ private struct ImportReviewRowView: View {
                 confidenceBadge
             }
             if row.showsSourceTitle, row.matchedTitle != nil {
-                Text("GOG: \(row.sourceTitle)").font(.caption).foregroundStyle(.secondary)
+                Text("\(model.sourceLabel): \(row.sourceTitle)").font(.caption).foregroundStyle(.secondary)
             }
             HStack(spacing: 6) {
                 platformMenu
@@ -373,6 +479,14 @@ private struct ImportReviewRowView: View {
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(.quaternary, in: Capsule())
                         .help("This title runs only on Linux; imported as a PC game.")
+                }
+                if let note = row.duplicateNote {
+                    Text(note).font(.caption2).foregroundStyle(.secondary)
+                }
+                if let edition = row.edition {
+                    Text(edition).font(.caption2)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
                 }
                 if let reason = row.ignoreReason, row.bucket == .ignored {
                     Text(reason.label).font(.caption2).foregroundStyle(.secondary)
@@ -391,7 +505,7 @@ private struct ImportReviewRowView: View {
 
     private var platformMenu: some View {
         Menu {
-            ForEach(["pc", "mac"], id: \.self) { slug in
+            ForEach(model.platformChoices, id: \.self) { slug in
                 Button(PlatformLabels.short(slug)) { model.setPlatform(slug, externalID: row.externalID) }
             }
         } label: {
