@@ -313,6 +313,29 @@ struct LibraryStore: Sendable {
         try await dbWriter.write { db in try RankingStore.applySetTier(gameIDs, tierID: tierID, db) }
     }
 
+    /// Mark several games **played** in one transaction (PLAN §8 "Mark Played As").
+    /// Every id gets `played = 1`. When `status` is non-nil it is written too; a
+    /// `nil` status leaves any existing status untouched (so a plain "Played" mark
+    /// never wipes a game's completion status). The whole batch is atomic: an
+    /// unknown id rolls the transaction back (nothing is marked) so a stale
+    /// selection can never partially apply.
+    func markPlayed(_ gameIDs: [Int64], status: PlayStatus?) async throws {
+        guard !gameIDs.isEmpty else { return }
+        try await dbWriter.write { db in
+            let now = Date()
+            for id in gameIDs {
+                if let status {
+                    try db.execute(sql: "UPDATE games SET played = 1, status = ?, updated_at = ? WHERE id = ?",
+                                   arguments: [status.rawValue, now, id])
+                } else {
+                    try db.execute(sql: "UPDATE games SET played = 1, updated_at = ? WHERE id = ?",
+                                   arguments: [now, id])
+                }
+                guard db.changesCount == 1 else { throw LibraryError.notFound }
+            }
+        }
+    }
+
     /// Set the optional completion status (PLAN §12). `nil` clears it.
     func setStatus(_ gameIDs: [Int64], _ status: PlayStatus?) async throws {
         try await dbWriter.write { db in
