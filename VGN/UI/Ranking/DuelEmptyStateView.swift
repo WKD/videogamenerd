@@ -58,7 +58,8 @@ struct DuelEmptyStateView: View {
         HStack(spacing: 14) {
             ForEach(model.stats.perTier) { tier in
                 VStack(spacing: 4) {
-                    TierChip(letter: tier.letter, colorHex: model.tier(tier.tierID)?.colorHex, size: 28)
+                    TierChip(letter: tier.letter, colorHex: model.tier(tier.tierID)?.colorHex, size: 28,
+                             label: model.tier(tier.tierID)?.label)
                     Text("\(tier.placed)")
                         .font(.headline.monospacedDigit())
                     if tier.unplaced > 0 {

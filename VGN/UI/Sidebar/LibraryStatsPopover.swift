@@ -81,6 +81,10 @@ struct LibraryStatsPopover: View {
                             Text(row.letter).font(.caption.bold())
                             Text(row.count.formatted()).font(.caption2).foregroundStyle(.secondary)
                         }
+                        .help(TierChip.hoverText(
+                            letter: row.letter,
+                            label: tiers.first { $0.letter == row.letter }?.label,
+                            labels: [:]))
                     }
                 }
             }

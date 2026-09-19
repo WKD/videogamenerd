@@ -43,6 +43,11 @@ protocol LibraryDataSource: Sendable {
     /// any duel / drag / divider move so "#4 overall" stays current.
     func scoreLineStream(for gameID: Int64) -> AsyncStream<DerivedScoreLine?>
 
+    /// Live map of every tiered game's derived 1–10 score, for the grid badge
+    /// tooltips (PLAN §7). Re-yields after any tier/rank change. Scores are never
+    /// stored — always derived from the ranking snapshot.
+    func scoresStream() -> AsyncStream<[Int64: DerivedScoreValue]>
+
     /// A cheap aggregate snapshot for the sidebar stats popover (PLAN §6.4).
     func libraryStats() async -> LibraryStats
 }
@@ -51,6 +56,7 @@ extension LibraryDataSource {
     // Defaults so preview sources need not implement these explicitly.
     func compilationMemberIDs(productID: Int64) async -> [Int64] { [] }
     func scoreLineStream(for gameID: Int64) -> AsyncStream<DerivedScoreLine?> { onceStream(nil) }
+    func scoresStream() -> AsyncStream<[Int64: DerivedScoreValue]> { onceStream([:]) }
     func libraryStats() async -> LibraryStats { .empty }
 }
 
@@ -95,13 +101,24 @@ enum LibraryFilterEvaluator {
                 return false
             }
         }
-        // Tier
-        if !filter.tierIDs.isEmpty {
-            guard let tid = game.tierID, filter.tierIDs.contains(tid) else { return false }
+        // Tier (OR within kind: any selected tier, plus "Unrated" = played, no tier).
+        if !filter.tierIDs.isEmpty || filter.includeUnrated {
+            let inSet = game.tierID.map(filter.tierIDs.contains) ?? false
+            let isUnrated = filter.includeUnrated && game.played && game.tierID == nil
+            if !(inSet || isUnrated) { return false }
         }
-        // Status
-        if !filter.statuses.isEmpty {
-            guard let status = game.status, filter.statuses.contains(status) else { return false }
+        // Completion (OR within kind: any selected status, "Not Played", "No Status").
+        if !filter.statuses.isEmpty || filter.includeNotPlayed || filter.includeNoStatus {
+            let inSet = game.status.map(filter.statuses.contains) ?? false
+            let isNotPlayed = filter.includeNotPlayed && !game.played
+            let isNoStatus = filter.includeNoStatus && game.played && game.status == nil
+            if !(inSet || isNotPlayed || isNoStatus) { return false }
+        }
+        // Ownership: "Not Owned" is evaluable via GameSummary.owned; specific format
+        // values are not carried on the summary and stay SQL-only, so a selected
+        // format leaves this facet unconstrained here (matches prior behaviour).
+        if filter.includeNotOwned, filter.formats.isEmpty, game.owned {
+            return false
         }
         // Explicit platform facet (independent of scope)
         if let platform = filter.platform, !game.platformIDs.contains(platform) {

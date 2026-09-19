@@ -159,7 +159,7 @@ private struct TierRowView: View {
     // Left coloured letter block — a tier drop target without a position.
     private var letterBlock: some View {
         VStack(spacing: 4) {
-            TierChip(letter: row.tier.letter, colorHex: row.tier.colorHex, size: 30)
+            TierChip(letter: row.tier.letter, colorHex: row.tier.colorHex, size: 30, label: row.tier.label)
             Text(row.tier.label)
                 .font(.caption2).foregroundStyle(.secondary)
                 .lineLimit(1).minimumScaleFactor(0.7)

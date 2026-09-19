@@ -10,6 +10,10 @@ struct GameCell: View {
     @Bindable var model: GameCellModel
     let coverLoader: any CoverLoading
     var isSelected: Bool = false
+    /// The game's derived 1–10 score, for the tier-badge hover tooltip (nil when
+    /// the game is unranked or scores haven't loaded). Passed as a plain value so
+    /// only cells whose score changed re-render.
+    var score: DerivedScoreValue? = nil
     var cellWidth: CGFloat = 150
 
     var onTap: () -> Void = {}
@@ -173,7 +177,9 @@ struct GameCell: View {
         VStack {
             HStack(alignment: .top) {
                 if let letter = game.tierLetter {
-                    TierChip(letter: letter, colorHex: game.tierColorHex, size: 22)
+                    // Label comes from the `\.tierLabels` environment; the derived
+                    // score (when the game is ranked) enriches the hover tooltip.
+                    TierChip(letter: letter, colorHex: game.tierColorHex, size: 22, score: score)
                 }
                 Spacer(minLength: 0)
                 if game.isCompilationMember {

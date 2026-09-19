@@ -62,6 +62,11 @@ struct GRDBLibraryDataSource: LibraryDataSource {
         return Self.bridge(ranking.scoreLineObservation(for: gameID))
     }
 
+    func scoresStream() -> AsyncStream<[Int64: DerivedScoreValue]> {
+        guard let ranking else { return onceStream([:]) }
+        return Self.bridge(ranking.derivedScoresObservation())
+    }
+
     func libraryStats() async -> LibraryStats {
         (try? await store.libraryStats()) ?? .empty
     }

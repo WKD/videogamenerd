@@ -81,7 +81,8 @@ struct TheTopView: View {
                 HStack(spacing: 10) {
                     ForEach(model.distribution) { div in
                         HStack(spacing: 4) {
-                            TierChip(letter: div.tier.letter, colorHex: div.tier.colorHex, size: 16)
+                            TierChip(letter: div.tier.letter, colorHex: div.tier.colorHex, size: 16,
+                                     label: div.tier.label)
                             Text("\(div.placedCount)").font(.caption.monospacedDigit())
                             if div.unplacedCount > 0 {
                                 Text("+\(div.unplacedCount)")
@@ -190,7 +191,8 @@ private struct TopDividerView: View {
                 Image(systemName: "line.3.horizontal")
                     .font(.caption2).foregroundStyle(.tertiary)
             }
-            TierChip(letter: divider.tier.letter, colorHex: divider.tier.colorHex, size: 20)
+            TierChip(letter: divider.tier.letter, colorHex: divider.tier.colorHex, size: 20,
+                     label: divider.tier.label)
             Text(divider.tier.label).font(.subheadline.weight(.semibold))
             Text("^[\(divider.placedCount) game](inflect: true)")
                 .font(.caption).foregroundStyle(.secondary)
@@ -315,7 +317,8 @@ private struct TopRowView: View {
     @ViewBuilder
     private var trailing: some View {
         if let letter = row.tier?.letter {
-            TierChip(letter: letter, colorHex: row.tier?.colorHex, size: 18)
+            TierChip(letter: letter, colorHex: row.tier?.colorHex, size: 18,
+                     label: row.tier?.label, score: row.score)
         }
         if !row.isPlaced {
             Button("Place") { model.goToDuel() }.buttonStyle(.borderless).font(.caption)

@@ -34,7 +34,8 @@ struct BorderSuggestionCard: View {
                     if let toTier {
                         HStack(spacing: 8) {
                             Text("Move to")
-                            TierChip(letter: toTier.letter, colorHex: toTier.colorHex, size: 22)
+                            TierChip(letter: toTier.letter, colorHex: toTier.colorHex, size: 22,
+                                     label: toTier.label)
                             Text(toTier.label)
                         }
                         .font(.callout)

@@ -102,6 +102,81 @@ import GRDB
         #expect(try await titles(store, LibraryFilter(genres: ["RPG"])) == ["Chrono Trigger"])
     }
 
+    // MARK: - Facets, "Unrated" / "Not Played" / "No Status" / "Not Owned"
+    // Bloodborne: owned+played, S, finished. Gran Turismo: owned-only (not played),
+    // no tier, no status. Broken Sword: played-only (not owned), no tier, no status.
+    // Journey: owned+played, no tier, completed. Chrono Trigger: owned+played, A, no status.
+    //   Unrated (played, no tier):  Broken Sword, Journey
+    //   Not Played (played = 0):    Gran Turismo
+    //   No Status (played, no status): Broken Sword, Chrono Trigger
+    //   Not Owned (no owned copy):  Broken Sword
+
+    @Test func unratedAlone() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        #expect(try await titles(store, LibraryFilter(includeUnrated: true)) == ["Broken Sword", "Journey"])
+    }
+
+    @Test func unratedORsWithSelectedTiers() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        // S + Unrated: S-tier games and every unrated (played, untiered) game.
+        #expect(try await titles(store, LibraryFilter(tierIDs: [1], includeUnrated: true)) ==
+                ["Bloodborne", "Broken Sword", "Journey"])
+    }
+
+    @Test func notPlayedAlone() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        #expect(try await titles(store, LibraryFilter(includeNotPlayed: true)) == ["Gran Turismo"])
+    }
+
+    @Test func noStatusAloneIsPlayedButStatusLess() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        // Excludes Gran Turismo (not played) even though it too has no status.
+        #expect(try await titles(store, LibraryFilter(includeNoStatus: true)) ==
+                ["Broken Sword", "Chrono Trigger"])
+    }
+
+    @Test func completionFacetORsStatusesNotPlayedAndNoStatus() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        // finished OR Not Played OR No Status.
+        #expect(try await titles(store,
+            LibraryFilter(statuses: [.finished], includeNotPlayed: true, includeNoStatus: true)) ==
+                ["Bloodborne", "Gran Turismo", "Broken Sword", "Chrono Trigger"])
+    }
+
+    @Test func notOwnedAlone() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        #expect(try await titles(store, LibraryFilter(includeNotOwned: true)) == ["Broken Sword"])
+    }
+
+    @Test func notOwnedORsWithSelectedFormats() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        // Physical OR Not Owned: the physically-owned games plus the un-owned one.
+        // All owned copies in the fixture are physical, so this is every owned game
+        // plus Broken Sword (un-owned) = the whole library.
+        #expect(try await titles(store, LibraryFilter(formats: [.physical], includeNotOwned: true)) ==
+                ["Bloodborne", "Gran Turismo", "Broken Sword", "Journey", "Chrono Trigger"])
+    }
+
+    @Test func newFacetsAcrossKindsSearchAndContradictoryScopes() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await buildLibrary(store)
+        // Unrated AND platform ps4: played, untiered ps4 games = Journey.
+        #expect(try await titles(store, LibraryFilter(includeUnrated: true, platform: "ps4")) == ["Journey"])
+        // Unrated AND search text.
+        #expect(try await titles(store, LibraryFilter(searchText: "journ", includeUnrated: true)) == ["Journey"])
+        // Contradiction: scope Owned + Not Owned → empty, no crash.
+        #expect(try await titles(store, LibraryFilter(includeNotOwned: true, scope: .owned)).isEmpty)
+        // Sensible combo: scope Backlog + Not Played → the backlog (owned, not played).
+        #expect(try await titles(store, LibraryFilter(includeNotPlayed: true, scope: .backlog)) == ["Gran Turismo"])
+    }
+
     // MARK: - Facets, AND across kinds
 
     @Test func facetsANDAcrossKinds() async throws {
