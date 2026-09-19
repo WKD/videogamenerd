@@ -41,6 +41,12 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 
 ## 4. Open items
 
+### Delicious Library import (§5.5, wave 10)
+- **Own-cover fallback vs enrichment.** A Delicious box-art cover applied to a game with no cover is stored **without** the user-chosen marker, so it is not locked. But enrichment only fills an **empty** `cover_file`; once the Delicious cover is set, `cover_file` is non-empty, so the background cover job won't fetch a "better" one on its own. In practice the Delicious regional box art sticks unless the owner uses **Choose Cover…** / **Remove custom cover**. Making enrichment prefer a higher-quality cover over an import-supplied one would need an enrichment change (off-limits this wave). [watch]
+- **Title cleaning is heuristic** (match-title only; the original is always shown). The dry run over the owner's real file cleaned 20/103 titles well, but a few leave harmless residue in the *match* string only — a stray region tail ("Evolution Worlds - US"), empty brackets ("Resident Evil 2 [ ] [ UK Import ]", which the matcher's own bracket-stripping then removes), or a bundle cut at " + " that shortens a compilation's match ("God of war collection: God of war 1"). These affect only the IGDB query; the owner reviews and can pick an alternative or create manually. [watch]
+- **Live cover application is window-only.** The reader, mapping, duplicate rules, commit payload and the cover DB setter are unit-tested; the end-to-end live cover apply (real cover directory + files) is exercised only by launching the app. [owner]
+- **Covers not offered in matcher-less runs isn't a thing** — the toggle appears whenever a cover store exists (live and sample). In sample mode the cover writes to a temp dir, so it's a no-op for the real library.
+
 ### Library, Quick Add, search
 - IGDB `search` misses mid-word prefixes and alt-name-only titles; the name-prefix / alternative-name fallback and the **typed-year filter** ("super mario bros 1985") cover the known cases; odd titles may still need "Create '…' manually". [watch]
 - Enrichment never overwrites non-empty fields (plus the `user_edited` marker): a wrong-but-non-empty IGDB value is only replaced by "Refresh metadata". Manual entries (no IGDB id) get no metadata/time-to-beat, and a cover job only on platforms with a libretro repo.
