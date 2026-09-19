@@ -171,7 +171,6 @@ struct RootView: View {
             tierMenu
             statusMenu
             formatMenu
-            copiesMenu
             playtimeMenu
             platformMenu
             sortMenu
@@ -282,7 +281,11 @@ struct RootView: View {
         !vm.filter.statuses.isEmpty || vm.filter.includeNotPlayed || vm.filter.includeNoStatus
     }
 
-    // Ownership format (physical / digital / ROM), driven by ProductFormat.
+    // Ownership format (physical / digital / ROM) + the "Multiple Copies" facet,
+    // driven by ProductFormat. "Multiple Copies" (≥ 2 owned products) is its own facet
+    // that ANDs with the formats — "Physical" + "Multiple Copies" = games with a
+    // physical copy that are owned several times (owner request 2026-09-19: folded in
+    // here to save toolbar space).
     private var formatMenu: some View {
         Menu {
             ForEach(ProductFormat.allCases, id: \.self) { format in
@@ -290,34 +293,20 @@ struct RootView: View {
             }
             Divider()
             Toggle("Not Owned", isOn: flag(\.includeNotOwned))
-            if !vm.filter.formats.isEmpty || vm.filter.includeNotOwned {
+            Toggle("Multiple Copies", isOn: flag(\.multipleCopies))
+                .help("Games you own more than once — several copies or formats (e.g. physical + digital). ANDs with a chosen format.")
+            if formatFacetActive {
                 Divider()
                 Button("Clear") { clearFormatFacet() }
             }
         } label: {
             Label("Format", systemImage: "opticaldisc")
-                .symbolVariant(vm.filter.formats.isEmpty && !vm.filter.includeNotOwned ? .none : .fill)
+                .symbolVariant(formatFacetActive ? .fill : .none)
         }
     }
 
-    // "Owns multiple copies" — games I own in more than one copy or format
-    // (≥ 2 owned products). Its own facet, ANDed across kinds (owner request 2026-09-19).
-    private var copiesMenu: some View {
-        Menu {
-            Toggle("Owns multiple copies", isOn: flag(\.multipleCopies))
-                .help("Games you own more than once — several copies or formats (e.g. physical + digital).")
-            if vm.filter.multipleCopies {
-                Divider()
-                Button("Clear") {
-                    var f = vm.filter
-                    f.multipleCopies = false
-                    vm.setFilter(f)
-                }
-            }
-        } label: {
-            Label("Copies", systemImage: "square.on.square")
-                .symbolVariant(vm.filter.multipleCopies ? .fill : .none)
-        }
+    private var formatFacetActive: Bool {
+        !vm.filter.formats.isEmpty || vm.filter.includeNotOwned || vm.filter.multipleCopies
     }
 
     // Playtime bands (< 4 h … > 200 h) over effective playtime, falling back to the
@@ -433,6 +422,7 @@ struct RootView: View {
         var f = vm.filter
         f.formats.removeAll()
         f.includeNotOwned = false
+        f.multipleCopies = false
         vm.setFilter(f)
     }
 
