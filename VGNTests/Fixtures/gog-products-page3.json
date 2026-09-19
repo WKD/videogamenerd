@@ -1,0 +1,15 @@
+{
+  "sortBy": "title",
+  "page": 3,
+  "totalProducts": 10,
+  "totalPages": 3,
+  "productsPerPage": 4,
+  "products": [
+    { "id": 100009, "title": "Synthetic Puzzle", "isGame": true, "isHidden": false,
+      "category": "Puzzle",
+      "worksOn": { "Windows": true, "Mac": true, "Linux": false } },
+    { "id": 100010, "title": "Synthetic Wallpapers", "isGame": false, "isHidden": false,
+      "category": "Goodies",
+      "worksOn": { "Windows": true, "Mac": false, "Linux": false } }
+  ]
+}

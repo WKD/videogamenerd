@@ -84,6 +84,31 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 ### Safety
 - Export (JSON/CSV) and Restore from Backup… are in the File menu; the restore glue (`PendingRestore`, applied at next launch after a safety snapshot) is unit-tested since 2026-09-19 (no bug found). [owner: still try a restore once before relying on it]
 
+### GOG import (G0 scaffolding — wave 8, lane A)
+The shared importer machinery, migration v5, the GOG client/auth/mapping/validator and the
+sync coordinator are built and tested on **synthetic fixtures only** — no `gog.com` request
+has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live steps G1–G5:
+- **Every GOG response shape is an assumption.** DTOs come from community documentation, not
+  a recorded response. All guesses are marked `// ASSUMPTION(G0):` and listed in
+  `docs/gog-import.md`. Field names, the `releaseDate` variants, and especially the **noise
+  heuristics** (DLC / soundtrack / demo detection off `isGame`/`isHidden`/`category`/title
+  keywords) must be confirmed and tuned against real data at G4/G5. **[G1–G5, with owner]**
+- **Sign-in is OAuth route (a) only** (owner decision, G1). The session-cookie route was not
+  modelled. Galaxy client id/secret are the documented public values in
+  `GOGAuthConfiguration+Galaxy.swift` — **verify at G1** they still work.
+- **`ProductSource` has no `.gog` case.** `VGN/Model/GameEnums.swift` is outside this lane's
+  owned paths, so committed GOG Products store `source = 'gog'` as a raw string (the DB CHECK
+  was widened in v5). Reads via `ProductSource(rawValue:)` fall back to `.manual`, so a
+  GOG-sourced Product currently *displays* as manual-sourced. **[Model owner: add `.gog`]**
+- **Keychain adapter for the GOG token is not built.** `GOGAuth` depends on a `GOGTokenStoring`
+  seam with an in-memory fake; a `SecretStoring`-backed adapter needs a `SecretKey.gog` case,
+  which lives in the out-of-lane `VGN/Services/Keychain/SecretStoring.swift`. **[Keychain owner
+  / wiring lane]**
+- **Linux-only titles** map to `pc` but carry no persisted "note" (no column for it); the
+  review-sheet lane should surface it from the mapping. **[review-sheet lane]**
+- Nothing is wired into `AppEnvironment`/`ServicesFactory`, and there is no Settings pane,
+  WKWebView login bridge or review sheet yet — those are the next (UI) lane's. **[wave 8+]**
+
 ## 5. Out of scope for now [later]
 PSN import (M7, fully planned in PLAN §13) · Polish M9 (Liquid Glass touches, Dark/Tinted icon via Icon Composer — masters in `design/app-icon/`, Top export as image, richer empty states) · HowLongToBeat scraping (the "Open on HowLongToBeat" link exists) · TheGamesDB covers · `ClaudeAPIRecognizer` · editable tier labels/colours (owner: not now) · adjustable snooze.
 

@@ -1,0 +1,9 @@
+{
+  "page": 1,
+  "totalProducts": 2,
+  "totalPages": 1,
+  "products": [
+    { "id": 200001, "title": "Synthetic Dup", "worksOn": { "Windows": true } },
+    { "id": 200001, "title": "Synthetic Dup Again", "worksOn": { "Windows": true } }
+  ]
+}

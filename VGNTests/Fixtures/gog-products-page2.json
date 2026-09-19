@@ -1,0 +1,23 @@
+{
+  "sortBy": "title",
+  "page": 2,
+  "totalProducts": 10,
+  "totalPages": 3,
+  "productsPerPage": 4,
+  "products": [
+    { "id": 100005, "title": "Synthetic Linux Adventure", "isGame": true, "isHidden": false,
+      "category": "Adventure",
+      "worksOn": { "Windows": false, "Mac": false, "Linux": true },
+      "releaseDate": { "date": "2016-03-03 00:00:00", "timezone_type": 3, "timezone": "UTC" } },
+    { "id": 100006, "title": "Synthetic Hidden Gem", "isGame": true, "isHidden": true,
+      "category": "Puzzle",
+      "worksOn": { "Windows": true, "Mac": false, "Linux": false } },
+    { "id": 100007, "title": "Synthetic Shooter Demo", "isGame": true, "isHidden": false,
+      "category": "Shooter",
+      "worksOn": { "Windows": true, "Mac": false, "Linux": false } },
+    { "id": 100008, "title": "Synthetic Trilogy", "isGame": true, "isHidden": false,
+      "category": "Role-playing",
+      "worksOn": { "Windows": true, "Mac": true, "Linux": false },
+      "releaseDate": "2009-09-09 00:00:00" }
+  ]
+}
