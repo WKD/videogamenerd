@@ -183,10 +183,14 @@ struct ImportStagingStore: Sendable {
                                          gameID: gameID, db: db)
 
                 case .newGame(let spec):
+                    // The game's origin is the importer's source (owner request):
+                    // pass it as the draft source so `insert` tags it, even though
+                    // the owned Product is attached separately below.
                     let draft = GameDraft(
                         title: spec.title, igdbID: spec.igdbID, year: spec.releaseYear,
                         altTitles: spec.altTitles, platformIDs: [item.platformID],
-                        owned: false, played: false)
+                        owned: false, played: false,
+                        source: ProductSource(rawValue: item.source) ?? .manual)
                     let outcome = try LibraryStore.insert(draft, db)
                     let gameID = outcome.gameID
                     if case .created = outcome { result.gamesCreated += 1 }
@@ -204,9 +208,11 @@ struct ImportStagingStore: Sendable {
                         sourceRaw: item.source, externalID: item.externalID,
                         kindRaw: "compilation", title: title, db: db)
                     result.productsAdded += 1
+                    let memberSource = ProductSource(rawValue: item.source) ?? .manual
                     for member in members {
                         let outcome = try LibraryStore.upsertCompilationMember(
-                            member, productID: productID, platformID: item.platformID, db: db)
+                            member, productID: productID, platformID: item.platformID,
+                            source: memberSource, db: db)
                         if case .created = outcome { result.gamesCreated += 1 }
                         result.affectedGameIDs.append(outcome.gameID)
                     }

@@ -89,6 +89,7 @@ struct InspectorView: View {
 private struct SingleGameInspector: View {
     @Bindable var vm: LibraryViewModel
     let detail: GameDetail
+    @Environment(\.hltbFetchPresenter) private var hltbFetch
 
     private var ids: Set<Int64> { [detail.id] }
 
@@ -159,9 +160,25 @@ private struct SingleGameInspector: View {
                 Divider()
                 playtimeSection
 
+                originFooter
+
                 Spacer(minLength: 0)
             }
             .padding(16)
+        }
+    }
+
+    /// A single, quiet line recording when and how the game entered the library
+    /// (owner request — debugging, not prominent): "Added 19 Sep 2026 · via GOG".
+    @ViewBuilder
+    private var originFooter: some View {
+        let added = detail.addedAt.formatted(date: .abbreviated, time: .omitted)
+        if let origin = detail.origin {
+            Text("Added \(added) · via \(origin.label)")
+                .font(.caption2).foregroundStyle(.tertiary)
+        } else {
+            Text("Added \(added)")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
     }
 
@@ -350,6 +367,32 @@ private struct SingleGameInspector: View {
                 Text("Average completion times arrive with metadata.")
                     .font(.caption).foregroundStyle(.tertiary)
             }
+            hltbActions
+        }
+    }
+
+    /// True when at least one of the three completion times is missing — the HLTB
+    /// fallback can fill it (PLAN §5.3).
+    private var hasTimeGap: Bool {
+        detail.ttbHastilyS == nil || detail.ttbNormallyS == nil || detail.ttbCompletelyS == nil
+    }
+
+    /// "Fetch from HowLongToBeat" (shown while a gap remains) + the "Open on
+    /// HowLongToBeat" link (the exact page when the HLTB id is known).
+    @ViewBuilder
+    private var hltbActions: some View {
+        HStack(spacing: 12) {
+            if hasTimeGap, let hltbFetch {
+                Button {
+                    hltbFetch.fetchOne(gameID: detail.id)
+                } label: {
+                    Label("Fetch from HowLongToBeat", systemImage: "clock.arrow.circlepath")
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .disabled(hltbFetch.isFetchingOne)
+                .accessibilityIdentifier("inspector.fetchHLTB")
+            }
             hltbLink
         }
     }
@@ -386,17 +429,31 @@ private struct SingleGameInspector: View {
                 if let s = detail.ttbHastilyS { Text("Rushed \(PlaytimeParser.formatApprox(seconds: s))") }
                 if let s = detail.ttbCompletelyS { Text("Completionist \(PlaytimeParser.formatApprox(seconds: s))") }
             }
-            if let source = detail.ttbSource, !source.isEmpty {
-                Text("Source: \(source)").font(.caption2).foregroundStyle(.tertiary)
+            if let label = Self.sourceLabel(detail.ttbSource) {
+                Text("Source: \(label)").font(.caption2).foregroundStyle(.tertiary)
             }
         }
         .font(.caption).foregroundStyle(.secondary)
     }
 
-    /// "Open on HowLongToBeat" — a plain search link, no scraping (PLAN §5.3/§6.4).
+    /// Display the ttb source as "IGDB" / "HowLongToBeat" / "edited" (PLAN §5.3), or
+    /// nil when there is no source to show.
+    static func sourceLabel(_ raw: String?) -> String? {
+        guard let raw, !raw.isEmpty else { return nil }
+        switch raw {
+        case "igdb": return "IGDB"
+        case "hltb": return "HowLongToBeat"
+        case "edited", "user": return "edited"
+        default: return raw.capitalized
+        }
+    }
+
+    /// "Open on HowLongToBeat" — the exact game page when the HLTB id is known (the
+    /// fallback persists it), else a plain search link (PLAN §5.3/§6.4). No scraping.
     @ViewBuilder
     private var hltbLink: some View {
-        if let url = HowLongToBeatLink.searchURL(title: detail.title) {
+        if let url = detail.hltbID.flatMap(HowLongToBeatLink.gameURL(id:))
+            ?? HowLongToBeatLink.searchURL(title: detail.title) {
             Link(destination: url) {
                 Label("Open on HowLongToBeat", systemImage: "arrow.up.forward.square")
             }

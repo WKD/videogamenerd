@@ -43,6 +43,13 @@ struct GameDetail: Sendable, Hashable, Identifiable {
     var ttbNormallyS: Int?
     var ttbCompletelyS: Int?
     var ttbSource: String?
+    /// HowLongToBeat game id, when the HLTB fallback filled an estimate (PLAN §5.3)
+    /// — lets "Open on HowLongToBeat" go straight to the exact page.
+    var hltbID: Int64? = nil
+
+    /// How this game first entered the library, for debugging (owner request). Only
+    /// surfaced minimally (inspector footer + export).
+    var origin: GameOrigin? = nil
 
     var addedAt: Date
     var updatedAt: Date

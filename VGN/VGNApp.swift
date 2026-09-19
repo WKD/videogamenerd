@@ -28,6 +28,7 @@ struct VGNApp: App {
                 .environment(\.rankingEnvironment, env.ranking)
                 .photoScanPresentation(env.photoScan)
                 .gogImportPresentation(env.gogImport)
+                .hltbFetchPresentation(env.hltb)
                 .environment(\.playNextEnvironment, env.playNext)
             } else if let failure = env.failure {
                 DatabaseErrorView(failure: failure)

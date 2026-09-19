@@ -1,0 +1,212 @@
+import AppKit
+import SwiftUI
+
+// App-level hookup for the HLTB time-estimate fallback (PLAN §5.3): a presenter the
+// container builds once, a view modifier that hosts the bulk sheet + the single-game
+// picker, and the Game-menu command. Mirrors `GOGImportHookup` so the hot root files
+// change by one line each. Live mode injects the real `HLTBClient`; every other mode
+// gets the inert, no-network search.
+
+/// Owns the presentation state of the HLTB fetch flow (PLAN §5.3): the bulk sheet, the
+/// single-game picker, the confident-fill Undo banner. One per window/container.
+@MainActor
+@Observable
+final class HLTBFetchPresenter {
+    private let store: LibraryStore
+    private let makeSearch: @Sendable () -> any HLTBSearching
+    /// The focused library view model — for selection scope, banners and Undo.
+    weak var library: LibraryViewModel?
+
+    /// Non-nil while the bulk sheet is up.
+    var bulk: HLTBBulkFetchModel?
+    /// Non-nil while the single-game picker sheet is up.
+    var picker: HLTBPickerRequest?
+    private(set) var isFetchingOne = false
+
+    init(store: LibraryStore, makeSearch: @escaping @Sendable () -> any HLTBSearching) {
+        self.store = store
+        self.makeSearch = makeSearch
+    }
+
+    // MARK: - Bulk (Game ▸ Fetch Missing Time Estimates…)
+
+    var canRunBulk: Bool { library?.isLibraryGridDestination ?? false }
+
+    func presentBulk() {
+        guard bulk == nil, let library, canRunBulk else { return }
+        let selection = library.selectedGameIDs
+        let model = HLTBBulkFetchModel(store: store, makeSearch: makeSearch)
+        bulk = model
+        let store = self.store
+        Task {
+            let scope: [Int64]
+            if selection.isEmpty {
+                scope = (try? await store.gameIDsWithNoTimeEstimate()) ?? []
+            } else {
+                // The current selection, narrowed to games that still have a gap.
+                let facts = (try? await store.timeToBeatFacts(gameIDs: Array(selection))) ?? [:]
+                scope = facts.values.filter(\.hasAnyGap)
+                    .sorted { ($0.title, $0.id) < ($1.title, $1.id) }
+                    .map(\.id)
+            }
+            model.start(gameIDs: scope)
+        }
+    }
+
+    func dismissBulk() { bulk?.cancel(); bulk = nil }
+
+    // MARK: - Single game (inspector ▸ Fetch from HowLongToBeat)
+
+    func fetchOne(gameID: Int64) {
+        guard !isFetchingOne, let library else { return }
+        isFetchingOne = true
+        let search = makeSearch()
+        let store = self.store
+        Task { [weak self] in
+            defer { self?.isFetchingOne = false }
+            guard let facts = (try? await store.timeToBeatFacts(gameIDs: [gameID]))?[gameID] else { return }
+            do {
+                let candidates = try await search.search(title: facts.title)
+                switch HLTBMatcher.match(title: facts.title, year: facts.year, candidates: candidates) {
+                case .confident(let candidate):
+                    await self?.applyConfident(gameID: gameID, candidate: candidate)
+                case .ambiguous(let list):
+                    self?.picker = HLTBPickerRequest(
+                        gameID: gameID, title: facts.title, year: facts.year, candidates: list)
+                case .notFound:
+                    library.showBanner("No HowLongToBeat match for “\(facts.title)”.", kind: .info)
+                }
+            } catch let error as ImportError {
+                library.showBanner(Self.stopMessage(error), kind: .error)
+            } catch {
+                library.showBanner("Couldn't reach HowLongToBeat.", kind: .error)
+            }
+        }
+    }
+
+    /// The user picked one candidate from the single-game picker sheet.
+    func pickForSingle(_ candidate: HLTBCandidate) {
+        guard let request = picker else { return }
+        picker = nil
+        Task { await applyConfident(gameID: request.gameID, candidate: candidate) }
+    }
+
+    func dismissPicker() { picker = nil }
+
+    private func applyConfident(gameID: Int64, candidate: HLTBCandidate) async {
+        guard let library,
+              let result = try? await store.applyHLTBTimes(gameID: gameID, candidate: candidate)
+        else { return }
+        if result.didWrite {
+            registerUndo(gameID: gameID, snapshot: result.previous, library: library)
+            library.showBanner("Filled times from HowLongToBeat. Press ⌘Z to undo.", kind: .info)
+        } else {
+            library.showBanner("HowLongToBeat had no new times to add.", kind: .info)
+        }
+    }
+
+    private func registerUndo(gameID: Int64, snapshot: HLTBTimeSnapshot, library: LibraryViewModel) {
+        let store = self.store
+        library.undoManager?.registerUndo(withTarget: library) { _ in
+            Task { try? await store.restoreTimeToBeat(gameID: gameID, snapshot) }
+        }
+        library.undoManager?.setActionName("Fetch Time Estimate")
+    }
+
+    static func stopMessage(_ error: ImportError) -> String {
+        if case .rejected(let reject) = error {
+            return "\(reject.reason.message) VGN stopped and made no further requests."
+        }
+        return "HowLongToBeat request stopped."
+    }
+}
+
+// MARK: - Builder
+
+/// Builds the HLTB fetch presenter for ``AppEnvironment`` (PLAN §5.3). **Live** mode
+/// injects the real ``HLTBClient`` (its own budget/cache per run, keyed on a fresh
+/// instance each fetch); every other mode uses the inert, no-network search — so the
+/// whole UI is exercisable in sample/seeded/test mode without a request.
+enum HLTBFetchBuilder {
+    @MainActor
+    static func build(mode: LaunchMode, database: AppDatabase,
+                      library: LibraryViewModel) -> HLTBFetchPresenter {
+        let store = LibraryStore(database)
+        let makeSearch: @Sendable () -> any HLTBSearching
+        if mode == .live {
+            makeSearch = { HLTBClient(transport: URLSessionTransport(),
+                                      cache: ImportResponseCacheStore(database)) }
+        } else {
+            makeSearch = { HLTBInertSearch() }
+        }
+        let presenter = HLTBFetchPresenter(store: store, makeSearch: makeSearch)
+        presenter.library = library
+        return presenter
+    }
+}
+
+// MARK: - View hookup
+
+private struct HLTBFetchPresentation: ViewModifier {
+    let presenter: HLTBFetchPresenter?
+
+    func body(content: Content) -> some View {
+        if let presenter {
+            content
+                .sheet(isPresented: Binding(
+                    get: { presenter.bulk != nil },
+                    set: { if !$0 { presenter.dismissBulk() } }
+                )) {
+                    if let model = presenter.bulk {
+                        HLTBBulkSheet(model: model, presenter: presenter) { presenter.dismissBulk() }
+                    }
+                }
+                .sheet(item: Binding(
+                    get: { presenter.picker },
+                    set: { if $0 == nil { presenter.dismissPicker() } }
+                )) { request in
+                    HLTBPickerSheet(
+                        title: request.title, year: request.year, candidates: request.candidates,
+                        onPick: { presenter.pickForSingle($0) },
+                        onCancel: { presenter.dismissPicker() })
+                }
+                .focusedSceneValue(\.hltbFetchPresenter, presenter)
+                .environment(\.hltbFetchPresenter, presenter)
+        } else {
+            content
+        }
+    }
+}
+
+/// Environment access to the presenter for in-window views (the inspector's
+/// "Fetch from HowLongToBeat" button). Commands use the focused value above.
+private struct HLTBFetchPresenterEnvironmentKey: EnvironmentKey {
+    static let defaultValue: HLTBFetchPresenter? = nil
+}
+
+extension EnvironmentValues {
+    var hltbFetchPresenter: HLTBFetchPresenter? {
+        get { self[HLTBFetchPresenterEnvironmentKey.self] }
+        set { self[HLTBFetchPresenterEnvironmentKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Hosts the HLTB bulk-fetch sheet and single-game picker (PLAN §5.3).
+    func hltbFetchPresentation(_ presenter: HLTBFetchPresenter?) -> some View {
+        modifier(HLTBFetchPresentation(presenter: presenter))
+    }
+}
+
+// MARK: - Focused value + command
+
+struct HLTBFetchPresenterFocusedValueKey: FocusedValueKey {
+    typealias Value = HLTBFetchPresenter
+}
+
+extension FocusedValues {
+    var hltbFetchPresenter: HLTBFetchPresenter? {
+        get { self[HLTBFetchPresenterFocusedValueKey.self] }
+        set { self[HLTBFetchPresenterFocusedValueKey.self] = newValue }
+    }
+}

@@ -98,6 +98,10 @@ struct LibraryExporter: Sendable {
         var igdbRating: Double?
         var igdbRatingCount: Int?
         var userEdited: String
+        /// HowLongToBeat game id, when the HLTB fallback filled an estimate (v6).
+        var hltbID: Int64?
+        /// How the game entered the library (v6, debugging). See ``GameOrigin``.
+        var origin: String?
         var addedAt: Date
         var updatedAt: Date
         var platforms: [GamePlatform]
@@ -120,6 +124,8 @@ struct LibraryExporter: Sendable {
         var igdbID: Int64?
         var coverFile: String?
         var source: String
+        /// The importer's external id for this owned copy (idempotency key, v5).
+        var externalID: String?
         var psnEntitlement: String?
         var acquiredAt: Date?
         var members: [Member]
@@ -170,7 +176,7 @@ struct LibraryExporter: Sendable {
                    played, status, tier_id, rank_key, my_playtime_s, psn_playtime_s,
                    ttb_hastily_s, ttb_normally_s, ttb_completely_s, ttb_source,
                    igdb_cover_image_id, cover_file, igdb_rating, igdb_rating_count,
-                   user_edited, added_at, updated_at
+                   user_edited, hltb_id, origin, added_at, updated_at
             FROM games ORDER BY id
             """).map { r -> Game in
             let altRaw: String = r["alt_titles"]
@@ -185,21 +191,23 @@ struct LibraryExporter: Sendable {
                 ttbCompletelyS: r["ttb_completely_s"], ttbSource: r["ttb_source"],
                 igdbCoverImageID: r["igdb_cover_image_id"], coverFile: r["cover_file"],
                 igdbRating: r["igdb_rating"], igdbRatingCount: r["igdb_rating_count"],
-                userEdited: r["user_edited"], addedAt: r["added_at"], updatedAt: r["updated_at"],
+                userEdited: r["user_edited"], hltbID: r["hltb_id"], origin: r["origin"],
+                addedAt: r["added_at"], updatedAt: r["updated_at"],
                 platforms: platformsByGame[id] ?? [], genres: genresByGame[id] ?? [],
                 traits: traitsByGame[id] ?? [])
         }
 
         let products = try Row.fetchAll(db, sql: """
             SELECT id, title, platform_id, kind, format, edition, region, igdb_id,
-                   cover_file, source, psn_entitlement, acquired_at
+                   cover_file, source, external_id, psn_entitlement, acquired_at
             FROM products ORDER BY id
             """).map { r -> Product in
             let id: Int64 = r["id"]
             return Product(
                 id: id, title: r["title"], platformID: r["platform_id"], kind: r["kind"],
                 format: r["format"], edition: r["edition"], region: r["region"], igdbID: r["igdb_id"],
-                coverFile: r["cover_file"], source: r["source"], psnEntitlement: r["psn_entitlement"],
+                coverFile: r["cover_file"], source: r["source"], externalID: r["external_id"],
+                psnEntitlement: r["psn_entitlement"],
                 acquiredAt: r["acquired_at"], members: membersByProduct[id] ?? [])
         }
 
@@ -218,7 +226,7 @@ struct LibraryExporter: Sendable {
     static let csvHeader = [
         "title", "year", "platforms", "owned", "played", "status", "tier",
         "overall_rank", "score", "my_playtime_hours", "igdb_main_hours",
-        "igdb_rating", "formats", "compilation",
+        "igdb_rating", "formats", "compilation", "origin",
     ]
 
     static func buildCSV(_ db: Database) throws -> String {
@@ -258,7 +266,7 @@ struct LibraryExporter: Sendable {
         var lines: [String] = [csvHeader.map(escapeCSV).joined(separator: ",")]
         let rows = try Row.fetchAll(db, sql: """
             SELECT id, title, year, played, status, tier_id,
-                   my_playtime_s, psn_playtime_s, ttb_normally_s, igdb_rating
+                   my_playtime_s, psn_playtime_s, ttb_normally_s, igdb_rating, origin
             FROM games ORDER BY sort_title, id
             """)
         for r in rows {
@@ -285,6 +293,7 @@ struct LibraryExporter: Sendable {
                 (r["igdb_rating"] as Double?).map { String(format: "%.0f", $0) } ?? "",
                 formats,
                 compilationByGame[id] ?? "",
+                (r["origin"] as String?) ?? "",
             ]
             lines.append(field.map(escapeCSV).joined(separator: ","))
         }

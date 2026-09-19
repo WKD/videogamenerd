@@ -29,6 +29,10 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
     var igdbRating: Double?
     var igdbRatingCount: Int?
     var userEdited: String
+    /// HowLongToBeat game id kept when the HLTB fallback filled an estimate (v6).
+    var hltbID: Int64?
+    /// How the game first entered the library, for debugging (v6). See ``GameOrigin``.
+    var origin: String?
     var addedAt: Date
     var updatedAt: Date
 
@@ -58,6 +62,8 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         case igdbRating = "igdb_rating"
         case igdbRatingCount = "igdb_rating_count"
         case userEdited = "user_edited"
+        case hltbID = "hltb_id"
+        case origin
         case addedAt = "added_at"
         case updatedAt = "updated_at"
     }
@@ -92,6 +98,8 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         igdbRating: Double? = nil,
         igdbRatingCount: Int? = nil,
         userEdited: String = "",
+        hltbID: Int64? = nil,
+        origin: String? = nil,
         addedAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -118,6 +126,8 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         self.igdbRating = igdbRating
         self.igdbRatingCount = igdbRatingCount
         self.userEdited = userEdited
+        self.hltbID = hltbID
+        self.origin = origin
         self.addedAt = addedAt
         self.updatedAt = updatedAt
     }

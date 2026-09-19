@@ -91,8 +91,11 @@ extension LibraryStore {
     }
 
     /// Reuse-or-create a compilation member game and link it to the product.
+    /// `source` is the compilation product's source, recorded as the new member
+    /// game's ``GameOrigin`` (set once, at creation).
     static func upsertCompilationMember(
-        _ member: CompilationMemberDraft, productID: Int64, platformID: String, db: Database
+        _ member: CompilationMemberDraft, productID: Int64, platformID: String,
+        source: ProductSource = .manual, db: Database
     ) throws -> AddOutcome {
         let year = member.year ?? member.releaseDate.map(year(of:))
         var existing: GameRecord?
@@ -122,7 +125,8 @@ extension LibraryStore {
                 releaseDate: member.releaseDate,
                 year: year,
                 played: member.played,
-                status: member.status?.rawValue
+                status: member.status?.rawValue,
+                origin: source.rawValue
             )
             try record.insert(db)
             gameID = record.id!

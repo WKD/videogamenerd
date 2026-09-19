@@ -25,4 +25,18 @@ enum ImportPolicy {
     /// PSN: ≥ 1.5 s between requests, budget 40 (PLAN §13.1 rule 3). Not wired yet —
     /// here so the PSN lane reuses the same file.
     static let psn = Pacing(minDelay: 1.5, jitter: 0.5, budget: 40)
+
+    // MARK: - HowLongToBeat (PLAN §5.3)
+
+    /// HLTB fallback fetch: serial, ≥ 1.5 s (jittered) between requests, budget 250
+    /// per run (a whole-library gap-fill of ~150 games plus discovery, well under a
+    /// hard cap). The site has no account at stake, but the same machinery applies
+    /// (allow-list, pacer, budget, validator, stop-on-first-unexpected-response).
+    static let hltb = Pacing(minDelay: 1.5, jitter: 0.5, budget: 250)
+
+    /// A found HLTB match is cached 180 days (PLAN §5.3 — hits are stable), a
+    /// "no result" 30 days (retry sooner in case the title later appears). A cached
+    /// answer, hit or miss, costs zero requests.
+    static let hltbHitTTL: TimeInterval = 180 * 24 * 60 * 60
+    static let hltbMissTTL: TimeInterval = 30 * 24 * 60 * 60
 }

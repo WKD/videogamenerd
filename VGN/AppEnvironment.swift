@@ -36,6 +36,9 @@ final class AppEnvironment {
     let playNext: PlayNextEnvironment?
     /// Presents the GOG import flow (progress + review sheets, PLAN §14); nil in tests.
     let gogImport: GOGImportPresenter?
+    /// Presents the HLTB time-estimate fallback (bulk sheet + single-game picker,
+    /// PLAN §5.3); nil in tests.
+    let hltb: HLTBFetchPresenter?
 
     struct DatabaseOpenFailure: Sendable {
         var message: String
@@ -59,7 +62,8 @@ final class AppEnvironment {
         ranking: RankingEnvironment? = nil,
         photoScan: PhotoScanPresenter? = nil,
         playNext: PlayNextEnvironment? = nil,
-        gogImport: GOGImportPresenter? = nil
+        gogImport: GOGImportPresenter? = nil,
+        hltb: HLTBFetchPresenter? = nil
     ) {
         self.settings = settings
         self.library = library
@@ -73,6 +77,7 @@ final class AppEnvironment {
         self.photoScan = photoScan
         self.playNext = playNext
         self.gogImport = gogImport
+        self.hltb = hltb
     }
 
     /// Build the environment. Never throws — a DB failure becomes `failure`.
@@ -138,6 +143,11 @@ final class AppEnvironment {
                 })
             settings.gogAccount = gogWiring.account
 
+            // HLTB time-estimate fallback (PLAN §5.3): live builds the real search
+            // client; other modes get the inert, no-network search. Reuses the shared
+            // importer cache (source = "hltb").
+            let hltb = HLTBFetchBuilder.build(mode: mode, database: database, library: vm)
+
             return AppEnvironment(
                 settings: settings, library: vm, actions: actions, failure: nil,
                 services: built?.graph, quickAdd: wiring.quickAdd,
@@ -151,7 +161,8 @@ final class AppEnvironment {
                 },
                 playNext: .live(database: database, library: store,
                                 coverLoader: coverLoader, viewModel: vm),
-                gogImport: gogWiring.presenter
+                gogImport: gogWiring.presenter,
+                hltb: hltb
             )
         } catch {
             let path = (try? AppPaths.databaseURL().path) ?? "~/Library/Application Support/VGN/vgn.sqlite"

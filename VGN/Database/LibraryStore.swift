@@ -69,7 +69,8 @@ struct LibraryStore: Sendable {
                 year: year,
                 played: impliesPlayed,
                 status: draft.status?.rawValue,
-                tierID: draft.tierID
+                tierID: draft.tierID,
+                origin: draft.source.rawValue   // set once, at creation (owner request)
             )
             try record.insert(db)
             gameID = record.id!
@@ -136,7 +137,8 @@ struct LibraryStore: Sendable {
             var outcomes: [AddOutcome] = []
             for member in members {
                 let outcome = try Self.upsertCompilationMember(member, productID: productID,
-                                                               platformID: product.platformID, db: db)
+                                                               platformID: product.platformID,
+                                                               source: product.source, db: db)
                 outcomes.append(outcome)
             }
             return (productID, outcomes)
@@ -147,11 +149,13 @@ struct LibraryStore: Sendable {
     @discardableResult
     func addCompilationMember(productID: Int64, _ member: CompilationMemberDraft) async throws -> AddOutcome {
         try await dbWriter.write { db in
-            guard let platformID = try String.fetchOne(
-                db, sql: "SELECT platform_id FROM products WHERE id = ?", arguments: [productID])
-            else { throw LibraryError.notFound }
+            let row = try Row.fetchOne(
+                db, sql: "SELECT platform_id, source FROM products WHERE id = ?", arguments: [productID])
+            guard let row else { throw LibraryError.notFound }
+            let platformID: String = row["platform_id"]
+            let source = ProductSource(rawValue: row["source"]) ?? .manual
             return try Self.upsertCompilationMember(member, productID: productID,
-                                                    platformID: platformID, db: db)
+                                                    platformID: platformID, source: source, db: db)
         }
     }
 
