@@ -69,7 +69,9 @@ struct BatoceraSettingsModelTests {
         model.newSkipEntry = "extra"; model.addSkip()
 
         model.syncNow()
-        await waitUntil { !model.isSyncing && model.lastSummary != nil }
+        // Wait on every post-condition asserted below (the banner callback and the
+        // timestamp land just after `lastSummary`; asserting early raced under load).
+        await waitUntil { !model.isSyncing && model.lastSummary != nil && bannerSummary != nil && model.lastSyncAt != nil }
 
         #expect(backend.calls.count == 1)
         #expect(backend.calls.first?.skip.contains("extra") == true)   // the edited skip list is passed

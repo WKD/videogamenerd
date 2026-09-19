@@ -35,7 +35,11 @@ struct BatoceraClickProbeTests {
     private func clickBand(_ w: ClickProbeWindow, top: CGFloat, height: CGFloat,
                            rightToLeft: Bool, until: () -> Bool) async {
         let width = w.window.frame.width
-        let xs = Array(stride(from: CGFloat(6), through: width - 6, by: 11))
+        // ONLY the right half of the band: the action buttons sit right of the Spacer. The
+        // left half holds the "All Systems" and "Sort" `Menu`s — a synthetic click on a Menu
+        // pops a REAL menu on the owner's screen and blocks the whole test run until someone
+        // dismisses it (it happened, 2026-09-19). Never sweep over a Menu / menu-style Picker.
+        let xs = Array(stride(from: width * 0.55, through: width - 6, by: 11))
         let ordered = rightToLeft ? xs.reversed() : Array(xs)
         for y in stride(from: top, through: top - height, by: -9) {
             for x in ordered {

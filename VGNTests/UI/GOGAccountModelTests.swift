@@ -85,6 +85,9 @@ struct GOGAccountModelTests {
         model.confirmForceRefresh()
         await poll(until: { backend.forceRefreshCalls.count == 1 })
         #expect(backend.forceRefreshCalls == [GOGEndpoint.filteredProducts])
+        // The sync request fires AFTER the cache drop returns — poll on the post-condition
+        // (asserting it right away raced under a loaded parallel run).
+        await poll(until: { synced })
         #expect(synced)
     }
 
