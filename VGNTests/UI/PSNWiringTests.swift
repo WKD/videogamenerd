@@ -32,6 +32,12 @@ struct PSNWiringTests {
         #expect(wiring.account.login == nil)
     }
 
+    @Test func theLiveSafetyLatchIsOffByDefault() {
+        // Live PSN objects are only built once the owner arms the latch (PLAN §13.5).
+        #expect(AppPreferences.defaults.object(forKey: PSNImportBuilder.liveEnabledKey) == nil)
+        #expect(AppPreferences.defaults.bool(forKey: PSNImportBuilder.liveEnabledKey) == false)
+    }
+
     @Test(.timeLimit(.minutes(1)))
     func inertBackendIsSignedOutAndSyncsNothing() async throws {
         let wiring = try build(mode: .sampleData)

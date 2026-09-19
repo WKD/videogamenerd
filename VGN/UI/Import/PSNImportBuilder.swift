@@ -17,6 +17,9 @@ enum PSNImportBuilder {
         let presenter: PSNImportPresenter
     }
 
+    /// Preference key of the live-PSN safety latch (default false = inert everywhere).
+    static let liveEnabledKey = "psn.liveEnabled"
+
     @MainActor
     static func build(
         mode: LaunchMode,
@@ -33,7 +36,13 @@ enum PSNImportBuilder {
         var login: PSNLoginConfig?
         var expiryProvider: @Sendable () async -> Date? = { nil }
 
-        if mode == .live, let graph, let platformCatalog {
+        // SAFETY LATCH (orchestrator, 2026-09-19): the live PSN objects exist only once the
+        // owner has explicitly armed them (`defaults write com.pomatelier.VideoGameNerd
+        // psn.liveEnabled -bool YES`). Until the DEBUG build-steps panel (PLAN §13.5) lands,
+        // a stray click on Sign In / Sync Now must not be able to talk to Sony: the plan is
+        // one tiny probe at a time, with the orchestrator present.
+        let armed = AppPreferences.defaults.bool(forKey: PSNImportBuilder.liveEnabledKey)
+        if mode == .live, armed, let graph, let platformCatalog {
             let transport = URLSessionTransport()
             let auth = PSNAuth(
                 transport: transport,
