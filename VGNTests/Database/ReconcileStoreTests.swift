@@ -489,6 +489,25 @@ struct ReconcileStoreTests {
 
     // MARK: - Index read
 
+    // MARK: - Unlinked scope + count
+
+    @Test func unlinkedScopeAndCount() async throws {
+        let store = try await TestDB.makeStore()
+        let a = try await addGame(store, title: "Linked", igdbID: 7)
+        try await addProduct(store, gameID: a, platform: "pc")
+        let b = try await addGame(store, title: "Unlinked One")
+        try await addProduct(store, gameID: b, platform: "pc")
+        let c = try await addGame(store, title: "Unlinked Two")
+        try await addProduct(store, gameID: c, platform: "snes")
+
+        let rows = try await store.gamesOnce(filter: LibraryFilter(scope: .unlinked))
+        let ids = Set(rows.map(\.id))
+        #expect(ids == [b, c])
+
+        let count = try await store.dbReader.read { try LibraryQuery.fetchUnlinkedCount($0) }
+        #expect(count == 2)
+    }
+
     @Test func igdbLinkIndexReportsLinkedGames() async throws {
         let store = try await TestDB.makeStore()
         let a = try await addGame(store, title: "A", igdbID: 100)

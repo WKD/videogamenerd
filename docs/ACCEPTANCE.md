@@ -135,6 +135,14 @@ The request shape was **verified live 2026-09-19** (wave 10, lane B) and the fix
 - [ ] Import works the same in `-VGNSampleData YES` mode (no account, no network except IGDB matching — which is inert there).
 - [ ] Confirm the real file's bytes are untouched after an import (it is opened read-only).
 
+## Reconciling unlinked games (§5.1, wave 11) [owner]
+- [ ] The sidebar shows an **Unlinked** row (under LIBRARY) only when you have games with no IGDB link; its count matches the real library (the owner has ~8: *Cérébrale Académie*, *Dragon Quest IV : L'épopée des Elus*, *Evolution Worlds - GameCube - US*, *The Nomad Soul*, *Myst V: End of Ages Limited Edition*, *Obduction ®*, *The Bard's Tale IV: Barrows Deep*, *Uru: Complete Chronicles*). Selecting it lists exactly those games. It disappears once all are linked.
+- [ ] An unlinked game's inspector shows the "Not linked to IGDB" notice and a **Link to IGDB…** button; a linked game shows **Change IGDB Match…** instead. The grid context menu and File menu offer the same.
+- [ ] **Link…** opens a search prefilled with a cleaned title; typing the English name (e.g. "Big Brain Academy") finds the game. The "Only <platform>" toggle narrows / widens results. Choosing it fills metadata, cover and time estimates within a few seconds, and the game leaves the Unlinked list (selection moves to the next row). Search still finds the old title (e.g. "Cérébrale Académie").
+- [ ] Linking a game whose IGDB entry you **already own** (a duplicate) shows the merge sheet spelling out what moves; confirming leaves one game with both platforms' copies, and Undo restores both games exactly. Re-running a Delicious import proposes no second copy of it.
+- [ ] **Change IGDB Match…** on a wrongly-matched game (weird edition) replaces the entry and refreshes metadata; a genre/year from the wrong match does not linger.
+- [ ] In the import review sheet, a ticked row with no IGDB match shows a quiet "will import unlinked" warning; **Find…** opens the search and, on choose, attaches the match to that row.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
