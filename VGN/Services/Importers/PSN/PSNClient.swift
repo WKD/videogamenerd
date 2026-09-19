@@ -390,6 +390,11 @@ actor PSNClient {
         request.httpMethod = spec.method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // psn-api's `call()` sends `Content-Type: application/json` on EVERY request, GETs
+        // included. The REST endpoints do not care, but the GraphQL gateway (Apollo CSRF
+        // prevention) answers a GET without it with HTTP 400 "blocked as a potential
+        // Cross-Site Request Forgery" — S6 probe, 2026-09-19.
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         for (k, v) in spec.extraHeaders { request.setValue(v, forHTTPHeaderField: k) }
         return request
     }

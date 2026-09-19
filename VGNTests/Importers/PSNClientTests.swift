@@ -118,6 +118,12 @@ import Testing
         #expect(await client.fromCache == 1)
         let profileRequests = transport.requests.filter { ($0.url?.absoluteString ?? "").contains("me/profile2") }
         #expect(profileRequests.count == 1)
+        // Every PSN request carries the reference client's headers — the GraphQL gateway
+        // rejects a GET without a JSON content type as a potential CSRF (live, 2026-09-19).
+        for request in transport.requests {
+            #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+            #expect(request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true)
+        }
     }
 
     // MARK: - Pacer
