@@ -35,9 +35,10 @@ func seededPSNAuth(transport: HTTPTransport, now: Date = importFixedNow,
                    tokenStore: store, now: { now })
 }
 
-/// Wire a ``StubHTTPTransport`` with the coherent PSN fixtures (profile, trophy2 two pages,
-/// PS3/Vita trophies, game list, purchases + token). Routing is by URL substring; the
-/// `offset=10` route is registered before the generic `trophy2` route so paging resolves.
+/// Wire a ``StubHTTPTransport`` with the coherent PSN fixtures (profile, the single trophy
+/// list over two pages incl. PS3/Vita titles, game list, purchases + token). Routing is by
+/// URL substring; the `offset=10` route is registered before the generic `trophyTitles` route
+/// so paging resolves. No `npServiceName` is sent any more (the endpoint ignores it).
 func psnHappyPathTransport() throws -> StubHTTPTransport {
     let transport = StubHTTPTransport(defaultStub: .init(status: 200, body: Data("{}".utf8),
                                                          headers: ["Content-Type": "application/json"]))
@@ -46,10 +47,9 @@ func psnHappyPathTransport() throws -> StubHTTPTransport {
     }
     transport.on(urlContains: "oauth/token", try json("psn-token.json"))
     transport.on(urlContains: "me/profile2", try json("psn-profile.json"))
-    // Trophy paging: offset=10 (page 2) must win over the generic trophy2 route.
-    transport.on(urlContains: "npServiceName=trophy2&limit=800&offset=10", try json("psn-trophy-page2.json"))
-    transport.on(urlContains: "npServiceName=trophy2", try json("psn-trophy-probe.json"))
-    transport.on(urlContains: "npServiceName=trophy", try json("psn-trophy-ps3vita.json"))
+    // Trophy paging: page 2 (offset=10) must win over the generic trophyTitles route.
+    transport.on(urlContains: "trophyTitles?limit=800&offset=10", try json("psn-trophy-page2.json"))
+    transport.on(urlContains: "trophyTitles", try json("psn-trophy-probe.json"))
     transport.on(urlContains: "gamelist/v2", try json("psn-gamelist.json"))
     transport.on(urlContains: "graphql", try json("psn-purchases.json"))
     return transport

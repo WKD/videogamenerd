@@ -182,6 +182,9 @@ enum ImportIgnoreReason: String, Sendable, Hashable, Codable, CaseIterable {
     case preOrder
     case inactiveEntitlement
     case mediaApp
+    /// A PS Plus claim played ≤ the Vault gate (10 min) — it belongs in The Vault, not the
+    /// library (PLAN §16). Staged ignored/restorable; a later lane moves it to the Vault.
+    case vaultedSubscription
 
     var label: String {
         switch self {
@@ -195,6 +198,7 @@ enum ImportIgnoreReason: String, Sendable, Hashable, Codable, CaseIterable {
         case .preOrder: return "Pre-order"
         case .inactiveEntitlement: return "Inactive entitlement"
         case .mediaApp: return "Media app"
+        case .vaultedSubscription: return "PS Plus — in the Vault (played under 10 min)"
         }
     }
 }

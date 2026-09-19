@@ -17,7 +17,7 @@ import Testing
 
     @Test func allowListAcceptsOnlyReadEndpoints() {
         let a = ImportAllowList.psn
-        #expect(a.allows(URL(string: "https://m.np.playstation.com/api/trophy/v1/users/me/trophyTitles?npServiceName=trophy2")!))
+        #expect(a.allows(URL(string: "https://m.np.playstation.com/api/trophy/v1/users/me/trophyTitles?limit=800&offset=0")!))
         #expect(a.allows(URL(string: "https://web.np.playstation.com/api/graphql/v1/op?operationName=getPurchasedGameList")!))
         #expect(!a.allows(URL(string: "https://m.np.playstation.com/api/trophy/v1/users/me/trophyGroups")!))
         #expect(!a.allows(URL(string: "https://evil.example/")!))
@@ -47,15 +47,15 @@ import Testing
                                clock: RecordingImmediateClock(), wallClock: { importFixedNow })
         // No probe yet → a full page refuses.
         do {
-            _ = try await client.trophyTitlesPage(service: "trophy2", limit: 800, offset: 0)
+            _ = try await client.trophyTitlesPage(limit: 800, offset: 0)
             Issue.record("expected probeRequired")
         } catch let error as PSNClient.ClientError {
-            #expect(error == .probeRequired("probe:trophyTitles:trophy2"))
+            #expect(error == .probeRequired("probe:trophyTitles"))
         }
         // After a probe, the full page proceeds.
-        _ = try await client.probe(.trophyTitles(service: "trophy2"))
-        #expect(try await client.hasProbe(for: .trophyTitles(service: "trophy2")))
-        _ = try await client.trophyTitlesPage(service: "trophy2", limit: 800, offset: 0)
+        _ = try await client.probe(.trophyTitles)
+        #expect(try await client.hasProbe(for: .trophyTitles))
+        _ = try await client.trophyTitlesPage(limit: 800, offset: 0)
     }
 
     // MARK: - Retry table

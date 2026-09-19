@@ -96,9 +96,30 @@ struct PSNProfile: Decodable, Sendable, Equatable {
     }
 }
 
+/// A JSON id that arrives as either a String or an Int, normalised to a String. The game
+/// list gives `concept.id` as an **Int** while the purchases DTO gives `conceptId` as a
+/// nullable **String** (null in the owner's real data) — decoding both through this makes the
+/// join treat them the same (live, 2026-09-20).
+struct PSNFlexibleID: Decodable, Sendable, Equatable {
+    let value: String?
+    /// A direct initialiser (tests / synthetic DTOs).
+    init(_ value: String?) { self.value = value }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { value = nil }
+        else if let s = try? c.decode(String.self) { value = s }
+        else if let n = try? c.decode(Int64.self) { value = String(n) }
+        else { value = nil }
+    }
+}
+
 // MARK: - Trophy titles (…/trophy/v1/users/me/trophyTitles, PLAN §13.3)
 
-/// One page of trophy titles — the launch history (the only PS3/Vita source). Required:
+/// One page of trophy titles — the whole launch history for the account. **One list, not
+/// two:** the endpoint ignores the `npServiceName` filter (live, 2026-09-20 — `trophy` and
+/// `trophy2` returned the identical 265-item list), so VGN fetches it **once** (psn-api's
+/// `getUserTitles` likewise sends no `npServiceName`) and reads each title's own
+/// `npServiceName` (`trophy` = PS3/PS4/Vita sets, `trophy2` = PS5 sets). Required:
 /// `trophyTitles`, `totalItemCount`. `nextOffset` drives paging.
 struct PSNTrophyTitlesPage: Decodable, Sendable, Equatable {
     let trophyTitles: [PSNTrophyTitle]
@@ -151,14 +172,23 @@ struct PSNGameListPage: Decodable, Sendable, Equatable {
 }
 
 /// One played PS4/PS5 title. `playDuration` is an ISO-8601 duration string (e.g.
-/// `PT228H56M33S`) — parsed to seconds by ``PSNDuration``. Required: `titleId`, `name`.
-/// ASSUMPTION(S0): `service`/`category` are the disc-vs-digital candidates (PLAN §13.3
-/// point 3) — inspected at S5.
+/// `PT228H56M33S`, `PT33H34M17S`, `PT5M22S`) — parsed to seconds by ``PSNDuration``.
+/// Required: `titleId`, `name`.
+///
+/// Two fields drive the mapping (verified live 2026-09-20):
+/// - `service` tells **how** the game was accessed: `none(purchased)` = a digital purchase,
+///   `ps_plus` = played through PS Plus, `other` = neither (in the owner's data, his DISC
+///   games) — kept raw; never asserts ownership on its own (PLAN §13.3).
+/// - `category` (`ps5_native_game`, `ps4_game`, `ps5_native_media_app`, …) gives the
+///   platform (the list has no platform field) and flags non-games (a category that does not
+///   end in `_game` is a media app → *Ignored*).
 struct PSNGameListTitle: Decodable, Sendable, Equatable {
     let titleId: String
     let name: String
     let localizedName: String?
+    /// e.g. `ps5_native_game`, `ps4_game`, `ps5_native_media_app` (Netflix/Plex). Kept raw.
     let category: String?
+    /// `none(purchased)` / `ps_plus` / `other`, or an unknown value kept raw. Kept raw.
     let service: String?
     let playCount: Int?
     let firstPlayedDateTime: Date?
@@ -174,7 +204,11 @@ struct PSNGameListTitle: Decodable, Sendable, Equatable {
 }
 
 struct PSNConcept: Decodable, Sendable, Equatable {
-    let id: Int64?
+    /// `concept.id` is an Int on the game list; normalised to a String so it joins with the
+    /// purchases DTO's String `conceptId` (live, 2026-09-20).
+    let idRaw: PSNFlexibleID?
+    var id: String? { idRaw?.value }
+    enum CodingKeys: String, CodingKey { case idRaw = "id" }
 }
 
 // MARK: - Purchases (GraphQL getPurchasedGameList, PLAN §13.3)
@@ -222,8 +256,18 @@ struct PSNPurchasedGame: Decodable, Sendable, Equatable {
     let entitlementId: String?
     let productId: String?
     let titleId: String?
-    let conceptId: String?
+    /// `conceptId` is a nullable String (null on every row in the owner's real data), but a
+    /// bare Int is tolerated too — decoded through ``PSNFlexibleID`` (live, 2026-09-20).
+    let conceptIdRaw: PSNFlexibleID?
     let image: PSNImage?
+
+    var conceptId: String? { conceptIdRaw?.value }
+
+    enum CodingKeys: String, CodingKey {
+        case name, platform, membership, isActive, isDownloadable, isPreOrder
+        case entitlementId, productId, titleId, image
+        case conceptIdRaw = "conceptId"
+    }
 
     struct PSNImage: Decodable, Sendable, Equatable { let url: String? }
 

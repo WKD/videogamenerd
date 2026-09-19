@@ -1,16 +1,17 @@
 import Foundation
 
 /// The pure promotion rules that decide which catalogue ROMs become library games
-/// (PLAN §15). No I/O. A ROM is a promotion candidate when the box says the owner
-/// **really played it** (> 5 min total) or marked it a **favourite**; `playcount` alone
+/// (PLAN §15/§16). No I/O. A ROM is a promotion candidate when the box says the owner
+/// **really played it** (> 10 min total) or marked it a **favourite**; `playcount` alone
 /// never promotes (a launch that lasted seconds is a mistake, not a game they play).
 enum BatoceraPromotion {
 
-    /// The one threshold (PLAN §15 — `gametime > 300 s`). A total below this stays in the
-    /// catalogue whatever the play count.
-    static let playedThresholdSeconds = 300
+    /// The one threshold, now **The Vault's shared 10-minute gate** (PLAN §16, owner
+    /// 2026-09-20 — this raised the earlier 5-minute rule). A total at or below this stays in
+    /// the Vault whatever the play count.
+    static let playedThresholdSeconds = ImportPolicy.vaultPlaytimeGateSeconds
 
-    /// Whether a ROM counts as **played** for the library (> 5 min).
+    /// Whether a ROM counts as **played** for the library (strictly more than the gate).
     static func isPlayed(gameTimeSeconds: Int) -> Bool {
         gameTimeSeconds > playedThresholdSeconds
     }

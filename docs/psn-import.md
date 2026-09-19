@@ -114,6 +114,55 @@ milestone: build the importer with `includePurchases: false` until S6 passes.
 betas, add-ons, themes/avatars, media apps, pre-orders and inactive entitlements go to
 noise (each with a reason, restorable).
 
+## Mapping — what the real fields mean (verified live 2026-09-20)
+
+The three lists are joined into **one staging row per game** on **concept id → title id →
+normalised name** (name only, so a cross-gen twin with different title ids and a null concept
+id still merges). Trophy titles carry no ids, so they join by name. ™/®/© are stripped for
+the join **and** for the IGDB match title (`matchTitle`); the shown `name` keeps them.
+
+**Trophy titles — one list.** The endpoint (`…/trophy/v1/users/me/trophyTitles`) ignores the
+`npServiceName` filter and returns every title of the account; each title carries its own
+`npServiceName` (`trophy` = PS3/PS4/Vita sets, `trophy2` = PS5 sets). VGN fetches it once (no
+`npServiceName`, as psn-api's `getUserTitles` does). `trophyTitlePlatform` values, including
+combined ones, map to slugs: `PS5`→ps5, `PS4`→ps4, `PS3`→ps3, `PSVITA`→vita, `PS4,PS5`→ps5,
+`PS3,PSVITA`→vita (the newest generation of a combined string wins). The same
+`npCommunicationId` never double-counts.
+
+**Game list — `service`** tells how a game was accessed:
+
+| `service` | Meaning | Becomes |
+|---|---|---|
+| `none(purchased)` | a digital purchase | **owned digital**, even if the purchases list misses it |
+| `ps_plus` | played through PS Plus | if a `PS_PLUS` entitlement exists → owned-via-subscription; else **played, not owned**, note "played via PS Plus" |
+| `other` | neither (the owner's disc games) | **played, not owned**, note "probably a disc — not a digital licence" → *Played — no purchase found* group; "Own the ticked rows as ▸" **defaults to Physical** |
+| unknown | kept raw and shown | played (per play time), not owned |
+
+**Game list — `category`** gives the platform (the list has no platform field): `ps5_…`→ps5,
+`ps4_…`→ps4. A category that does **not** end in `_game` (`ps5_native_media_app`,
+`ps5_web_based_media_app`: Netflix, Plex…) is a **media app → Ignored** ("media app").
+
+**Purchases — `membership`.** `NONE` = a bought copy I really own (never vaulted). `PS_PLUS`
+= a subscription claim, gated by play time (below). Unknown values are kept raw and shown.
+**Cross-gen twins** (the same game as a PS4 *and* a PS5 entitlement, null concept id) become
+**one** staged game with one copy: platform ps5 when a PS5 entitlement exists (else ps4),
+note "PS4 & PS5 versions", external id on the PS5 entitlement (stable across syncs). A PS Plus
+twin + a bought twin ⇒ the **bought** one wins as the owned copy (no subscription flag).
+
+**The Vault's 10-minute gate (§16 / `ImportPolicy.vaultPlaytimeGateSeconds = 600`).** A
+`PS_PLUS` entitlement whose joined game-list play time is **≤ 600 s** (including no game-list
+entry at all, regardless of a 0 % trophy) is **not** imported into the library: it is staged
+*Ignored* with reason "PS Plus — in the Vault (played under 10 min)" (`.vaultedSubscription`,
+restorable), for a later lane to move into the Vault. One played **> 600 s** is imported as the
+owned-via-subscription copy (the "+" badge). Batocera's promotion uses the same constant
+(raised from its old 5-minute rule). The review header shows "PS Plus: N played · M in the
+Vault".
+
+**Play data.** ISO-8601 `playDuration` (e.g. `PT33H34M17S`, `PT5M22S`, `PT221H51M37S`) →
+seconds; `firstPlayedDateTime`/`lastPlayedDateTime` → `games.first_played_at`/`last_played_at`.
+A 0 % trophy title whose game-list play time is < 30 min stays **Launched** (e.g. Myst,
+5 m 22 s).
+
 ## What a reject looks like
 
 A bogus response is **never cached** and never overwrites a good entry. The client records
@@ -163,8 +212,10 @@ path — click it to reveal in Finder — elapsed) and the running total, then l
 open the cached body from disk to check the DTO before the next click:
 
 - **S2 · Probe profile** — the test online id.
-- **S3a · Probe trophy titles — limit 10** and **S3a′ · Probe trophy titles PS3/Vita — limit 10**
-  (both require S2). A brand-new account's list may be **empty** — that is valid.
+- **S3a · Probe trophy titles — limit 10** (requires S2). **One list, not two:** the endpoint
+  ignores the `npServiceName` filter (live, 2026-09-20 — `trophy` and `trophy2` returned the
+  identical 265-item list), so there is no separate PS3/Vita probe/fetch; each title carries
+  its own `npServiceName`. A brand-new account's list may be **empty** — that is valid.
 - **S5 · Probe game list — limit 10** (requires S2).
 - **S6 · Probe purchases — size 10** (requires S2) — the test account's free games prove the
   GraphQL call, the persisted-query hash and the `membership: NONE` DTO. **Most likely to fail.**
@@ -177,7 +228,7 @@ test account is the probes.
 **Sign Out** (optionally tick "also delete cached PlayStation responses"), sign in with the real
 account, then set the panel picker to **real** — a red **REAL ACCOUNT** marker appears and the
 panel resets to what is recorded for `real` (nothing yet; the dev cache and markers are per
-account). Run **one probe per data set** (S2 → S3a → S3a′ → S5 → S6), stopping after each for the
+account). Run **one probe per data set** (S2 → S3a → S5 → S6), stopping after each for the
 orchestrator to check the dev cache. The first real `membership: PS_PLUS` shows here.
 
 ### 8. Full fetches on the real account, one at a time
@@ -216,3 +267,8 @@ importer with `includePurchases: false` until S6 passes.
 - **2026-09-20 — REAL account, S2/S3a served FROM THE TEST ACCOUNT'S CACHE — our bug, zero requests, stopped.** After Sign Out (cache kept) → Sign In as the real account → label `real`, the panel showed S2 and S3a "ok · from cache · 0 B · 0 requests": the 30-day `import_cache` key was endpoint+params only, so the real session was handed the test account's profile and empty trophy list. Nothing reached Sony and nothing was imported, but a sync would have shown the wrong account's data. Fix: every PSN login session gets a random **cache scope** (`PSNStoredToken.cacheScope`, minted at interactive sign-in, kept across token refreshes, persisted with the tokens in the Keychain); every cache key, dev-cache hash and probe marker is prefixed with it. A new sign-in ⇒ a cold cache and fresh probes, never another account's data. Regression test `PSNCacheScopeTests`. The old unscoped rows are unreachable (they expire in 30 days or go with "delete cached responses"). Owner action before continuing: relaunch the rebuilt app; the `real` label's two "passed" flags from the bogus run must be ignored — press S2 again (it will now go to the network).
 - **2026-09-20 — REAL account, S2 + S3a OK, 2 requests (from network, after the cache-scope fix).** Profile: nested, `plus: 1` (the subscription is visible). Trophy titles `trophy2`, limit 10: `totalItemCount: 265`, `nextOffset: 10`, 10 coherent titles; per-title keys `npCommunicationId` (NPWR…), `npServiceName`, `trophyTitleName`, `trophyTitlePlatform` ("PS5" / "PS4"), `progress` (0–100), `earnedTrophies{}`, `definedTrophies{}`, `lastUpdatedDateTime` (ISO), `hiddenFlag`, `hasTrophyGroups`, `trophyGroupCount`, `trophySetVersion`, `trophyTitleIconUrl` — the DTO matches. Two 0 % titles in the first ten (the "Launched, 0 %" group is real), names carry ™/® (must be stripped for IGDB matching — check the import matcher's cleaning before the first real review). A full fetch is ONE request (265 < 800).
 - **2026-09-20 — REAL account, S3a′ + S5 + S6 probes OK, 3 requests (5 / 40 for the session).** (1) `npServiceName=trophy` returned the SAME list as `trophy2` (265 titles, same first ten): the endpoint lists everything and each title carries its own `npServiceName` — the separate PS3/Vita data set is wrong and is being removed (lane w14/a). (2) Game list: `totalItemCount 231`; per title `name`, `titleId` (PPSA…/CUSA…), `category` (`ps5_native_game`, `ps4_game`, **`ps5_native_media_app`, `ps5_web_based_media_app`** = Netflix, Plex → noise), **`service`** = `none(purchased)` | `ps_plus` | `other` (the owner's disc games are `other`), `playDuration` (`PT221H51M37S`, `PT5M22S`), `playCount`, `firstPlayedDateTime`, `lastPlayedDateTime`, `concept { id (Int), name, genres, … }`. (3) Purchases: `pageInfo.totalCount 581`, `isLast false`; **`membership: "PS_PLUS"` confirmed** (7 of the first 10) next to `"NONE"`; `conceptId` null everywhere; PS4 and PS5 versions of one game are separate entitlements. No full fetch yet — waiting for lane w14/a (single trophy list, `service`/`category` mapping, cross-gen twins, never-played PS Plus claims → Ignored).
+- **2026-09-20 — `npServiceName` is ignored by the trophyTitles endpoint (real account).** A probe with `npServiceName=trophy` returned EXACTLY the same list as `npServiceName=trophy2` (same 265 `totalItemCount`, same first ten titles). The endpoint lists every title of the account; each carries its own `npServiceName` (`trophy` = PS3/PS4/Vita, `trophy2` = PS5). Fixed (w14/a): fetch the list **once** with no `npServiceName` (matches psn-api's `getUserTitles`); removed the separate PS3/Vita data set / probe / full fetch (client `DataSet`, importer loop, panel S3a′, runner, estimates, docs, tests). `npServiceName` is still kept per-title on the DTO. Combined `trophyTitlePlatform` values ("PS4,PS5", "PS3,PSVITA") map to the newest slug. The same `npCommunicationId` never double-counts.
+- **2026-09-20 — game list `service` = how the game was accessed (real account).** Per title `service` ∈ `none(purchased)` (a digital purchase), `ps_plus` (played through PS Plus), `other` (neither — the owner's DISC games: Elden Ring, FF VII Rebirth, Kingdom Come II…). Mapping (w14/a): `none(purchased)` → owned digital even if the purchases list misses it; `ps_plus` → owned-via-subscription if a `PS_PLUS` entitlement exists, else played-not-owned ("played via PS Plus"); `other` → played-not-owned ("probably a disc — not a digital licence"), whose *Own the ticked rows as ▸* defaults to Physical. Unknown values kept raw. **Never asserts ownership from `other`.**
+- **2026-09-20 — game list has non-games (real account).** `category` ∈ `ps5_native_game`, `ps4_game`, `ps5_native_media_app`, `ps5_web_based_media_app`. A category not ending in `_game` → *Ignored* ("media app"); `category` also gives the platform (the list has no platform field). Types: `concept.id` is an **Int** in the game list, `conceptId` a nullable **String** in purchases (null on every real row) — both decoded through `PSNFlexibleID`, normalised to String; the join falls back to name when the concept id is absent.
+- **2026-09-20 — purchases probe, real account, size 10.** `pageInfo.totalCount = 581`, `isLast = false`; `membership` values `PS_PLUS` (7 of the first 10) and `NONE` — the PS Plus flag works as assumed; `conceptId` null on every row. **Cross-gen twins**: the same game appears as two entitlements (PS4 + PS5) — merged into one game/one copy (ps5 preferred), note "PS4 & PS5 versions", stable external id on the PS5 entitlement; a bought twin beats a PS Plus twin (no flag). **Volume**: 581 entitlements, mostly PS Plus monthly claims never launched. Per **owner 2026-09-20 (PLAN §16 The Vault)**: a `PS_PLUS` entitlement with joined play time **≤ 10 min** (600 s, `ImportPolicy.vaultPlaytimeGateSeconds`, shared with Batocera) is staged *Ignored* "PS Plus — in the Vault (played under 10 min)" for a later lane to move to the Vault; > 10 min → owned-via-subscription. Bought (`NONE`) never vaulted. Full purchases fetch estimate ceil(581/100) = 6. Review header: "PS Plus: N played · M in the Vault".
+- **2026-09-20 — w14/a landed all of the above offline** (no new Sony traffic; all on synthetic fixtures with the same shapes). Panel steps are now S2 · S3a · S5 · S6 · three full fetches; estimates 1 / 2 / 6. Whole suite green (1494 tests). Not yet exercised against the real account beyond the probes above: the **full** real fetches (trophy 265, game list, purchases 581) and the first real review sheet — first run should watch the cross-gen merge and the Vault counts on real names.

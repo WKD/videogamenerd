@@ -352,6 +352,18 @@ final class ImportReviewModel {
         PSNReviewGroup.allCases.filter { g in rows.contains { psnGroup(for: $0) == g } }
     }
 
+    /// PS Plus claims imported as owned-via-subscription copies (played > 10 min).
+    var psPlusPlayedCount: Int { psnRows(in: .psPlus).count }
+    /// PS Plus claims sent to the Vault (played ≤ 10 min) — staged ignored (PLAN §16).
+    var psPlusVaultedCount: Int {
+        rows.filter { transientByID[$0.externalID]?.ignoreReason == .vaultedSubscription }.count
+    }
+    /// The review-header line "PS Plus: N played · M in the Vault" (PLAN §16), or nil.
+    var psPlusHeaderSummary: String? {
+        guard isPSN, psPlusPlayedCount > 0 || psPlusVaultedCount > 0 else { return nil }
+        return "PS Plus: \(psPlusPlayedCount) played · \(psPlusVaultedCount) in the Vault"
+    }
+
     /// A one-line "what will change" for an **Already in your library** row (PLAN §13.3 —
     /// "+ played", "+ 42 h", "+ last played 2021"). Describes what the import contributes
     /// (the commit is idempotent/monotonic), not a diff against the stored game.
@@ -626,6 +638,9 @@ struct ImportReviewSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Import from \(model.sourceLabel)").font(.headline)
                 Text(model.summaryLine).font(.caption).foregroundStyle(.secondary)
+                if let plus = model.psPlusHeaderSummary {
+                    Text(plus).font(.caption).foregroundStyle(.secondary)
+                }
                 if let note = model.summary.ownedGapNote {
                     Label(note, systemImage: "exclamationmark.circle")
                         .font(.caption2).foregroundStyle(.secondary)
@@ -728,7 +743,10 @@ struct ImportReviewSheet: View {
     private var ownAsRow: some View {
         HStack(spacing: 8) {
             Text("Own the ticked rows as").font(.caption).foregroundStyle(.secondary)
-            Button("Physical") { model.ownTickedAs(.physical) }.controlSize(.small)
+            // Physical is the default: these are played games with no digital licence, so most
+            // likely discs (PLAN §13.3 rule 3 / item 2 — `service: other`).
+            Button("Physical") { model.ownTickedAs(.physical) }
+                .controlSize(.small).buttonStyle(.borderedProminent)
             Button("Digital") { model.ownTickedAs(.digital) }.controlSize(.small)
         }
         .disabled(!model.canOwnPlayedRows)

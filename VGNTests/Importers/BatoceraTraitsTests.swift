@@ -38,12 +38,17 @@ struct BatoceraTraitsTests {
         #expect(traits.contains(GameTrait(kind: .keyword, value: "run & jump")))
     }
 
-    @Test func promotionThresholdIsFiveMinutesExclusive() {
-        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 300) == false)
-        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 301) == true)
+    @Test func promotionThresholdIsTheTenMinuteVaultGateExclusive() {
+        // The Vault's shared 10-minute gate (PLAN §16), strictly more than 600 s.
+        #expect(BatoceraPromotion.playedThresholdSeconds == ImportPolicy.vaultPlaytimeGateSeconds)
+        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 0) == false)
+        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 599) == false)
+        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 600) == false)
+        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 601) == true)
         // playcount alone never promotes.
         #expect(BatoceraPromotion.isCandidate(gameTimeSeconds: 100, isFavorite: false) == false)
         #expect(BatoceraPromotion.isCandidate(gameTimeSeconds: 100, isFavorite: true) == true)
-        #expect(BatoceraPromotion.isCandidate(gameTimeSeconds: 600, isFavorite: false) == true)
+        #expect(BatoceraPromotion.isCandidate(gameTimeSeconds: 600, isFavorite: false) == false)
+        #expect(BatoceraPromotion.isCandidate(gameTimeSeconds: 601, isFavorite: false) == true)
     }
 }
