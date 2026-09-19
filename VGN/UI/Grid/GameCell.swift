@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// One fixed-size grid tile (PLAN §8/§9). A 3:4 cover area with the art
@@ -19,6 +20,18 @@ struct GameCell: View {
 
     @Environment(\.displayScale) private var displayScale
     @State private var isDropTargeted = false
+
+    /// What a click does, Finder-style: ⌘ toggles the game in the selection, ⇧ extends
+    /// the selection from the anchor, anything else selects only this game. ⌘ wins
+    /// when both are held; Caps Lock, ⌥, ⌃ and fn do not change the meaning.
+    enum ClickKind: Equatable { case select, toggle, extend }
+
+    static func clickKind(for flags: NSEvent.ModifierFlags) -> ClickKind {
+        let relevant = flags.intersection(.deviceIndependentFlagsMask)
+        if relevant.contains(.command) { return .toggle }
+        if relevant.contains(.shift) { return .extend }
+        return .select
+    }
 
     private var game: GameSummary { model.summary }
 
@@ -66,9 +79,17 @@ struct GameCell: View {
                 .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
         )
         .contentShape(RoundedRectangle(cornerRadius: 8))
-        .onTapGesture(perform: onTap)
-        .gesture(TapGesture().modifiers(.command).onEnded(onCommandTap))
-        .gesture(TapGesture().modifiers(.shift).onEnded(onShiftTap))
+        // ONE tap gesture, modifiers read at click time. Three stacked gestures
+        // (`onTapGesture` + `TapGesture().modifiers(…)`) do not work: the plain tap is
+        // attached first and wins even while ⌘/⇧ is held, so every click replaced
+        // the selection.
+        .onTapGesture {
+            switch Self.clickKind(for: NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags) {
+            case .toggle: onCommandTap()
+            case .extend: onShiftTap()
+            case .select: onTap()
+            }
+        }
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first(where: { $0.isFileURL }) else { return false }
             onDropCover(url)
