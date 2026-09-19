@@ -106,7 +106,9 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   v7 drops the `products.source` CHECK — validated in Swift via `ProductSource`, so file/importer sources
   (Delicious §5.5) add no rebuild;
   v8 `products.subscription` (NULL = really owned, `'ps_plus'` = a PS Plus claim; free text, tolerant
-  `ProductSubscription`) + a partial index — PS Plus copies §13.3). `LibraryStore`
+  `ProductSubscription`) + a partial index — PS Plus copies §13.3;
+  v9 `games.first_played_at` / `games.last_played_at` (nullable, **importer-filled only**, never
+  typed — PSN §13.3; monotonic via `LibraryStore.setPSNPlayedDates`)). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`

@@ -169,6 +169,19 @@ first, then the real account; **stop and report on anything unexpected** before 
 - [ ] **Change IGDB Match…** on a wrongly-matched game (weird edition) replaces the entry and refreshes metadata; a genre/year from the wrong match does not linger.
 - [ ] In the import review sheet, a ticked row with no IGDB match shows a quiet "will import unlinked" warning; **Find…** opens the search and, on choose, attaches the match to that row.
 
+## PSN import UI (§13, wave 11) [owner — most items are LIVE steps, run with the orchestrator]
+Read `docs/psn-import.md` first. The build-steps panel is **not yet built** (see LIMITATIONS §5c), so run the S1–S8 runbook through the ordinary Settings flow, deliberately, one account at a time — **test account first, then the real account** — stopping and asking at any odd response.
+- [ ] **Settings ▸ PlayStation** signed-out shows *Sign In to PlayStation…*, a *Paste NPSSO instead* disclosure, and the three-line risk note. The NPSSO is never shown back to you and the field clears after use; an implausible paste is rejected without echoing what you typed.
+- [ ] **Sign in (S1).** The login sheet loads Sony's page in a private window, the address line shows only the host, and off-Sony pages are blocked. After you log in it reads the `npsso` cookie and signs in; the tab now shows your **online id** (never the account id), the session-renewal date, and per-data-set cache ages. (If the cookie can't be read, *Paste NPSSO instead* works.)
+- [ ] **Probes then full fetches (S2–S6), test account.** Sync Now fetches profile → trophy titles → game list → purchases, each probed first. A test account with a few free games and **no PS Plus** produces a coherent review; the free games appear as owned digital, none as PS Plus.
+- [ ] **Stop-and-ask is real.** If any response is off (login page, error envelope, schema mismatch, rate limit, the `getPurchasedGameList` hash moved…), the sync **stops**, shows "VGN stopped and made no further requests." with the reject reason and a redacted excerpt, and makes no further requests. Nothing is committed.
+- [ ] **Real account (S5b–S8).** One tiny probe per data set before each full fetch; the first real PS Plus title shows the yellow **+** badge in the grid and "PS Plus — expires with the subscription" in the inspector. A second Sync inside the cache window makes **zero** requests.
+- [ ] **Review & commit.** Committing imports the games (owned digital for purchases, played for trophy titles with their last-played date and 100 % status where earned) and shows a banner; re-committing adds nothing new. Decisions persist across syncs.
+- [ ] **PS Plus facet.** Format ▸ **PS Plus** shows only games you own solely through PS Plus; with Status ▸ Not Played it is the "finish before unsubscribing" list. A removable *PS Plus* chip appears.
+- [ ] **Change Copy Format.** Selecting several games and Game ▸ **Change Copy Format ▸ Physical** reclassifies each single-copy game and reports "N changed · M skipped (several copies)"; Undo reverts them in one step. A PS Plus copy is never changed.
+- [ ] **Last played.** A played PSN game shows "Last played <date>" in the inspector; sorting by **Last Played** orders by it (never-played-by-an-importer games last). CSV/JSON export carry the dates.
+- [ ] **Force Refresh / Sign Out.** Force Refresh on one data set states the request cost + cached age before spending anything; Sign Out (optionally deleting cached responses) returns to the signed-out pane.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
