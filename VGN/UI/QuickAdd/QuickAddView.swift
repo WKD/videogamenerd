@@ -173,7 +173,7 @@ struct QuickAddView: View {
     }
 
     private var shortcutHint: String {
-        "↑↓ select · Tab platform · ↩ add · ⌘↩ add & open · ⌃S…⌃F tier · esc close"
+        "↑↓ select · Tab platform · ↩ add · ⇧↩ add & keep list · ⌘↩ add & open · ⌃S…⌃F tier · esc close"
     }
 }
 

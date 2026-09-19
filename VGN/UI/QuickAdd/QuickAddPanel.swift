@@ -127,7 +127,8 @@ final class QuickAddPanelController {
 
         switch event.keyCode {
         case 36, 76:                                   // Return / keypad Enter
-            model.commit(openInspector: hasCommand)
+            // ↩ add (field clears) · ⇧↩ add and keep the list (series) · ⌘↩ add & open
+            model.commit(openInspector: hasCommand, keepResults: mods.contains(.shift))
             return true
         case 53:                                        // Escape
             if !model.handleEscape() { hide() }

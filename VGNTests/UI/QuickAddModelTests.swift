@@ -187,6 +187,46 @@ struct QuickAddModelTests {
         #expect(await library.addedDrafts.first?.igdbID == 1)
     }
 
+    @Test func shiftReturnAddsAndKeepsTheListForSeries() async {
+        let library = FakeLibrary()
+        await library.setOutcome(.created(gameID: 5))
+        let model = makeQuickAddModel(library: library)
+        model.query = "yakuza"
+        model.applyRemote(
+            [makeSearchResult(id: 1, name: "Yakuza 0", year: 2015, platforms: ["ps4"]),
+             makeSearchResult(id: 2, name: "Yakuza Kiwami", year: 2016, platforms: ["ps4"]),
+             makeSearchResult(id: 3, name: "Yakuza Kiwami 2", year: 2017, platforms: ["ps4"])],
+            generation: model.searchGeneration, credentials: true)
+        #expect(model.selectedIndex == 0)
+
+        model.commit(openInspector: false, keepResults: true)
+        await poll { model.confirmation != nil && model.selectedIndex == 1 }
+
+        #expect(model.query == "yakuza")                  // field untouched
+        #expect(model.results.count == 3)                 // list kept
+        #expect(model.selectedIndex == 1)                 // stepped to the next entry
+        #expect(model.confirmation?.message.contains("Yakuza 0") == true)
+        #expect(await library.addedDrafts.map(\.igdbID) == [1])
+
+        // A second ⇧↩ adds the next game of the series without retyping.
+        model.commit(openInspector: false, keepResults: true)
+        await poll { model.selectedIndex == 2 }
+        #expect(await library.addedDrafts.map(\.igdbID) == [1, 2])
+        #expect(model.query == "yakuza")
+    }
+
+    @Test func shiftReturnOnTheLastRowStaysOnIt() async {
+        let library = FakeLibrary()
+        let model = makeQuickAddModel(library: library)
+        model.query = "ico"
+        model.applyRemote([makeSearchResult(id: 9, name: "Ico", year: 2001, platforms: ["ps2"])],
+                          generation: model.searchGeneration, credentials: true)
+        model.commit(openInspector: false, keepResults: true)
+        await poll { model.confirmation != nil }
+        #expect(model.selectedIndex == 0)
+        #expect(model.query == "ico")
+    }
+
     @Test func commandReturnOpensInspectorAndCloses() async {
         let captured = Captured()
         let library = FakeLibrary()

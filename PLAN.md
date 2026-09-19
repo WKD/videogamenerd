@@ -163,7 +163,7 @@ Data-driven `platforms.json`, grouped by manufacturer in the sidebar: Sony, Nint
 Spotlight-style palette, keyboard only:
 1. Type 3+ letters → results stream in (local library + catalog cache instantly, IGDB ~200 ms later; 150 ms debounce, previous request cancelled). Rows: cover, title, year, platform chips. Already-in-library rows are marked.
 2. `↑↓` select · `Tab` cycles platform (defaults to the sidebar's current platform, else the game's most likely one) · `⌘O` owned / `⌘P` played (sticky from last add) · `⌘D` cycles the owned format **physical → digital → ROM** (sticky too) · optional `S A B C D` sets the tier right away.
-3. `↩` adds; the field clears and **stays open** for the next game. `⌘↩` adds and opens the inspector. `esc` closes.
+3. `↩` adds; the field clears and **stays open** for the next game. `⇧↩` adds but **keeps the query and the result list** and steps to the next row — for entering a whole series ("yakuza" → `⇧↩ ⇧↩ ⇧↩`). `⌘↩` adds and opens the inspector. `esc` closes.
 - Picking a bundle result offers "Add as compilation (n games)".
 - Fully manual entry (no IGDB match) is one more row at the bottom: "Create '…' manually".
 - Metadata, cover and time-to-beat are fetched in the background *after* insertion — adding never waits on the network.

@@ -196,6 +196,8 @@ final class QuickAddModel {
     private var cacheTask: Task<Void, Never>?
     private var remoteTask: Task<Void, Never>?
     private var commitTask: Task<Void, Never>?
+    /// Set by `commit(keepResults:)`, consumed by `finishAdd`.
+    private var keepResultsOnFinish = false
 
     init(
         catalog: any CatalogSearching,
@@ -486,8 +488,13 @@ final class QuickAddModel {
     /// open the inspector on it (`openInspector == true`). Never waits on the
     /// network to *insert* (PLAN §6.1). With no results, adds the typed text
     /// manually.
-    func commit(openInspector: Bool) {
+    ///
+    /// `keepResults` (⇧↩) adds the selected row but keeps the query and the result
+    /// list, then moves the selection to the next row — for adding a whole series
+    /// ("yakuza" → ⇧↩ ⇧↩ ⇧↩) without retyping. Ignored with `openInspector`.
+    func commit(openInspector: Bool, keepResults: Bool = false) {
         commitTask?.cancel()
+        keepResultsOnFinish = keepResults && !openInspector
         commitTask = Task { [weak self] in await self?.performCommit(openInspector: openInspector) }
     }
 
@@ -616,6 +623,26 @@ final class QuickAddModel {
             onRequestClose()
             return
         }
+        if keepResultsOnFinish, !results.isEmpty {
+            keepResultsOnFinish = false
+            tierLetter = nil      // tier is per-entry
+            platformOverride = nil
+            confirmation = QuickAddConfirmation(message: message, gameID: gameID)
+            // Re-read the library so the row just added shows as "in library", then
+            // step to the next row.
+            let generation = searchGeneration, text = query, next = selectedIndex + 1
+            localTask?.cancel()
+            localTask = Task { [weak self] in
+                guard let self else { return }
+                let matches = await self.library.localMatches(text)
+                self.applyLocal(matches, generation: generation)
+                if generation == self.searchGeneration, self.results.indices.contains(next) {
+                    self.selectedIndex = next
+                }
+            }
+            return
+        }
+        keepResultsOnFinish = false
         query = ""            // clears results + confirmation via didSet…
         tierLetter = nil      // tier is per-entry
         confirmation = QuickAddConfirmation(message: message, gameID: gameID)   // …then re-shown

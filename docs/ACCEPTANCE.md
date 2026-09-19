@@ -14,7 +14,7 @@ Things machines can't judge (or that need the owner's data/eyes). Updated by the
 ### M1 — Library core (code merged 2026-09-18; tag `m1` follows the loose-ends merge)
 The agents cannot drive the GUI, so the keyboard palette has only been exercised through its model tests. **Main runtime risk: the Quick Add `NSPanel` key handling on macOS 15.** With the real app and real credentials:
 - [ ] Settings ▸ Accounts: enter the IGDB client id/secret → **Test connection** says it is connected.
-- [ ] `⌘N` opens the palette; typing streams results (library instantly, IGDB ~200 ms later); `↑↓` select, `Tab`/`⇧Tab` cycle platform, `⌘O` owned, `⌘P` played, `⌘D` physical → digital → ROM, `⌃S…⌃F` tier (`⌃0` clears), `↩` adds and stays open, `⌘↩` opens the inspector, `esc` clears then closes.
+- [ ] `⌘N` opens the palette; typing streams results (library instantly, IGDB ~200 ms later); `↑↓` select, `Tab`/`⇧Tab` cycle platform, `⌘O` owned, `⌘P` played, `⌘D` physical → digital → ROM, `⌃S…⌃F` tier (`⌃0` clears), `↩` adds and stays open (field clears), `⇧↩` adds and keeps the list (for a series), `⌘↩` opens the inspector, `esc` clears then closes.
 - [ ] **50 games by keyboard in < 5 minutes**, the palette never waiting on the network.
 - [ ] Covers appear in the grid within seconds; the sidebar footer shows "Fetching metadata · n left"; quit mid-fetch and relaunch → the queue resumes; relaunch is instant and covers persist.
 - [ ] "metal gear solid legacy" offers **Add as compilation** and creates the member games; "bloodb" and "chevaliers de baphomet" both find their game (search fallback).
