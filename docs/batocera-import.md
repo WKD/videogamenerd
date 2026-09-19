@@ -132,3 +132,108 @@ Nothing derived from the share is committed except aggregate facts and a handful
 titles in tests/docs (titles are product names). No ROMs, images or videos are copied. The
 share is opened read-only; the mount may vanish and everything still works from tests (no test
 reads `/Volumes/…`; all gamelists in the suite are built in code).
+
+---
+
+# Phase 2 — UI as built (wave 13, PLAN §15)
+
+Phase 2 adds the whole owner-facing surface on top of the phase-1 services. Nothing here
+changes the schema (v10 already carries `dismissed_at` / `not_interested` / `promoted_game_id`).
+Every promotion still goes through the **review sheet** — nothing is ever auto-committed into
+the library (the owner has ~134 hand-entered ROM copies and IGDB matching can be wrong).
+
+## What runs automatically vs. never
+
+- **Auto-sync at launch (live only).** If the share is mounted and *"Sync automatically at
+  launch"* is on (default), a change-detecting sync runs **after the UI is up**, off the main
+  actor, one at a time, cancellable. It updates the catalogue only; when it finds new promotion
+  candidates it shows a quiet banner **"N Batocera games ready to review"** with a **Review…**
+  action. Sample / seeded / test runs get an **inert** backend and **never touch `/Volumes`**.
+- **Never automatic:** promotion into the library. The banner's *Review…*, the File ▸ *Import
+  from Batocera…* command, and the browser / Discover *Add to Library…* all open the shared
+  review sheet; a game is added only when the owner commits it.
+
+## Settings ▸ Batocera (`BatoceraSettingsPane`)
+
+Share folder (an `NSOpenPanel` that picks the folder containing `roms/`, default suggestion
+`/Volumes/share`, stored in `AppPreferences.defaults`), a status block (mounted / not mounted,
+last sync, systems + catalogue size + candidates waiting), **Sync Now** with progress + cancel,
+the **"Sync automatically at launch"** toggle (default on), the **editable skip list** (defaults
+from `BatoceraSystems.defaultSkipList`; removing a non-arcade entry un-skips it; `mame*`/`cps*`
+families are always skipped), and the read-only promotion threshold. Errors are quiet and
+specific ("Batocera share not mounted"). The pane is `settingsPane()`-sized (≈ 570 pt,
+`SettingsPaneSizingTests`).
+
+## Sidebar "Batocera ▸ ROM Catalogue" + the browser (`RomCatalogueView`)
+
+A **"Batocera"** section after *By Length*, before *Platforms*, shown **only when the catalogue
+is non-empty**. Its count comes from a **separate** `rom_catalog` observation
+(`vm.romCatalogueCount`), never the library counts — so 11 000 ROMs never touch any library
+number (`SidebarSelection.romCatalogue` returns `nil` from `SidebarCounts.count(for:)`; a test
+asserts the library counts are byte-identical with a 10 000-row catalogue). The row routes to a
+**separate** view (not the grid): a system picker with counts, an FTS search field, a sort menu
+(title / rating / year / recently added / most played), filter chips (Never played · Played ·
+Favourites · In my library) and a paged list — thumbnail (read from the share off-main through a
+small bounded cache keyed by path + mtime; placeholder when unmounted, never copied), title,
+system pill, year, genre, ★ rating, play time and an **In Library** marker linking to the
+promoted game. Row / selection actions: **Add to Library…**, **Not Interested**, **Show in
+Finder** (when mounted).
+
+## Promotion review (`BatoceraImportHookup`)
+
+Reuses the shared `ImportReviewSheet` ("Import from Batocera"). Candidates (played > 5 min or
+favourite, not promoted, not dismissed) or a hand-picked set → each staged row is IGDB-matched
+by the existing `ImportSyncCoordinator` + `ImportMatcher` (platform-constrained, release-year
+tie-breaker) **while a progress sheet with a cancel shows the `completed/total`**; matched
+results persist in the staging table, so reopening does not re-query. Rows show the platform,
+the play-time line ("4 h 12 · last played Apr 2025 · ★") and the duplicate state **"Already in
+your library — adds play time only"** when the matched game already owns a ROM copy on that
+platform (`gameHasROMCopy`). Commit runs through **`BatoceraPromoter`** (not the shared
+`commitItems()`): a ROM copy (`source = batocera`, format `.rom`), played + playtime + last
+played per phase-1 rules, favourites-with-no-playtime owned-not-played, and the catalogue row
+linked (`promoted_game_id`). The shared model got two small additive seams for this: a
+`romPromotion` flag (the duplicate note) and a `customCommit` closure (the Promoter path);
+GOG / PSN / Delicious are unaffected.
+
+**First-run cost.** ~290 candidates on the owner's box → ~290 IGDB autocomplete requests
+(one per new row, through the rate limiter), a few minutes; already-matched rows on a re-run
+cost nothing.
+
+## Play Next ▸ "Discover on your Batocera" (`DiscoverScorer` + `DiscoverRow`)
+
+A separate row **below** the regular picks, hidden when the catalogue is empty or Play Next has
+"not enough data" (no ranked games). Candidates = never-played, not-promoted, not-dismissed
+catalogue entries (`neverPlayedPool`). Scored by **my taste, not popularity**, by a **new**
+pure scorer next to the engine (the engine's weights and backtest are untouched):
+
+- trait affinity (`RomCatalogTraits` genre/theme/keyword/franchise/developer/decade vs my ranked
+  games weighted by tier/derived score) via the engine's `TraitProfile`;
+- direct links ("same series as *X* (your S tier)", "from the makers of *Y*") via `DirectLinks`;
+- the crowd `rating` only as a **prior** (a small, capped weight that shrinks as I rank more
+  games — ScreenScraper gives no rating count, so the engine's crowd term is replaced here);
+- **system affinity** (a small constant nudge for systems I actually play);
+- time fit is **neutral** (catalogue entries have no length — never a penalty);
+- minus anything **Not Interested**.
+
+**Rotation:** a deterministic weekly seed (ISO week) mixes exploration into the top so the row
+changes week to week without being random on every refresh; **Shuffle** re-rolls within the
+week. 5–8 cards: thumbnail, title, system, year, genre, taste reason(s), ★ rating; actions
+**Add to Library…**, **Not Interested**, **Show in Catalogue**. Excluded from the taste backtest
+(no ground truth). Scoring runs off the main actor (≈ 0.36 s for 11 300 entries).
+
+**"Ask Claude" is not wired to Discover in this lane** — noted as a follow-up in
+`docs/LIMITATIONS.md`.
+
+## Owner first-run walkthrough
+
+1. **Settings ▸ Batocera ▸ Choose…** the share folder (the one with `roms/`; `/Volumes/share`
+   is suggested). Leave *"Sync automatically at launch"* on.
+2. **Sync Now** (or just relaunch). The catalogue fills; a **"N Batocera games ready to
+   review"** banner appears.
+3. **Review…** → the *Import from Batocera* sheet matches the ~290 played/favourite ROMs to
+   IGDB (a couple of minutes the first time). Untick anything wrong, use **Find…** on a no-match
+   row, then **Import**. Duplicates you already own get play time only.
+4. Browse the rest under **Sidebar ▸ Batocera ▸ ROM Catalogue**; **Add to Library…** anything
+   you want, **Not Interested** on anything you don't.
+5. Open **Play Next** for the **Discover on your Batocera** row — retro games you own but never
+   played, ranked by your taste. **Shuffle** for a new set.

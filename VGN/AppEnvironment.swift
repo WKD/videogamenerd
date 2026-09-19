@@ -40,6 +40,10 @@ final class AppEnvironment {
     let psnImport: PSNImportPresenter?
     /// Presents the Delicious Library file-import flow (PLAN §5.5); nil in tests.
     let deliciousImport: DeliciousImportPresenter?
+    /// The Batocera catalogue browser + Discover dependencies (PLAN §15); nil in tests.
+    let batocera: BatoceraEnvironment?
+    /// Presents the Batocera promotion-review flow (PLAN §15); nil in tests.
+    let batoceraImport: BatoceraImportPresenter?
     /// Presents the HLTB time-estimate fallback (bulk sheet + single-game picker,
     /// PLAN §5.3); nil in tests.
     let hltb: HLTBFetchPresenter?
@@ -74,6 +78,8 @@ final class AppEnvironment {
         gogImport: GOGImportPresenter? = nil,
         psnImport: PSNImportPresenter? = nil,
         deliciousImport: DeliciousImportPresenter? = nil,
+        batocera: BatoceraEnvironment? = nil,
+        batoceraImport: BatoceraImportPresenter? = nil,
         hltb: HLTBFetchPresenter? = nil,
         igdbLink: IGDBLinkPresenter? = nil,
         catalogSearcher: (any CatalogSearching)? = nil
@@ -92,6 +98,8 @@ final class AppEnvironment {
         self.gogImport = gogImport
         self.psnImport = psnImport
         self.deliciousImport = deliciousImport
+        self.batocera = batocera
+        self.batoceraImport = batoceraImport
         self.hltb = hltb
         self.igdbLink = igdbLink
         self.catalogSearcher = catalogSearcher
@@ -185,6 +193,28 @@ final class AppEnvironment {
                     if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
                 })
 
+            // Batocera ROM collection (PLAN §15): live builds the real sync + share access;
+            // other modes get an inert backend that never touches `/Volumes`. The Settings
+            // pane, catalogue browser, promotion review and Discover row all hang off this.
+            let batoceraWiring = BatoceraBuilder.build(
+                mode: mode, database: database, secrets: settings.secretStore,
+                graph: built?.graph, platformCatalog: built?.platformCatalog,
+                library: store, recommendation: RecommendationStore(database), vm: vm,
+                onError: { [weak vm] message in vm?.showBanner(message, kind: .error) },
+                onLibraryChanged: {
+                    if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
+                })
+            settings.batoceraAccount = batoceraWiring.settings
+
+            // Auto-sync at launch (live only, after the UI is up — never delays launch). The
+            // sync runs in an actor (off the main actor); when it finds new candidates the
+            // settings model's `onSyncFinished` shows the quiet "Review…" banner. NEVER an
+            // auto-commit — every promotion goes through the review sheet.
+            if batoceraWiring.shouldAutoSync {
+                let batoceraSettings = batoceraWiring.settings
+                Task { @MainActor in batoceraSettings.syncNow() }
+            }
+
             // HLTB time-estimate fallback (PLAN §5.3): live builds the real search
             // client; other modes get the inert, no-network search. Reuses the shared
             // importer cache (source = "hltb").
@@ -206,6 +236,8 @@ final class AppEnvironment {
                 gogImport: gogWiring.presenter,
                 psnImport: psnWiring.presenter,
                 deliciousImport: deliciousImport,
+                batocera: batoceraWiring.environment,
+                batoceraImport: batoceraWiring.presenter,
                 hltb: hltb,
                 igdbLink: wiring.igdbLink,
                 catalogSearcher: wiring.catalogSearcher

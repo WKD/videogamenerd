@@ -24,6 +24,11 @@ final class LibraryViewModel {
     private(set) var tiers: [TierInfo] = []
     private(set) var genresInUse: [String] = []
     private(set) var decadesInUse: [Int] = []
+    /// Present-entry count of the Batocera ROM catalogue (PLAN §15). A **separate** observation
+    /// from the library counts — a catalogue write never disturbs the library's counts stream,
+    /// and this number never enters `SidebarCounts`. Drives the "Batocera" sidebar section's
+    /// visibility (shown only when > 0) and its badge.
+    private(set) var romCatalogueCount: Int = 0
 
     // MARK: UI state
     private(set) var selection: SidebarSelection
@@ -125,6 +130,9 @@ final class LibraryViewModel {
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
     var banner: LibraryBanner?
+    /// The handler for a banner that carries an `actionTitle` (e.g. Batocera "Review…",
+    /// PLAN §15). Kept off the `Equatable`/`Sendable` banner value.
+    @ObservationIgnored private var bannerAction: (@MainActor () -> Void)?
     /// A pending yes/no confirmation (orphan delete / last-copy removal).
     var pendingConfirmation: LibraryConfirmation?
     /// A pending "add a copy" flow needing a platform + format choice.
@@ -172,6 +180,7 @@ final class LibraryViewModel {
     private var scoresTask: Task<Void, Never>?
     private var genresTask: Task<Void, Never>?
     private var decadesTask: Task<Void, Never>?
+    private var romCatalogueCountTask: Task<Void, Never>?
     private var bannerDismissTask: Task<Void, Never>?
 
     /// Bumped on every `restartGames` so a stale observation task's emission is
@@ -307,6 +316,11 @@ final class LibraryViewModel {
         decadesTask = Task { [dataSource] in
             for await value in dataSource.decadesInUse() { self.decadesInUse = value }
         }
+        romCatalogueCountTask = Task { [dataSource] in
+            for await value in dataSource.romCatalogueCount() {
+                if value != self.romCatalogueCount { self.romCatalogueCount = value }
+            }
+        }
         scoresTask = Task { [dataSource] in
             for await value in dataSource.scoresStream() {
                 // Assign only on a real change so an unrelated write (that leaves
@@ -327,6 +341,7 @@ final class LibraryViewModel {
         scoresTask?.cancel(); scoresTask = nil
         genresTask?.cancel(); genresTask = nil
         decadesTask?.cancel(); decadesTask = nil
+        romCatalogueCountTask?.cancel(); romCatalogueCountTask = nil
     }
 
     /// (Re)subscribe the single sidebar-counts observation with the current pace's
@@ -486,6 +501,10 @@ final class LibraryViewModel {
     /// True when the sidebar has Play Next selected (grid is replaced by the
     /// recommendation view — a placeholder until a later wave, PLAN §7b).
     var isPlayNextSelection: Bool { selection == .playNext }
+
+    /// True when the sidebar has the Batocera ROM Catalogue selected (the grid is replaced by
+    /// the separate catalogue browser, PLAN §15).
+    var isRomCatalogueSelection: Bool { selection == .romCatalogue }
 
     // MARK: Filter
 
@@ -931,6 +950,7 @@ final class LibraryViewModel {
     /// than swallowed (PLAN §8).
     func showBanner(_ message: String, kind: LibraryBanner.Kind = .info) {
         banner = LibraryBanner(message: message, kind: kind)
+        bannerAction = nil
         bannerDismissTask?.cancel()
         bannerDismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(kind == .error ? 6 : 4))
@@ -939,8 +959,25 @@ final class LibraryViewModel {
         }
     }
 
+    /// Show a **persistent** banner with an action button (e.g. Batocera "Review…",
+    /// PLAN §15). It does not auto-dismiss; the action or the ✕ clears it.
+    func showBanner(_ message: String, kind: LibraryBanner.Kind = .info,
+                    actionTitle: String, action: @escaping @MainActor () -> Void) {
+        bannerDismissTask?.cancel()
+        bannerAction = action
+        banner = LibraryBanner(message: message, kind: kind, actionTitle: actionTitle)
+    }
+
+    /// Run the current banner's action (if any) and dismiss it.
+    func performBannerAction() {
+        let action = bannerAction
+        dismissBanner()
+        action?()
+    }
+
     func dismissBanner() {
         bannerDismissTask?.cancel()
+        bannerAction = nil
         banner = nil
     }
 }

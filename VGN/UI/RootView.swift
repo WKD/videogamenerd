@@ -90,7 +90,7 @@ struct RootView: View {
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 0) {
-            if !vm.isRankingSelection && !vm.isPlayNextSelection {
+            if !vm.isRankingSelection && !vm.isPlayNextSelection && !vm.isRomCatalogueSelection {
                 FilterChipsBar(vm: vm)
             }
             ZStack(alignment: .bottom) {
@@ -105,11 +105,15 @@ struct RootView: View {
                         .environment(\.rankingActions, RankingViewActions(
                             goToDuel: { vm.select(.duel) },
                             inspect: { id in vm.selectOnly(id); vm.showInspector() }))
+                } else if vm.isRomCatalogueSelection {
+                    RomCatalogueView()
                 } else {
                     LibraryGridView(vm: vm)
                 }
                 if let banner = vm.banner {
-                    BannerView(banner: banner) { vm.dismissBanner() }
+                    BannerView(banner: banner,
+                               onAction: banner.actionTitle != nil ? { vm.performBannerAction() } : nil,
+                               onDismiss: { vm.dismissBanner() })
                         .padding(12)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -441,6 +445,7 @@ struct RootView: View {
 /// A transient banner pinned to the bottom of the content (PLAN §8 feedback).
 private struct BannerView: View {
     let banner: LibraryBanner
+    var onAction: (() -> Void)? = nil
     let onDismiss: () -> Void
 
     var body: some View {
@@ -448,6 +453,12 @@ private struct BannerView: View {
             Image(systemName: icon)
             Text(banner.message).font(.callout)
             Spacer(minLength: 8)
+            if let title = banner.actionTitle, let onAction {
+                Button(title) { onAction() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("banner.action")
+            }
             Button {
                 onDismiss()
             } label: {

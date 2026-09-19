@@ -117,6 +117,10 @@ enum LibraryQuery {
             appendLengthScope(shelf, bounds: bounds, style: style, into: &wheres, args: &args)
         case .unmeasured:
             wheres.append("\(lengthEstimateExpr(style: style)) IS NULL")
+        case .romCatalogue:
+            // The ROM catalogue is a separate shelf that never routes to the library grid
+            // (PLAN §15). Should a query ever reach here, match nothing rather than the library.
+            wheres.append("0")
         case let .platform(slug):
             appendPlatformMembership(slug, into: &wheres, args: &args)
         }

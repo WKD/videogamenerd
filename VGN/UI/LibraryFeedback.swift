@@ -7,6 +7,10 @@ struct LibraryBanner: Identifiable, Equatable, Sendable {
     let id = UUID()
     var message: String
     var kind: Kind
+    /// An optional action affordance rendered as a button (e.g. "Review…", PLAN §15). When
+    /// set, the banner does **not** auto-dismiss — it waits for the action or the ✕. The
+    /// handler itself lives on ``LibraryViewModel`` (a closure is not `Equatable`/`Sendable`).
+    var actionTitle: String? = nil
 }
 
 /// A yes/no confirmation the user must answer before a destructive retry (an

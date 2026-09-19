@@ -95,13 +95,34 @@ enum BatoceraSystems {
         "windows_installers",
     ]
 
-    /// Classify one system folder name.
+    /// The default editable skip list shown in Settings ▸ Batocera (PLAN §15 phase 2):
+    /// the built-in arcade romsets + non-collection ports/engines, sorted. The owner may
+    /// add or remove entries; the numbered romset **families** (`mame*`, `cps*`) are always
+    /// skipped regardless (``isArcadeFamily(_:)``) so a stray `mame2010` can never flood in.
+    static let defaultSkipList: [String] = Array(arcadeSkip.union(nonCollectionSkip)).sorted()
+
+    /// Classify one system folder name against the built-in skip list (existing behaviour).
     static func classify(_ system: String) -> Classification {
+        classify(system, skip: arcadeSkip.union(nonCollectionSkip))
+    }
+
+    /// Classify one system folder name against an **explicit** skip set (PLAN §15 phase 2 —
+    /// the owner's editable skip list). `skip` is the authoritative list of exact system
+    /// folder names to skip; the arcade romset *families* (`mame*`, `cps*`) are always
+    /// skipped on top of it, so removing them from the list can never un-skip a `mame2003`.
+    static func classify(_ system: String, skip: Set<String>) -> Classification {
         let key = system.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if key.isEmpty { return .unknown }
-        if isSkipped(key) { return .skipped }
+        if isArcadeFamily(key) || skip.contains(key) { return .skipped }
         if let slug = slugTable[key] { return .mapped(slug: slug) }
         return .unknown
+    }
+
+    /// The always-skip arcade romset families identified by prefix (`mame2003`, `cps2` …),
+    /// which are never a personal collection whatever the editable list says.
+    static func isArcadeFamily(_ system: String) -> Bool {
+        let key = system.lowercased()
+        return key.hasPrefix("cps") || key.hasPrefix("mame")
     }
 
     /// The VGN slug for a system, or nil when skipped / unknown.

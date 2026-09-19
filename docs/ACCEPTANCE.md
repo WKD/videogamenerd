@@ -202,6 +202,34 @@ review / Settings exist. What phase 1 can be eyeballed today is the **dry-run** 
 - [ ] **Play Next ▸ Discover** surfaces never-played catalogue games scored by taste, rotates weekly,
   and "Not interested" retires a title for good.
 
+## Batocera ROM catalogue UI (§15, phase 2 — lane A, wave 13) [owner — live, run once]
+The UI is built; these need the owner + a mounted share (agents can't drive windows or read the
+owner's `/Volumes`). See `docs/batocera-import.md` for the first-run walkthrough.
+- [ ] **Settings ▸ Batocera.** Choose the share folder (`/Volumes/share` suggested); the status
+  shows *Mounted*, systems + catalogue size + candidates waiting. **Sync Now** shows progress and a
+  cancel; a second run reads 0 systems (unchanged). The **skip list** is editable (remove one and it
+  gets read next sync; `mame*`/`cps*` stay skipped). Unmounting the share → *Not mounted*, and a sync
+  reports "Batocera share not mounted" quietly.
+- [ ] **Auto-sync + review banner.** With auto-sync on and the share mounted, launching VGN runs the
+  sync in the background (no launch delay) and, when candidates turn up, shows **"N Batocera games
+  ready to review"** with **Review…** — and **never** adds anything to the library on its own.
+- [ ] **Promotion review.** *Review…* opens *Import from Batocera*: the ~290 candidates match to IGDB
+  (a progress sheet with a cancel; a couple of minutes the first time), each row shows the play-time
+  line and, where you already own the ROM, "Already in your library — adds play time only".
+  Untick/Find…/Ignore work; **Import** creates ROM copies with the box's play data and links the
+  catalogue rows. Reopening does not re-query matched rows.
+- [ ] **Sidebar ▸ Batocera ▸ ROM Catalogue.** The section appears only when the catalogue is
+  non-empty. Browse per system, search (instant), sort, filter chips; thumbnails load from the share
+  (placeholder when unmounted); **In Library** marks promoted games; **Add to Library… / Not
+  Interested / Show in Finder** work. The library's All/Owned/Backlog/stats/ranking counts are
+  **unchanged** with the catalogue present.
+- [ ] **Play Next ▸ Discover on your Batocera.** A row below the picks with 5–8 never-played ROMs
+  scored by your taste (reasons like "Part of *Zelda*, like *A Link to the Past* (S)"); **Shuffle**
+  re-rolls within the week; **Not Interested** retires a title; **Show in Catalogue** jumps to it.
+  Hidden when you have no rankings.
+- [ ] **Idle CPU.** With the ROM Catalogue open (and after a sync), the app idles at ~0 % CPU (no
+  polling of the mount).
+
 ## PSN build-steps panel + review groups + Play Next (§13, wave 12) [owner]
 The DEBUG build-steps panel, the richer review groups, and the Play Next PS Plus option landed in wave 12. Read `docs/psn-import.md`'s "panel runbook".
 - [ ] **The safety latch is a visible switch (all builds).** With sync off, Settings ▸ PlayStation reads "PlayStation sync is off" + the risk note + **Enable PlayStation sync (unofficial API)…**; enabling confirms, then says **"Relaunch VGN to apply"** (nothing hot-swaps). File ▸ **Import from PlayStation…** is disabled ("Enable it in Settings ▸ PlayStation") while off. Once on, a **Turn off…** action clears it (tokens survive until Sign Out).

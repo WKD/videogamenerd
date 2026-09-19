@@ -258,12 +258,165 @@ struct RomCatalogStore: Sendable {
         }
     }
 
+    // MARK: - Browser (paged, filtered, sorted — PLAN §15 sidebar catalogue)
+
+    /// Sort order for the ROM Catalogue browser (PLAN §15).
+    enum BrowseSort: String, CaseIterable, Sendable, Identifiable {
+        case title, rating, year, recentlyAdded, mostPlayed
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .title: return "Title"
+            case .rating: return "Rating"
+            case .year: return "Year"
+            case .recentlyAdded: return "Recently added"
+            case .mostPlayed: return "Most played"
+            }
+        }
+        /// The SQL `ORDER BY` tail (a stable `sort_title, id` tiebreak keeps paging stable).
+        var orderBy: String {
+            switch self {
+            case .title: return "c.sort_title ASC, c.id ASC"
+            case .rating: return "c.rating IS NULL, c.rating DESC, c.sort_title ASC, c.id ASC"
+            case .year: return "c.release_year IS NULL, c.release_year DESC, c.sort_title ASC, c.id ASC"
+            case .recentlyAdded: return "c.first_seen_at DESC, c.id DESC"
+            case .mostPlayed: return "c.game_time_s DESC, c.play_count DESC, c.sort_title ASC, c.id ASC"
+            }
+        }
+    }
+
+    /// Filter chips for the browser (PLAN §15).
+    enum BrowseFilter: String, CaseIterable, Sendable, Identifiable {
+        case all, neverPlayed, played, favourites, inLibrary
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .all: return "All"
+            case .neverPlayed: return "Never played"
+            case .played: return "Played"
+            case .favourites: return "Favourites"
+            case .inLibrary: return "In my library"
+            }
+        }
+        /// The SQL predicate (prefixed with ` AND `), or empty for `.all`.
+        var predicate: String {
+            switch self {
+            case .all: return ""
+            case .neverPlayed: return " AND c.game_time_s = 0 AND c.play_count = 0"
+            case .played: return " AND c.game_time_s > 0"
+            case .favourites: return " AND c.favorite = 1"
+            case .inLibrary: return " AND c.promoted_game_id IS NOT NULL"
+            }
+        }
+    }
+
+    /// Build the shared browse SQL (present rows, optional system + filter + FTS search),
+    /// returning the SQL body (`FROM … WHERE …`) and its arguments — used by both the paged
+    /// read and the count.
+    private static func browseBody(system: String?, filter: BrowseFilter, search: String)
+        -> (from: String, args: [DatabaseValueConvertible]) {
+        let pattern = FTSPattern.prefixMatch(search)
+        var from = "FROM rom_catalog c"
+        var args: [DatabaseValueConvertible] = []
+        if !pattern.isEmpty {
+            from += " JOIN rom_catalog_fts f ON f.rowid = c.id"
+        }
+        var where_ = " WHERE c.removed_at IS NULL"
+        if !pattern.isEmpty { where_ += " AND rom_catalog_fts MATCH ?"; args.append(pattern) }
+        if let system { where_ += " AND c.system = ?"; args.append(system) }
+        where_ += filter.predicate
+        return (from + where_, args)
+    }
+
+    /// One page of the browser (PLAN §15): present entries on an optional system, filtered
+    /// and sorted, with an optional FTS search, never loading the whole catalogue into memory.
+    func browse(system: String?, filter: BrowseFilter, sort: BrowseSort,
+                search: String, limit: Int, offset: Int) async throws -> [RomCatalogEntry] {
+        let body = Self.browseBody(system: system, filter: filter, search: search)
+        let args = Self.statementArgs(body.args + [limit, offset])
+        let sql = "SELECT c.* \(body.from) ORDER BY \(sort.orderBy) LIMIT ? OFFSET ?"
+        return try await dbWriter.read { db in
+            try Row.fetchAll(db, sql: sql, arguments: args).map(Self.entry(from:))
+        }
+    }
+
+    /// The total row count for a browse filter (for the paging footer).
+    func browseCount(system: String?, filter: BrowseFilter, search: String) async throws -> Int {
+        let body = Self.browseBody(system: system, filter: filter, search: search)
+        let sql = "SELECT COUNT(*) \(body.from)"
+        let args = Self.statementArgs(body.args)
+        return try await dbWriter.read { db in
+            try Int.fetchOne(db, sql: sql, arguments: args) ?? 0
+        }
+    }
+
+    /// Build a `StatementArguments` (a `Sendable` value) from a positional-arg array. The
+    /// return-type context picks the non-failable initialiser, so the result can be captured
+    /// into a GRDB read closure without a non-`Sendable` capture.
+    private static func statementArgs(_ values: [DatabaseValueConvertible]) -> StatementArguments {
+        StatementArguments(values)
+    }
+
+    /// Systems the owner has **real play time** on (any present entry played > 5 min), for
+    /// the Discover row's small "systems I actually play" affinity nudge (PLAN §15).
+    func playedSystems() async throws -> Set<String> {
+        try await dbWriter.read { db in
+            let rows = try String.fetchAll(db, sql: """
+                SELECT DISTINCT system FROM rom_catalog
+                WHERE removed_at IS NULL AND game_time_s > ?
+                """, arguments: [BatoceraPromotion.playedThresholdSeconds])
+            return Set(rows)
+        }
+    }
+
     /// Total present-entry count (diagnostics / tests).
     func totalCount(includeRemoved: Bool = false) async throws -> Int {
         try await dbWriter.read { db in
             let clause = includeRemoved ? "" : "WHERE removed_at IS NULL"
             return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM rom_catalog \(clause)") ?? 0
         }
+    }
+
+    /// Count of pending promotion candidates (played > 5 min or favourite, present, not
+    /// promoted, not dismissed) — the "candidates waiting" figure for Settings + the banner.
+    func promotionCandidateCount() async throws -> Int {
+        try await dbWriter.read { db in
+            try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM rom_catalog
+                WHERE removed_at IS NULL AND promoted_game_id IS NULL AND not_interested = 0
+                  AND (game_time_s > ? OR favorite = 1)
+                """, arguments: [BatoceraPromotion.playedThresholdSeconds]) ?? 0
+        }
+    }
+
+    /// A status snapshot for Settings ▸ Batocera (total present entries, distinct systems,
+    /// candidates waiting). One read, never touches the share.
+    func statusSnapshot() async throws -> BatoceraCatalogStatus {
+        try await dbWriter.read { db in
+            let total = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM rom_catalog WHERE removed_at IS NULL") ?? 0
+            let systems = try Int.fetchOne(db, sql: """
+                SELECT COUNT(DISTINCT system) FROM rom_catalog WHERE removed_at IS NULL
+                """) ?? 0
+            let candidates = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM rom_catalog
+                WHERE removed_at IS NULL AND promoted_game_id IS NULL AND not_interested = 0
+                  AND (game_time_s > ? OR favorite = 1)
+                """, arguments: [BatoceraPromotion.playedThresholdSeconds]) ?? 0
+            return BatoceraCatalogStatus(totalEntries: total, systemsCount: systems,
+                                         candidatesWaiting: candidates)
+        }
+    }
+
+    /// A GRDB observation of the present-entry count (the sidebar "ROM Catalogue" badge +
+    /// section visibility). A *separate* observation from the library counts, so a catalogue
+    /// write never disturbs the library's sidebar-counts stream (PLAN §15 — the catalogue is
+    /// invisible to the library).
+    func countObservation() -> AsyncValueObservation<Int> {
+        ValueObservation
+            .tracking { db in
+                try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM rom_catalog WHERE removed_at IS NULL") ?? 0
+            }
+            .values(in: dbWriter)
     }
 
     // MARK: - Row decode

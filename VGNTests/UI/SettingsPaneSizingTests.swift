@@ -59,8 +59,21 @@ struct SettingsPaneSizingTests {
             login: nil)
         await psnLatchOff.refresh()
 
+        // Batocera pane (PLAN §15): the tallest state has the status block, the skip list and
+        // the threshold row.
+        BatoceraPreferences.shareFolderPath = nil
+        let batoceraNoFolder = BatoceraSettingsModel(backend: InertBatoceraBackend())
+        BatoceraPreferences.shareFolderPath = "/Volumes/share"
+        let batoceraConfigured = BatoceraSettingsModel(
+            backend: FakeBatoceraBackend(isLive: false,
+                                         status: BatoceraCatalogStatus(totalEntries: 11_300, systemsCount: 40,
+                                                                       candidatesWaiting: 290)))
+        BatoceraPreferences.shareFolderPath = nil
+
         let heights: [(String, CGFloat)] = [
             ("General", fittingHeight(GeneralTab())),
+            ("Batocera no folder", fittingHeight(BatoceraSettingsTab(model: batoceraNoFolder))),
+            ("Batocera configured", fittingHeight(BatoceraSettingsTab(model: batoceraConfigured))),
             ("IGDB", fittingHeight(IGDBAccountTab(model: SettingsModel(secretStore: InMemorySecretStore())))),
             ("GOG signed in", fittingHeight(GOGAccountTab(model: signedIn))),
             ("GOG signed out", fittingHeight(GOGAccountTab(model: signedOut))),

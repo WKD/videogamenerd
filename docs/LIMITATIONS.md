@@ -270,6 +270,32 @@ Phase 1 landed the whole non-UI half; phase 2 (a later wave) owns everything vis
   that share a normalised title would fold, but none were observed. Multi-disc PS1/Sega-CD titles
   fold correctly (Disc 1 kept).
 
+## 5e. Batocera ROM catalogue UI (§15, wave 13 — lane A, phase 2) — **as built**
+Phase 2 built the whole visible surface (see `docs/batocera-import.md`). No schema change (v10
+sufficed). Watch items / follow-ups:
+- **Ask Claude for Discover is a follow-up [later].** The regular Play Next shortlist has "Ask
+  Claude"; the Batocera Discover row does **not** wire a second opinion this lane (the brief
+  scoped it out). Discover reasons are the engine's structured `PlayNextReason` sentences only.
+- **Batocera play time still shares `psn_playtime_s` [watch].** The phase-1 interim above is
+  unchanged — no neutral `imported_playtime_s` column was added (it was not needed for the UI, and
+  a migration was avoided per the brief). A promoted ROM's time still lands in `psn_playtime_s`
+  only when both playtime columns are empty, so a game with a real PSN time won't also show its
+  Batocera time. Still proposed for a future migration.
+- **Discover crowd prior is a local, capped weight [watch].** ScreenScraper ratings carry **no
+  rating count**, so the engine's count-confidence crowd weight would be zero. `DiscoverScorer`
+  instead blends the 0–1 rating with a small weight capped at 0.25 that shrinks as the owner ranks
+  more games — a documented deviation from the engine's crowd term, deliberately below the taste
+  terms so it only nudges near-ties. The engine's own weights/backtest are untouched.
+- **The library toolbar still renders over the ROM Catalogue view [watch].** The detail pane's
+  search field + filter menus (which drive the *grid*) stay in the window toolbar for the ROM
+  Catalogue destination; the catalogue's own search/sort/filter live in the view. They do nothing
+  to the catalogue but are visually redundant. Suppressing the toolbar per-selection was left out
+  to keep the change additive.
+- **Share thumbnails / "Show in Finder" are window-only [owner].** Reading box art from the share
+  and revealing a ROM in Finder are exercised only by launching the app against a real mounted
+  share (tests never read `/Volumes`; the loader has a nil root there). Idle CPU with the catalogue
+  open is a launch check (no timers, mount checked on demand only).
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.
