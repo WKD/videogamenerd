@@ -43,6 +43,7 @@ struct PlayNextModelTests {
         m1.setCompletionist(true)
         m1.setIncludeAbandoned(true)
         m1.setIncludePlayedWithoutStatus(true)
+        m1.setPreferExpiringSubscription(true)
         m1.useCustom(hoursPerWeek: 10, weeks: 3)
         m1.stop()
 
@@ -50,6 +51,7 @@ struct PlayNextModelTests {
         #expect(m2.completionist)
         #expect(m2.includeAbandoned)
         #expect(m2.includePlayedWithoutStatus)
+        #expect(m2.preferExpiringSubscription)
         #expect(m2.usesCustom)
         #expect(m2.customHoursPerWeek == 10)
         #expect(m2.customWeeks == 3)

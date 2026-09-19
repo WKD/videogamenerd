@@ -60,6 +60,8 @@ final class PlayNextModel {
 
     private(set) var includeAbandoned: Bool
     private(set) var includePlayedWithoutStatus: Bool
+    /// Prefer games owned only via PS Plus (PLAN §13.3), a small backtest-neutral nudge.
+    private(set) var preferExpiringSubscription: Bool
 
     // MARK: - Presented state
 
@@ -144,6 +146,7 @@ final class PlayNextModel {
         self.completionist = store.completionist
         self.includeAbandoned = store.includeAbandoned
         self.includePlayedWithoutStatus = store.includePlayedWithoutStatus
+        self.preferExpiringSubscription = store.preferExpiringSubscription
         self.hasShownAskDisclosure = store.hasShownAskDisclosure
     }
 
@@ -170,7 +173,8 @@ final class PlayNextModel {
             includeAbandoned: includeAbandoned,
             includePlayedWithoutStatus: includePlayedWithoutStatus,
             seed: seed,
-            maxAlternatives: 4)
+            maxAlternatives: 4,
+            preferExpiringSubscription: preferExpiringSubscription)
     }
 
     /// PLAN §7b: under ~15 ranked games, the view says so and leans on the crowd prior.
@@ -279,6 +283,12 @@ final class PlayNextModel {
 
     func setIncludePlayedWithoutStatus(_ on: Bool) {
         includePlayedWithoutStatus = on
+        persist()
+        recompute(debounce: false)
+    }
+
+    func setPreferExpiringSubscription(_ on: Bool) {
+        preferExpiringSubscription = on
         persist()
         recompute(debounce: false)
     }
@@ -531,6 +541,7 @@ final class PlayNextModel {
         store.completionist = completionist
         store.includeAbandoned = includeAbandoned
         store.includePlayedWithoutStatus = includePlayedWithoutStatus
+        store.preferExpiringSubscription = preferExpiringSubscription
         store.hasShownAskDisclosure = hasShownAskDisclosure
     }
 }
@@ -569,6 +580,7 @@ private struct Prefs {
         static let completionist = "playNext.completionist"
         static let includeAbandoned = "playNext.includeAbandoned"
         static let includePlayedWithoutStatus = "playNext.includePlayedWithoutStatus"
+        static let preferExpiringSubscription = "playNext.preferExpiringSubscription"
         static let hasShownAskDisclosure = "playNext.hasShownAskDisclosure"
     }
 
@@ -622,6 +634,10 @@ private struct Prefs {
     var includePlayedWithoutStatus: Bool {
         get { defaults.bool(forKey: Key.includePlayedWithoutStatus) }
         nonmutating set { defaults.set(newValue, forKey: Key.includePlayedWithoutStatus) }
+    }
+    var preferExpiringSubscription: Bool {
+        get { defaults.bool(forKey: Key.preferExpiringSubscription) }
+        nonmutating set { defaults.set(newValue, forKey: Key.preferExpiringSubscription) }
     }
     var hasShownAskDisclosure: Bool {
         get { defaults.bool(forKey: Key.hasShownAskDisclosure) }

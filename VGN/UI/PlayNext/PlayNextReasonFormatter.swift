@@ -64,6 +64,8 @@ enum PlayNextReasonFormatter {
             return "No metadata — matched on length only"
         case .weakEvidence:
             return "Little to go on yet"
+        case .leavesWithSubscription:
+            return "Leaves with PS Plus"
         }
     }
 

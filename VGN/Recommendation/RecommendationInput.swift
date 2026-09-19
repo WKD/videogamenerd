@@ -49,6 +49,10 @@ struct Candidate: Hashable, Sendable {
     var platformIDs: [String]
     var formats: [ProductFormat]
     var playStatus: PlayStatus?
+    /// The game is owned **only** through a subscription (every owned copy is a PS Plus
+    /// claim) — it "leaves with PS Plus" (PLAN §13.3). Feeds the optional, gated
+    /// "Prefer expiring PS Plus games" score term. Default false.
+    var ownedOnlyViaSubscription: Bool
 
     init(
         id: GameID,
@@ -66,7 +70,8 @@ struct Candidate: Hashable, Sendable {
         coverFile: String? = nil,
         platformIDs: [String] = [],
         formats: [ProductFormat] = [],
-        playStatus: PlayStatus? = nil
+        playStatus: PlayStatus? = nil,
+        ownedOnlyViaSubscription: Bool = false
     ) {
         self.id = id
         self.igdbID = igdbID
@@ -84,6 +89,7 @@ struct Candidate: Hashable, Sendable {
         self.platformIDs = platformIDs
         self.formats = formats
         self.playStatus = playStatus
+        self.ownedOnlyViaSubscription = ownedOnlyViaSubscription
     }
 
     var similarIGDBIDs: [Int64] { traits.compactMap(\.similarGameID) }
@@ -152,6 +158,9 @@ struct RecommendationOptions: Hashable, Sendable {
     var maxAlternatives: Int
     /// Max entries in the unknown-length lane.
     var maxUnknownLength: Int
+    /// Prefer games owned only via PS Plus (a small, backtest-neutral nudge that only
+    /// reorders near-ties, PLAN §13.3). Off by default.
+    var preferExpiringSubscription: Bool
 
     init(
         includeAbandoned: Bool = false,
@@ -159,7 +168,8 @@ struct RecommendationOptions: Hashable, Sendable {
         seed: UInt64 = 0,
         now: Double = Date().timeIntervalSince1970,
         maxAlternatives: Int = 4,
-        maxUnknownLength: Int = 8
+        maxUnknownLength: Int = 8,
+        preferExpiringSubscription: Bool = false
     ) {
         self.includeAbandoned = includeAbandoned
         self.includePlayedWithoutStatus = includePlayedWithoutStatus
@@ -167,6 +177,7 @@ struct RecommendationOptions: Hashable, Sendable {
         self.now = now
         self.maxAlternatives = maxAlternatives
         self.maxUnknownLength = maxUnknownLength
+        self.preferExpiringSubscription = preferExpiringSubscription
     }
 }
 

@@ -128,6 +128,8 @@ enum PlayNextReason: Hashable, Sendable {
     case noMetadata
     /// Thin evidence behind this pick.
     case weakEvidence
+    /// Owned only through PS Plus — the licence leaves with the subscription (PLAN §13.3).
+    case leavesWithSubscription
 }
 
 // MARK: - Suggestion + result

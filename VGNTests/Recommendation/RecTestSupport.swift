@@ -27,7 +27,8 @@ enum Rec {
         ratingCount: Int? = nil,
         hasMetadata: Bool = true,
         title: String = "Candidate",
-        playStatus: PlayStatus? = nil
+        playStatus: PlayStatus? = nil,
+        ownedOnlyViaSubscription: Bool = false
     ) -> Candidate {
         Candidate(
             id: id,
@@ -41,7 +42,8 @@ enum Rec {
             ratingCount: ratingCount,
             hasMetadata: hasMetadata,
             title: title,
-            playStatus: playStatus)
+            playStatus: playStatus,
+            ownedOnlyViaSubscription: ownedOnlyViaSubscription)
     }
 
     // "By Length" brackets at the default pace (8 h/week ⇒ edges 4 / 10 / 40 / 80).

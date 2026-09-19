@@ -103,5 +103,12 @@ struct RecommendationWeights: Sendable, Hashable {
     /// ~15 ranked games the model is thin; 5 ranked ⇒ weak).
     var fairMinRanked: Int = 8
 
+    // MARK: PS Plus (PLAN §13.3)
+
+    /// The opt-in nudge for a game owned only via PS Plus ("Prefer expiring PS Plus
+    /// games"). Deliberately small — below the trait/crowd terms — so it only reorders
+    /// near-ties and never overturns a clearly better fit. Off unless the option is on.
+    var subscriptionBonus: Double = 0.05
+
     init() {}
 }

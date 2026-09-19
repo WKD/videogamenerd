@@ -59,6 +59,26 @@ import GRDB
         #expect(byID.count == 6)                             // not the not-owned played game
     }
 
+    @Test func candidateLoaderMarksOwnedOnlyViaSubscription() async throws {
+        let (db, _, _) = try await makeStores()
+        try await db.dbWriter.write { db in
+            try db.execute(sql: "INSERT INTO games (id, title, sort_title, played) VALUES (201,'PlusOnly','plusonly',0),(202,'PlusAndDisc','plusanddisc',0),(203,'Bought','bought',0)")
+            try db.execute(sql: """
+                INSERT INTO products (id, platform_id, kind, format, source, subscription) VALUES
+                    (210,'ps5','single','digital','psn','ps_plus'),
+                    (211,'ps5','single','digital','psn','ps_plus'),
+                    (212,'ps5','single','physical','photo',NULL),
+                    (213,'ps5','single','digital','psn',NULL)
+                """)
+            try db.execute(sql: "INSERT INTO product_games (product_id, game_id, position) VALUES (210,201,0),(211,202,0),(212,202,0),(213,203,0)")
+        }
+        let candidates = try await db.dbWriter.read { db in try RecommendationStore.loadCandidates(db: db) }
+        let byID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
+        #expect(byID[201]?.ownedOnlyViaSubscription == true)    // only a PS Plus copy
+        #expect(byID[202]?.ownedOnlyViaSubscription == false)   // also on disc → not at risk
+        #expect(byID[203]?.ownedOnlyViaSubscription == false)   // really owned
+    }
+
     // MARK: - Features loaded (persisted traits + genre + platform + decade)
 
     @Test func featuresIncludeTraitsGenrePlatformDecade() async throws {
