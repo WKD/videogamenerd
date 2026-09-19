@@ -26,7 +26,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .unrated: return "Unrated"
             case .status: return "Status"
             case .notPlayed: return "Not Played"
-            case .noStatus: return "No Status"
+            case .noStatus: return "Played, No Status"
             case .format: return "Format"
             case .notOwned: return "Not Owned"
             case .playtime: return "Playtime"

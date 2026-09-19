@@ -158,6 +158,15 @@ struct FilterChipTests {
         #expect(!cleared.hasActiveFacets)
     }
 
+    @Test func playedNoStatusChipLabel() {
+        var f = LibraryFilter(scope: .all)
+        f.includeNoStatus = true
+        let chip = try! #require(LibraryFilterChips.chips(for: f, tiers: tiers)
+            .first { $0.kind == .noStatus })
+        #expect(chip.text == "Played, No Status")
+        #expect(chip.fullLabel == "Played, No Status")
+    }
+
     @Test func extraFlagsCountAsActiveFacetsAndClearAllResetsThem() {
         #expect(LibraryFilter(includeUnrated: true, scope: .all).hasActiveFacets)
         #expect(LibraryFilter(includeNotPlayed: true, scope: .all).hasActiveFacets)

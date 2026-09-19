@@ -265,8 +265,10 @@ struct RootView: View {
                 Toggle(status.label, isOn: membership(\.statuses, status))
             }
             Divider()
+            Toggle("Played, No Status", isOn: flag(\.includeNoStatus))
+                .help("Games you've marked played but not given a completion status (photo scans, Quick Add, imports) — how you find games to “Mark Played As”.")
             Toggle("Not Played", isOn: flag(\.includeNotPlayed))
-            Toggle("No Status", isOn: flag(\.includeNoStatus))
+                .help("Games you haven't played (played = off).")
             if statusFacetActive {
                 Divider()
                 Button("Clear") { clearStatusFacet() }
