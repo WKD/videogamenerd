@@ -36,6 +36,8 @@ final class AppEnvironment {
     let playNext: PlayNextEnvironment?
     /// Presents the GOG import flow (progress + review sheets, PLAN §14); nil in tests.
     let gogImport: GOGImportPresenter?
+    /// Presents the Delicious Library file-import flow (PLAN §5.5); nil in tests.
+    let deliciousImport: DeliciousImportPresenter?
 
     struct DatabaseOpenFailure: Sendable {
         var message: String
@@ -59,7 +61,8 @@ final class AppEnvironment {
         ranking: RankingEnvironment? = nil,
         photoScan: PhotoScanPresenter? = nil,
         playNext: PlayNextEnvironment? = nil,
-        gogImport: GOGImportPresenter? = nil
+        gogImport: GOGImportPresenter? = nil,
+        deliciousImport: DeliciousImportPresenter? = nil
     ) {
         self.settings = settings
         self.library = library
@@ -73,6 +76,7 @@ final class AppEnvironment {
         self.photoScan = photoScan
         self.playNext = playNext
         self.gogImport = gogImport
+        self.deliciousImport = deliciousImport
     }
 
     /// Build the environment. Never throws — a DB failure becomes `failure`.
@@ -138,6 +142,16 @@ final class AppEnvironment {
                 })
             settings.gogAccount = gogWiring.account
 
+            // Delicious Library file import (PLAN §5.5): available in live AND sample mode
+            // (a file needs no account). A committed import notifies enrichment like GOG.
+            let deliciousImport = DeliciousImportBuilder.build(
+                mode: mode, database: database, secrets: settings.secretStore,
+                graph: built?.graph, platformCatalog: built?.platformCatalog, store: store,
+                onError: { [weak vm] message in vm?.showBanner(message, kind: .error) },
+                onLibraryChanged: {
+                    if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
+                })
+
             return AppEnvironment(
                 settings: settings, library: vm, actions: actions, failure: nil,
                 services: built?.graph, quickAdd: wiring.quickAdd,
@@ -151,7 +165,8 @@ final class AppEnvironment {
                 },
                 playNext: .live(database: database, library: store,
                                 coverLoader: coverLoader, viewModel: vm),
-                gogImport: gogWiring.presenter
+                gogImport: gogWiring.presenter,
+                deliciousImport: deliciousImport
             )
         } catch {
             let path = (try? AppPaths.databaseURL().path) ?? "~/Library/Application Support/VGN/vgn.sqlite"
