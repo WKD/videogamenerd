@@ -133,33 +133,71 @@ sync stops; the owner is asked. `reachedRateLimitEnd` is set after the single 42
   never the real Application Support directory.
 - **Tokens** (Keychain, account `psn.tokens`): `PSNAuth.signOut()`.
 
-## Wave 11 — the import UI, and how to run the live steps through it
+## The panel runbook — S1–S8, one click at a time (wave 12)
 
-The PSN import UI landed in wave 11 (lane C): a **Settings ▸ PlayStation** tab, a WebKit login
-sheet, the live `ImportBackend`, the File ▸ **Import from PlayStation…** command, and the
-review/commit flow. The DEBUG **one-button-per-step build-steps panel** described in §13.5 is
-**not built yet** (see `docs/LIMITATIONS.md` §5c); until it is, run S1–S8 through the ordinary
-Settings flow below. The per-fetch probe guard still holds — the importer calls
-`client.probe(...)` before every full fetch, so a full page is never fetched un-probed — but
-this flow is *not* literally one request per click, so run it **deliberately**, watching the
-reject surface, and stop the moment anything looks off.
+The import UI landed in wave 11 (lane C); the **DEBUG "PSN build steps" panel** (§13.5) landed in
+wave 12 (lane A). Run the gated live steps **through the panel** — one request per click, each
+button disabled until its prerequisite has passed, and a hard stop-and-lock on anything
+unexpected. Only the orchestrator + owner run these steps, together, in a DEBUG build launched
+from Xcode (never `-VGNSampleData`, never against the owner's real library first).
 
-**Click-by-click (orchestrator + owner, DEBUG build, real Xcode-run app):**
-1. Launch the app normally (no `-VGNSampleData`; live mode builds the real PSN objects). Open **Settings ▸ PlayStation**.
-2. **Account = test.** The owner's throwaway test account (a few free games, **no PS Plus**) goes first. (The persisted `test`/`real` label — key `psn.buildSteps.accountLabel`, default `test` — already scopes the dev cache and probe markers; the picker UI ships with the build-steps panel.)
-3. **Sign in (S1).** Click **Sign In to PlayStation…**, log in on Sony's page (host-only address line; off-Sony pages blocked). VGN reads the `npsso` cookie → exchanges it for tokens. If the cookie can't be read, expand **Paste NPSSO instead** and paste the `npsso` value from a signed-in browser. The pane now shows the online id, expiry, and cache ages.
-4. **Sync (S2–S6).** Click **Sync Now**. The progress sheet runs profile → trophy titles (probe 10 → full 800, PS4/PS5 then PS3/Vita) → game list (probe 10 → full 200) → purchases (probe 10 → full). Watch for a **stop**: any reject shows "VGN stopped and made no further requests." with the reason + redacted excerpt, and nothing commits. For the test account, expect free games as owned digital and **no** PS Plus.
-5. **Review & commit.** The review sheet opens (generic *New / Already matched / Ignored* buckets for now; PSN-specific groups are deferred — see LIMITATIONS §5c). The commit is already correct per row: purchases → owned digital, trophy titles → played with last-played date + 100 % status where earned. Commit; a banner reports the counts; re-syncing + re-committing adds nothing.
-6. **Switch to the real account.** Sign out (optionally "also delete cached PlayStation responses"), then sign in with the real account. Because the dev cache and probe markers are per account (`test`/`real`), the real account re-probes each data set before its full fetch (S5b). The first real PS Plus title shows the yellow **+** badge and the inspector's "PS Plus — expires with the subscription" row.
-7. **Second sync (S8).** Click **Sync Now** again inside the cache window — it makes **zero** requests (all from cache), proving idempotency.
-8. **Force Refresh** on one data set states the request cost + cached age before spending anything (use it to re-fetch a single set without wiping the rest). **Sign Out** returns to the signed-out pane.
+### 0. Arm the latch (all builds)
+`psn.liveEnabled` defaults **off** — the live PSN objects are not even built, so no click can
+reach Sony. In **Settings ▸ PlayStation** the pane reads "PlayStation sync is off"; click
+**Enable PlayStation sync (unofficial API)…**, confirm, and it says **"Relaunch VGN to apply"**
+(the sign-in/importer/panel are composed once at launch — nothing hot-swaps). Relaunch.
+
+### 1. Sign in on the TEST account (S1)
+Leave the panel's account picker on **test** (persisted, key `psn.buildSteps.accountLabel`,
+default `test`; it also scopes the dev cache folder and the probe markers). Click **Sign In to
+PlayStation…**, log in on Sony's own page (host-only address bar; off-Sony pages blocked). VGN
+reads the `npsso` cookie → tokens; if the cookie can't be read, expand **Paste NPSSO instead**.
+The pane shows the online id; open **PSN build steps…** — the panel shows `test` and
+`requests this session: 0 / 40`.
+
+### 2–6. Probe on the test account, reading each cached body before the next click
+In §13.5 order, each button runs **exactly** its requests and writes the body to the dev cache
+(`~/Library/Application Support/VGN/dev-import-cache/psn/test/…`). After each, read the result
+row (HTTP status, item count / `totalItemCount`, from cache vs network, bytes, the dev-cache
+path — click it to reveal in Finder — elapsed) and the running total, then let the orchestrator
+open the cached body from disk to check the DTO before the next click:
+
+- **S2 · Probe profile** — the test online id.
+- **S3a · Probe trophy titles — limit 10** and **S3a′ · Probe trophy titles PS3/Vita — limit 10**
+  (both require S2). A brand-new account's list may be **empty** — that is valid.
+- **S5 · Probe game list — limit 10** (requires S2).
+- **S6 · Probe purchases — size 10** (requires S2) — the test account's free games prove the
+  GraphQL call, the persisted-query hash and the `membership: NONE` DTO. **Most likely to fail.**
+
+The full-fetch buttons (S3b/S4, S5, S6) stay disabled until their probe passes for `test`. On the
+test account you can run them too (they ask "up to N requests — continue?"), but the point of the
+test account is the probes.
+
+### 7. Switch to the REAL account (S5b)
+**Sign Out** (optionally tick "also delete cached PlayStation responses"), sign in with the real
+account, then set the panel picker to **real** — a red **REAL ACCOUNT** marker appears and the
+panel resets to what is recorded for `real` (nothing yet; the dev cache and markers are per
+account). Run **one probe per data set** (S2 → S3a → S3a′ → S5 → S6), stopping after each for the
+orchestrator to check the dev cache. The first real `membership: PS_PLUS` shows here.
+
+### 8. Full fetches on the real account, one at a time
+Only after a data set's probe has passed for `real`, its **Fetch** button enables. Each asks
+"up to N requests — continue?" and, on the real account, a **second confirmation**. Run them one
+at a time, reading the cached bodies between. When every probe and full fetch has passed for a
+label, the panel has satisfied the **DEBUG normal-Sync gate**: **Sync Now** / File ▸ Import from
+PlayStation… now run the ordinary cache-first sync (0 requests inside the cache window — S8) and
+open the review sheet with the PSN groups (Played · Launched 0 % · Played — no purchase found ·
+Purchased · PS Plus · Already in your library · Ignored · Proposed removals).
+
+### If a step stops (the reject lock)
+Any reject / budget-exceeded / auth failure / unexpected error **disables every button** and shows
+**"VGN stopped and made no further requests."** with the redacted excerpt. Nothing else happens
+until **Acknowledge**; acknowledging re-enables only steps whose prerequisites still hold, and the
+failed step needs an explicit **Try this step again** (one retry = one new decision). **Copy
+report** puts a redacted plain-text summary of all rows on the pasteboard (no token / NPSSO /
+account id). **Wipe dev cache (this account)** clears this label's recorded bodies.
 
 `getPurchasedGameList` hash moved (S6)? That is a **stop-and-ask**, not a retry: read the current
 hash from `library.playstation.com/recently-purchased`'s network tab and update
 `PSNClient.purchasedGamesHash`. Owned-digital can ship later without blocking by building the
 importer with `includePurchases: false` until S6 passes.
-
-When the build-steps panel is built, it replaces steps 3–8 with a labelled button per §13.5 row
-(S2 probe, S3a/S5/S6 probes, then the full fetches, each disabled until its probe succeeds for the
-current account), a running request total vs the 40 budget, a reject → **Acknowledge** lock, and a
-**Wipe dev cache (this account)** button — the same requests, made one click at a time.
