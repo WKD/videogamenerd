@@ -37,9 +37,10 @@ struct IGDBLinkChoice: Sendable, Equatable {
 /// with a fake searcher in tests — no network.
 @MainActor
 @Observable
-final class IGDBLinkModel {
+final class IGDBLinkModel: Identifiable {
     enum Phase: Equatable { case idle, searching, results, empty, error, notConfigured }
 
+    nonisolated var id: Int64 { gameID }
     let gameID: Int64
     let currentTitle: String
     let platformSlugs: [String]

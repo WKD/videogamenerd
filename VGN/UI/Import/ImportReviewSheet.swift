@@ -438,6 +438,10 @@ struct ImportReviewSheet: View {
 private struct ImportReviewRowView: View {
     @Bindable var model: ImportReviewModel
     let row: ImportReviewRow
+    /// The shared IGDB searcher for the inline "Find…" (PLAN §5.1 item 6); nil offline.
+    @Environment(\.igdbCatalogSearcher) private var searcher
+    /// The inline link-search sheet's model while open (created on "Find…").
+    @State private var finderModel: IGDBLinkModel?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -449,6 +453,45 @@ private struct ImportReviewRowView: View {
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+        .sheet(item: $finderModel) { model in IGDBLinkSheet(model: model) }
+    }
+
+    /// A ticked New row with no IGDB match will import unlinked (PLAN §5.1) — warn, and
+    /// offer an inline "Find…" that opens the same link search.
+    private var showsUnlinkedWarning: Bool {
+        row.bucket == .new && row.include && row.proposedMatch == nil && row.matchedGameID == nil
+    }
+
+    @ViewBuilder
+    private var unlinkedWarning: some View {
+        if showsUnlinkedWarning {
+            HStack(spacing: 4) {
+                Label("no IGDB match — will import unlinked", systemImage: "link.badge.plus")
+                    .font(.caption2).foregroundStyle(.orange)
+                    .help("No IGDB match: this title imports unlinked — no metadata, cover or "
+                          + "time estimates, and a later import could duplicate it. Link it here "
+                          + "or later from the Unlinked list.")
+                if searcher != nil {
+                    Button("Find…") { openFinder() }
+                        .font(.caption2).buttonStyle(.borderless)
+                }
+            }
+        }
+    }
+
+    private func openFinder() {
+        guard let searcher else { return }
+        let m = IGDBLinkModel(
+            gameID: 0, currentTitle: row.sourceTitle, platformSlugs: [], year: row.releaseYear,
+            isLinked: false, prefill: IGDBLinkQuery.clean(row.sourceTitle), searcher: searcher)
+        m.onChoose = { choice in
+            let match = ScanMatch(igdbID: choice.igdbID, name: choice.title, releaseYear: choice.year,
+                                  coverImageID: nil, platformSlugs: [], score: 1.0, matchedName: choice.title)
+            model.chooseAlternative(match, externalID: row.externalID)
+            finderModel = nil
+        }
+        m.onCancel = { finderModel = nil }
+        finderModel = m
     }
 
     private var includeCheckbox: some View {
@@ -492,6 +535,7 @@ private struct ImportReviewRowView: View {
                     Text(reason.label).font(.caption2).foregroundStyle(.secondary)
                 }
             }
+            unlinkedWarning
         }
     }
 

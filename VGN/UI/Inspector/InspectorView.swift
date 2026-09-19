@@ -109,13 +109,28 @@ private struct SingleGameInspector: View {
                     }
                 }
 
+                if detail.igdbID == nil { unlinkedNotice }
+
                 HStack(spacing: 12) {
+                    Button {
+                        vm.requestLinkToIGDB(gameID: detail.id)
+                    } label: {
+                        Label(detail.igdbID == nil ? "Link to IGDB…" : "Change IGDB Match…",
+                              systemImage: "link")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("inspector.linkIGDB")
+                    .help(detail.igdbID == nil
+                          ? "Match this game to an IGDB entry to fetch metadata, cover and time estimates."
+                          : "Re-match this game to a different IGDB entry (wrong edition / localised title).")
+
                     Button {
                         vm.refreshMetadata(gameID: detail.id)
                     } label: {
                         Label("Refresh metadata", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
+                    .disabled(detail.igdbID == nil)
                     .help("Re-fetch metadata, cover and completion times from IGDB.")
 
                     Button {
@@ -166,6 +181,26 @@ private struct SingleGameInspector: View {
             }
             .padding(16)
         }
+    }
+
+    /// The "not linked to IGDB" notice at the top of an unlinked game's inspector
+    /// (PLAN §5.1) — no metadata / time estimates / recommendations, with a "Link…"
+    /// affordance. The button action opens the sheet (never a state write in `body`).
+    private var unlinkedNotice: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "link.badge.plus").foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Not linked to IGDB").font(.callout.weight(.medium))
+                Text("No metadata, time estimates or recommendations.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Link…") { vm.requestLinkToIGDB(gameID: detail.id) }
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("inspector.linkNotice")
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.12)))
     }
 
     /// A single, quiet line recording when and how the game entered the library
