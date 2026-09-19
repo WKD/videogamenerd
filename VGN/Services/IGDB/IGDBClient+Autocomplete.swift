@@ -32,6 +32,27 @@ extension IGDBClient {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 3 else { return [] }
 
+        // A year in the query ("super mario bros 1985") disambiguates long series: the
+        // plain search returns 12 of dozens of entries and the wanted one may not be among
+        // them. Year-constrained lookups run first; the literal text still runs last so
+        // titles that contain a year ("Cyberpunk 2077", "FIFA 2005") keep working.
+        let split = IGDBAutocomplete.splitYear(trimmed)
+        if let year = split.year, split.text.count >= 3 {
+            async let yearSearch = tryAutocomplete(IGDBAutocomplete.searchQuery(
+                split.text, platformIGDBIDs: platformIGDBIDs, limit: limit, releaseYear: year))
+            async let yearPrefix = tryAutocomplete(IGDBAutocomplete.namePrefixQuery(
+                split.text, platformIGDBIDs: platformIGDBIDs, limit: limit, releaseYear: year))
+            async let literal = tryAutocomplete(IGDBAutocomplete.searchQuery(
+                trimmed, platformIGDBIDs: platformIGDBIDs, limit: limit))
+            let merged = IGDBAutocomplete.merge([await yearSearch, await yearPrefix, await literal], limit: limit)
+            try Task.checkCancellation()
+            if !merged.isEmpty { return merged }
+            // Nothing for that year (typo, regional date): fall through to the plain path
+            // on the text without the year.
+            return try await autocomplete(split.text, platformIGDBIDs: platformIGDBIDs,
+                                          limit: limit, fallbackThreshold: fallbackThreshold)
+        }
+
         let primary = try await runGamesSearch(
             IGDBAutocomplete.searchQuery(trimmed, platformIGDBIDs: platformIGDBIDs, limit: limit))
         try Task.checkCancellation()
@@ -60,20 +81,51 @@ enum IGDBAutocomplete {
 
     // MARK: - Queries
 
-    static func searchQuery(_ text: String, platformIGDBIDs: [Int]?, limit: Int) -> IGDBQuery {
-        var q = IGDBQuery().search(text).fields(IGDBFields.search).limit(limit)
-        if let ids = platformIGDBIDs, !ids.isEmpty {
-            q = q.filter("platforms = \(IGDBQuery.idSet(ids))")
+    /// Splits a trailing/embedded release year off a query: "super mario bros 1985" →
+    /// ("super mario bros", 1985); "(1985)" works too. A year is a standalone 4-digit
+    /// token in 1970…(this year + 2), and only counts when real title text remains
+    /// (so "1942" or "2048" alone stay titles). With several candidates the last wins.
+    static func splitYear(_ text: String, now: Date = Date()) -> (text: String, year: Int?) {
+        let maxYear = Calendar(identifier: .gregorian).component(.year, from: now) + 2
+        var tokens = text.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+        var found: (index: Int, year: Int)?
+        for (i, token) in tokens.enumerated() {
+            let core = token.trimmingCharacters(in: CharacterSet(charactersIn: "()[],."))
+            if core.count == 4, core.allSatisfy(\.isNumber), let y = Int(core), (1970...maxYear).contains(y) {
+                found = (i, y)
+            }
         }
+        guard let found else { return (text, nil) }
+        tokens.remove(at: found.index)
+        let rest = tokens.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        guard rest.filter(\.isLetter).count >= 3 else { return (text, nil) }
+        return (rest, found.year)
+    }
+
+    /// `release_dates.y` covers every regional / platform release of the entry, so
+    /// "1987" still finds a 1985 game that reached Europe in 1987.
+    private static func yearClause(_ year: Int?) -> String? {
+        year.map { "release_dates.y = \($0)" }
+    }
+
+    static func searchQuery(_ text: String, platformIGDBIDs: [Int]?, limit: Int,
+                            releaseYear: Int? = nil) -> IGDBQuery {
+        var q = IGDBQuery().search(text).fields(IGDBFields.search).limit(limit)
+        var clauses: [String] = []
+        if let ids = platformIGDBIDs, !ids.isEmpty { clauses.append("platforms = \(IGDBQuery.idSet(ids))") }
+        if let y = yearClause(releaseYear) { clauses.append(y) }
+        if !clauses.isEmpty { q = q.filter(clauses.joined(separator: " & ")) }
         return q
     }
 
-    static func namePrefixQuery(_ text: String, platformIGDBIDs: [Int]?, limit: Int) -> IGDBQuery {
+    static func namePrefixQuery(_ text: String, platformIGDBIDs: [Int]?, limit: Int,
+                                releaseYear: Int? = nil) -> IGDBQuery {
         let esc = IGDBQuery.escape(text)
         var clause = "name ~ \"\(esc)\"*"
         if let ids = platformIGDBIDs, !ids.isEmpty {
             clause += " & platforms = \(IGDBQuery.idSet(ids))"
         }
+        if let y = yearClause(releaseYear) { clause += " & \(y)" }
         return IGDBQuery()
             .fields(IGDBFields.search)
             .filter(clause)

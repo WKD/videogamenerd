@@ -266,8 +266,11 @@ final class QuickAddModel {
         localTask?.cancel()
         localTask = Task { [weak self] in
             guard let self else { return }
-            let matches = await self.library.localMatches(text)
-            self.applyLocal(matches, generation: generation)
+            // A typed year ("super mario bros 1985") is not part of any title: search
+            // on the text without it, then put the entries of that year first.
+            let split = IGDBAutocomplete.splitYear(text)
+            let matches = await self.library.localMatches(split.text)
+            self.applyLocal(Self.yearFirst(matches, year: split.year, yearOf: \.year), generation: generation)
         }
 
         // Remote: debounced, previous cancelled, ≥ 3 chars.
@@ -287,8 +290,10 @@ final class QuickAddModel {
         if let catalogCache {
             cacheTask = Task { [weak self] in
                 guard let self else { return }
-                let hits = await catalogCache.searchTitles(text, limit: 12)
-                self.applyCached(hits, generation: generation)
+                let split = IGDBAutocomplete.splitYear(text)
+                let hits = await catalogCache.searchTitles(split.text, limit: split.year == nil ? 12 : 40)
+                let ordered = Self.yearFirst(hits, year: split.year, yearOf: \.releaseYear)
+                self.applyCached(Array(ordered.prefix(12)), generation: generation)
             }
         }
 
@@ -336,6 +341,15 @@ final class QuickAddModel {
         guard generation == searchGeneration else { return }
         cachedResults = results
         rebuildResults()
+    }
+
+    /// Stable partition: entries released in `year` first. When at least one entry
+    /// matches, the others are dropped (the year was typed to disambiguate); when none
+    /// does, the list is returned unchanged (a wrong year must not hide everything).
+    static func yearFirst<T>(_ items: [T], year: Int?, yearOf: (T) -> Int?) -> [T] {
+        guard let year else { return items }
+        let hits = items.filter { yearOf($0) == year }
+        return hits.isEmpty ? items : hits
     }
 
     /// Guarded apply of local matches.

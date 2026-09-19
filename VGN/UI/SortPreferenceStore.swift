@@ -20,7 +20,7 @@ struct UserDefaultsSortPreferences: SortPreferenceStoring {
     nonisolated(unsafe) let defaults: UserDefaults
     private let prefix = "VGNSort."
 
-    init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    init(defaults: UserDefaults = AppPreferences.defaults) { self.defaults = defaults }
 
     func sortSetting(for selectionID: String) -> SortSetting? {
         guard let data = defaults.data(forKey: prefix + selectionID) else { return nil }

@@ -18,8 +18,8 @@ struct LiveCatalogSearcher: CatalogSearching {
     }
 
     func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] {
-        // Fetch the bundle's full metadata first: it lets `bundleMembers(of:)` use
-        // the forward `bundles` relation when present, else the reverse lookup.
+        // Members come from the reverse lookup (a bundle's own `bundles` field lists its
+        // parents, not its members); nested bundles expand, add-on content is dropped.
         guard let meta = try await client.games(ids: [bundleIGDBID]).first else {
             return try await client.bundleMembers(ofBundleID: bundleIGDBID)
         }
@@ -78,7 +78,7 @@ struct UserDefaultsQuickAddPreferences: QuickAddPreferenceStoring {
     private let playedKey = "VGNQuickAdd.played"
     private let formatKey = "VGNQuickAdd.format"
 
-    init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    init(defaults: UserDefaults = AppPreferences.defaults) { self.defaults = defaults }
 
     func loadFlags() -> QuickAddFlags {
         var flags = QuickAddFlags()

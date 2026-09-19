@@ -245,7 +245,7 @@ struct UserDefaultsPhotoScanPreferences: PhotoScanPreferenceStoring {
     private let concurrencyKey = "VGNPhotoScan.maxConcurrent"
     private let engineKey = "VGNPhotoScan.enginePreference"
 
-    init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    init(defaults: UserDefaults = AppPreferences.defaults) { self.defaults = defaults }
 
     func load() -> PhotoScanSettings {
         var settings = PhotoScanSettings()

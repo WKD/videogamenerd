@@ -81,7 +81,7 @@ final class PlayNextModel {
     init(
         backend: any PlayNextBackend,
         secondOpinion: any SecondOpinionProviding,
-        defaults: UserDefaults = .standard,
+        defaults: UserDefaults = AppPreferences.defaults,
         recomputeDebounce: Duration = .milliseconds(250)
     ) {
         self.backend = backend
