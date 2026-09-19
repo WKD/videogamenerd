@@ -28,6 +28,10 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     /// Edition / acquired date carried from the source onto the committed copy (Delicious).
     var edition: String? = nil
     var acquiredAt: Date? = nil
+    /// **(PSN)** A played-only row the owner chose to *also* own, as this format — the
+    /// "Own the ticked rows as ▸ Physical / Digital" group action (PLAN §13.3). nil ⇒ keep
+    /// it played-only. Forces a copy at commit.
+    var ownAsFormat: ProductFormat? = nil
 
     var id: String { externalID }
 
@@ -41,6 +45,47 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     var showsSourceTitle: Bool {
         guard let matched = proposedMatch?.name else { return true }
         return matched.caseInsensitiveCompare(sourceTitle) != .orderedSame
+    }
+}
+
+/// The PSN-specific review groups (PLAN §13.3). Used only when the sheet's source is PSN;
+/// GOG/Delicious keep the generic *New / Already matched / Ignored* buckets. A row lands in
+/// the first matching group (see ``ImportReviewModel/psnGroup(for:)``).
+enum PSNReviewGroup: String, CaseIterable, Sendable, Hashable {
+    /// Owned (a purchase) **and** played.
+    case played
+    /// A trophy title at 0 % — merely launched, never played. Unticked by default.
+    case launched
+    /// Played, no purchase found — offered a one-click "own as ▸ Physical / Digital".
+    case playedNoPurchase
+    /// A bought digital copy.
+    case purchased
+    /// A PS Plus claim — expires with the subscription.
+    case psPlus
+    /// Already in your library — the import only adds played / play time / dates.
+    case alreadyInLibrary
+    /// Filtered noise (with a reason).
+    case ignored
+
+    var label: String {
+        switch self {
+        case .played: return "Played"
+        case .launched: return "Launched, 0 %"
+        case .playedNoPurchase: return "Played — no purchase found"
+        case .purchased: return "Purchased"
+        case .psPlus: return "PS Plus"
+        case .alreadyInLibrary: return "Already in your library"
+        case .ignored: return "Ignored"
+        }
+    }
+    /// A group footnote shown under the header, or nil.
+    var footnote: String? {
+        switch self {
+        case .psPlus: return "expires with the subscription"
+        case .launched: return "a game you merely launched — tick any you actually played"
+        case .playedNoPurchase: return "imported as played, not owned"
+        default: return nil
+        }
     }
 }
 
@@ -81,6 +126,17 @@ final class ImportReviewModel {
     private(set) var committed = false
     private(set) var successMessage: String?
     private(set) var commitError: String?
+
+    // MARK: PSN-only review state (PLAN §13.3) — additive, ignored for GOG/Delicious.
+
+    /// Whether this sheet renders the richer PSN groups.
+    var isPSN: Bool { source == ImportSourceID.psn }
+    /// PS Plus claims a previous sync committed that the latest fetch no longer lists —
+    /// proposed for removal, never applied silently. Unticked by default.
+    private(set) var proposedRemovals: [ImportSubscriptionRemovalProposal] = []
+    var removalTicks: Set<Int64> = []
+    var removalConfirming = false
+    private(set) var removalsApplied = 0
 
     @ObservationIgnored private let transientByID: [String: ImportStagingRow]
     @ObservationIgnored private let matchByID: [String: ScanMatchOutcome]
@@ -132,6 +188,11 @@ final class ImportReviewModel {
         let titles = (try? await staging.titles(source: source)) ?? []
         rows = titles.map { makeRow(from: $0) }
         if detectShelfDuplicates { markIntraImportDuplicates() }
+        if isPSN {
+            let currentIDs = Set(transientByID.keys)
+            proposedRemovals = (try? await staging.proposedSubscriptionRemovals(
+                source: source, currentExternalIDs: currentIDs)) ?? []
+        }
     }
 
     private func makeRow(from title: ImportStagedTitle) -> ImportReviewRow {
@@ -140,7 +201,9 @@ final class ImportReviewModel {
         let bucket = title.ignored ? ImportReviewBucket.ignored
             : (title.matchedGameID == nil ? .new : .alreadyMatched)
         let confidence = outcome?.bucket ?? .none
-        // Confident, still-New matches are pre-ticked; the rest wait (PLAN §14.3).
+        // Confident, still-New matches are pre-ticked; the rest wait (PLAN §14.3). PSN uses
+        // its own pre-tick per group (Played/Purchased/PS Plus/already-in-library ticked;
+        // Launched 0 % unticked) below.
         let include = bucket == .new && confidence == .confident
         var row = ImportReviewRow(
             externalID: title.externalID,
@@ -171,6 +234,11 @@ final class ImportReviewModel {
             } else if otherFormatKeys.contains(key) {
                 row.duplicateNote = "You already own a different copy — this adds your \(productFormat.label.lowercased()) one"
             }
+        }
+
+        // PSN pre-tick: everything ticked except Launched-0 % and Ignored (PLAN §13.3).
+        if isPSN, !row.ignored {
+            row.include = psnGroup(for: row) != .launched
         }
         return row
     }
@@ -203,6 +271,84 @@ final class ImportReviewModel {
     func rows(in bucket: ImportReviewBucket) -> [ImportReviewRow] { rows.filter { $0.bucket == bucket } }
     var presentBuckets: [ImportReviewBucket] {
         [.new, .alreadyMatched, .ignored].filter { b in rows.contains { $0.bucket == b } }
+    }
+
+    // MARK: PSN groups (PLAN §13.3)
+
+    /// Classify a row into its PSN group (priority order): ignored → already-in-library →
+    /// PS Plus (a subscription claim) → owned+played → purchased → launched-0 % →
+    /// played-only → (fallback) purchased.
+    func psnGroup(for row: ImportReviewRow) -> PSNReviewGroup {
+        if row.ignored { return .ignored }
+        if row.matchedGameID != nil { return .alreadyInLibrary }
+        let t = transientByID[row.externalID]
+        let signals = t?.signals ?? []
+        if t?.subscription != nil { return .psPlus }
+        if signals.contains(.owned) { return signals.contains(.played) ? .played : .purchased }
+        if t?.launchedNotPlayed == true { return .launched }
+        if signals.contains(.played) { return .playedNoPurchase }
+        return .purchased
+    }
+
+    func psnRows(in group: PSNReviewGroup) -> [ImportReviewRow] {
+        rows.filter { psnGroup(for: $0) == group }
+    }
+    /// PSN groups present in this import, in display order.
+    var presentPSNGroups: [PSNReviewGroup] {
+        PSNReviewGroup.allCases.filter { g in rows.contains { psnGroup(for: $0) == g } }
+    }
+
+    /// A one-line "what will change" for an **Already in your library** row (PLAN §13.3 —
+    /// "+ played", "+ 42 h", "+ last played 2021"). Describes what the import contributes
+    /// (the commit is idempotent/monotonic), not a diff against the stored game.
+    func psnChangeDescription(for row: ImportReviewRow) -> String {
+        guard let t = transientByID[row.externalID] else { return "no change" }
+        var parts: [String] = []
+        if t.signals.contains(.played), !t.launchedNotPlayed { parts.append("+ played") }
+        if let seconds = t.playDurationS, seconds >= 3_600 {
+            parts.append("+ \(seconds / 3_600) h")
+        }
+        if let last = t.lastPlayedAt, last > Date.distantPast {
+            parts.append("+ last played \(Calendar.current.component(.year, from: last))")
+        }
+        if t.signals.contains(.owned) {
+            parts.append(t.subscription != nil ? "+ PS Plus copy" : "+ digital copy")
+        }
+        return parts.isEmpty ? "no change" : parts.joined(separator: " · ")
+    }
+
+    /// The "Own the ticked rows as ▸ Physical / Digital" group action for the
+    /// *Played — no purchase found* group (PLAN §13.3): the ticked played-only rows commit
+    /// an owned copy of `format` in addition to being marked played.
+    func ownTickedAs(_ format: ProductFormat) {
+        for i in rows.indices where psnGroup(for: rows[i]) == .playedNoPurchase && rows[i].include {
+            rows[i].ownAsFormat = format
+        }
+    }
+    /// Whether the group action can do anything (a ticked played-no-purchase row exists).
+    var canOwnPlayedRows: Bool {
+        rows.contains { psnGroup(for: $0) == .playedNoPurchase && $0.include }
+    }
+
+    // MARK: PSN proposed removals (PLAN §13.3)
+
+    func toggleRemoval(_ productID: Int64, _ on: Bool) {
+        if on { removalTicks.insert(productID) } else { removalTicks.remove(productID) }
+    }
+    var tickedRemovalCount: Int { removalTicks.count }
+    func requestApplyRemovals() { guard !removalTicks.isEmpty else { return }; removalConfirming = true }
+    func confirmApplyRemovals() {
+        removalConfirming = false
+        let ids = Array(removalTicks)
+        let store = staging
+        let changed = onLibraryChanged
+        Task {
+            let n = (try? await store.applySubscriptionRemovals(ids)) ?? 0
+            removalsApplied += n
+            proposedRemovals.removeAll { removalTicks.contains($0.productID) }
+            removalTicks.removeAll()
+            if n > 0 { changed() }
+        }
     }
     var committableCount: Int { rows.filter(\.isCommittable).count }
     var canCommit: Bool { !committed && !isCommitting && committableCount > 0 }
@@ -261,6 +407,14 @@ final class ImportReviewModel {
         }
     }
 
+    func selectAllPSN(in group: PSNReviewGroup) { setIncludePSN(true, group: group) }
+    func selectNonePSN(in group: PSNReviewGroup) { setIncludePSN(false, group: group) }
+    private func setIncludePSN(_ include: Bool, group: PSNReviewGroup) {
+        for i in rows.indices where !rows[i].ignored && psnGroup(for: rows[i]) == group {
+            rows[i].include = include
+        }
+    }
+
     private func persist(_ externalID: String, _ decision: ImportDecision) {
         let store = staging, src = source
         Task { try? await store.setDecision(source: src, externalID: externalID, decision) }
@@ -285,9 +439,12 @@ final class ImportReviewModel {
                     title: title, igdbID: row.proposedMatch?.igdbID,
                     releaseYear: row.releaseYear, altTitles: alts))
             }
+            // A played-only PSN row the owner chose to own commits a copy of the chosen
+            // format (PLAN §13.3 "own these as ▸ Physical / Digital"); everything else keeps
+            // the sheet's default format.
             return ImportCommitItem(
                 source: source, externalID: row.externalID, platformID: platformID,
-                format: productFormat, target: target,
+                format: row.ownAsFormat ?? productFormat, target: target,
                 edition: row.edition, acquiredAt: row.acquiredAt,
                 psn: psnCommit(for: row))
         }
@@ -299,8 +456,9 @@ final class ImportReviewModel {
     /// was merely *launched* at 0 %) and records its play time, dates and a 100 % status.
     private func psnCommit(for row: ImportReviewRow) -> PSNCommit? {
         guard source == ImportSourceID.psn, let t = transientByID[row.externalID] else { return nil }
+        // The owner's "own as ▸ …" choice forces an owned copy on a played-only row.
         return PSNCommit(
-            createProduct: t.signals.contains(.owned),
+            createProduct: t.signals.contains(.owned) || row.ownAsFormat != nil,
             subscription: t.subscription?.rawValue,
             markPlayed: t.signals.contains(.played) && !t.launchedNotPlayed,
             playDurationS: t.playDurationS,
@@ -314,6 +472,8 @@ final class ImportReviewModel {
         isCommitting = true
         commitError = nil
         let items = commitItems()
+        // Snapshot the imported/updated split before commit (the PSN banner reads it).
+        let psnBanner = isPSN ? psnSuccessMessage() : nil
         let store = staging
         let after = afterCommit
         let useCovers = useSourceCovers
@@ -323,7 +483,7 @@ final class ImportReviewModel {
                 // File sources (Delicious) can apply their own covers to games left
                 // without one — a background step, never blocking the success banner.
                 if let after { await after(result, useCovers) }
-                successMessage = Self.successMessage(from: result, sourceLabel: sourceLabel)
+                successMessage = psnBanner ?? Self.successMessage(from: result, sourceLabel: sourceLabel)
                 committed = true
                 onLibraryChanged()
             } catch {
@@ -331,6 +491,17 @@ final class ImportReviewModel {
             }
             isCommitting = false
         }
+    }
+
+    /// The PSN banner "N games imported from PlayStation · M updated" (PLAN §13.3), computed
+    /// from the ticked rows (new = imported, already-in-library = updated).
+    func psnSuccessMessage() -> String {
+        let committable = rows.filter(\.isCommittable)
+        let updated = committable.filter { $0.matchedGameID != nil }.count
+        let imported = committable.count - updated
+        var message = "\(imported) game\(imported == 1 ? "" : "s") imported from PlayStation"
+        if updated > 0 { message += " · \(updated) updated" }
+        return message
     }
 
     static func successMessage(from result: ImportCommitResult, sourceLabel: String) -> String {
@@ -367,6 +538,15 @@ struct ImportReviewSheet: View {
         }
         .frame(minWidth: 640, minHeight: 520)
         .task { await model.load() }
+        .confirmationDialog(
+            "Remove \(model.tickedRemovalCount) PS Plus cop\(model.tickedRemovalCount == 1 ? "y" : "ies")?",
+            isPresented: $model.removalConfirming, titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) { model.confirmApplyRemovals() }
+            Button("Cancel", role: .cancel) { model.removalConfirming = false }
+        } message: {
+            Text("These claims are no longer listed by PlayStation. Removing keeps any game you played (as played, not owned) and deletes copies you never played.")
+        }
     }
 
     private var header: some View {
@@ -395,19 +575,115 @@ struct ImportReviewSheet: View {
         .padding(12)
     }
 
+    @ViewBuilder
     private var list: some View {
+        if model.isPSN {
+            psnList
+        } else {
+            List {
+                ForEach(model.presentBuckets, id: \.self) { bucket in
+                    Section {
+                        ForEach(model.rows(in: bucket)) { row in
+                            ImportReviewRowView(model: model, row: row)
+                        }
+                    } header: {
+                        bucketHeader(bucket)
+                    }
+                }
+            }
+            .listStyle(.inset)
+        }
+    }
+
+    /// The richer PSN grouping (PLAN §13.3): one section per ``PSNReviewGroup`` plus a
+    /// proposed-removals section for lapsed PS Plus claims.
+    private var psnList: some View {
         List {
-            ForEach(model.presentBuckets, id: \.self) { bucket in
+            ForEach(model.presentPSNGroups, id: \.self) { group in
                 Section {
-                    ForEach(model.rows(in: bucket)) { row in
-                        ImportReviewRowView(model: model, row: row)
+                    ForEach(model.psnRows(in: group)) { row in
+                        PSNReviewRowView(model: model, row: row, group: group)
+                    }
+                    if group == .playedNoPurchase {
+                        ownAsRow
                     }
                 } header: {
-                    bucketHeader(bucket)
+                    psnGroupHeader(group)
+                }
+            }
+            if !model.proposedRemovals.isEmpty {
+                Section {
+                    ForEach(model.proposedRemovals) { removal in
+                        removalRow(removal)
+                    }
+                    removalActionRow
+                } header: {
+                    HStack {
+                        Text("Proposed removals").font(.headline)
+                        Text("\(model.proposedRemovals.count)").foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("PS Plus claims this sync no longer lists. Tick any to remove; nothing is removed unless you confirm.")
+                        .font(.caption)
                 }
             }
         }
         .listStyle(.inset)
+    }
+
+    private func psnGroupHeader(_ group: PSNReviewGroup) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack {
+                if group == .psPlus {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(Color(hex: "#0070D1") ?? .blue)
+                }
+                Text(group.label).font(.headline)
+                Text("\(model.psnRows(in: group).count)").foregroundStyle(.secondary)
+                Spacer()
+                if group != .ignored && group != .alreadyInLibrary {
+                    Button("All") { model.selectAllPSN(in: group) }.controlSize(.small)
+                    Button("None") { model.selectNonePSN(in: group) }.controlSize(.small)
+                }
+            }
+            if let footnote = group.footnote {
+                Text(footnote).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var ownAsRow: some View {
+        HStack(spacing: 8) {
+            Text("Own the ticked rows as").font(.caption).foregroundStyle(.secondary)
+            Button("Physical") { model.ownTickedAs(.physical) }.controlSize(.small)
+            Button("Digital") { model.ownTickedAs(.digital) }.controlSize(.small)
+        }
+        .disabled(!model.canOwnPlayedRows)
+    }
+
+    private func removalRow(_ removal: ImportSubscriptionRemovalProposal) -> some View {
+        Toggle(isOn: Binding(
+            get: { model.removalTicks.contains(removal.productID) },
+            set: { model.toggleRemoval(removal.productID, $0) }
+        )) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(removal.gameTitle ?? removal.externalID)
+                Text("PS Plus copy no longer claimed").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .toggleStyle(.checkbox)
+    }
+
+    @ViewBuilder
+    private var removalActionRow: some View {
+        HStack {
+            Spacer()
+            Button("Remove \(model.tickedRemovalCount) ticked cop\(model.tickedRemovalCount == 1 ? "y" : "ies")…",
+                   role: .destructive) { model.requestApplyRemovals() }
+                .controlSize(.small)
+                .disabled(model.tickedRemovalCount == 0)
+        }
     }
 
     private func bucketHeader(_ bucket: ImportReviewBucket) -> some View {
@@ -594,6 +870,76 @@ private struct ImportReviewRowView: View {
             }
             .menuStyle(.borderlessButton).fixedSize()
         }
+    }
+}
+
+// MARK: - PSN row
+
+/// A compact PSN review row (PLAN §13.3): the include checkbox, cover, title/platform, and a
+/// per-group annotation — the change line for *Already in your library*, an "own as" chip for
+/// a played-only row the owner elected to own, and the alternatives/ignore menu.
+private struct PSNReviewRowView: View {
+    @Bindable var model: ImportReviewModel
+    let row: ImportReviewRow
+    let group: PSNReviewGroup
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            if group != .ignored { includeCheckbox }
+            ImportCoverThumb(imageID: row.proposedMatch?.coverImageID)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(row.matchedTitle ?? row.sourceTitle).bold()
+                    if let year = row.releaseYear { Text(String(year)).foregroundStyle(.secondary) }
+                }
+                if row.showsSourceTitle, row.matchedTitle != nil {
+                    Text("PlayStation: \(row.sourceTitle)").font(.caption).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 6) {
+                    if let platform = row.platform {
+                        Text(PlatformLabels.short(platform)).font(.caption2)
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(.tint.opacity(0.2), in: Capsule())
+                    }
+                    if group == .alreadyInLibrary {
+                        Text(model.psnChangeDescription(for: row)).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if let format = row.ownAsFormat {
+                        Text("own as \(format.label)").font(.caption2)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                    }
+                    if let reason = row.ignoreReason, group == .ignored {
+                        Text(reason.label).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer(minLength: 8)
+            Menu {
+                MatchAlternativesSection(alternatives: row.alternatives) { alt in
+                    model.chooseAlternative(alt, externalID: row.externalID)
+                }
+                Divider()
+                if group == .ignored {
+                    Button("Restore") { model.restore(row.externalID) }
+                } else {
+                    Button("Ignore", role: .destructive) { model.ignore(row.externalID) }
+                }
+            } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).fixedSize()
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var includeCheckbox: some View {
+        Button {
+            model.setInclude(!row.include, externalID: row.externalID)
+        } label: {
+            Image(systemName: row.include ? "checkmark.square.fill" : "square")
+                .foregroundStyle(row.include ? Color.accentColor : .secondary)
+                .font(.title3)
+        }
+        .buttonStyle(.borderless)
     }
 }
 
