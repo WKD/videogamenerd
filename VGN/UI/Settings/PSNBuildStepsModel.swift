@@ -23,12 +23,22 @@ final class PSNBuildStepsModel {
     }
     enum Status: Sendable, Equatable { case idle, running, passed, failed }
 
-    /// A pending confirmation (a single dialog drives all four).
+    /// A pending confirmation. Rendered as an **inline confirm row** inside the panel (not a
+    /// `confirmationDialog`/`alert`): exactly ONE confirmation per action, so nothing is ever
+    /// requested while another presentation is dismissing (the macOS double-presentation trap
+    /// that silently dropped the real-account second dialog). The real account gets a single,
+    /// stronger confirm — not a chained second one.
     enum Confirm: Equatable, Sendable {
-        case fullFetch(PSNBuildStepKind)       // "up to N requests — continue?"
-        case realFullFetch(PSNBuildStepKind)   // the real-account second confirmation
+        case fullFetch(PSNBuildStepKind)       // "up to N requests — continue?" (stronger on real)
         case retry(PSNBuildStepKind)           // "Try this step again"
         case wipe
+    }
+
+    /// A visible note attached to a step row (or, when `kind == nil`, to the wipe control):
+    /// why a start did nothing, instead of failing silently. Shown until the next action.
+    struct ActionNote: Equatable, Sendable {
+        var kind: PSNBuildStepKind?
+        var text: String
     }
 
     private let runner: any PSNBuildRunner
@@ -47,6 +57,10 @@ final class PSNBuildStepsModel {
     private(set) var failedStep: PSNBuildStepKind?
 
     var pendingConfirm: Confirm?
+
+    /// The last "why nothing started" note (see ``ActionNote``). Cleared when a new action
+    /// begins; shown in the target step's row (or by the wipe control).
+    private(set) var lastActionNote: ActionNote?
 
     /// `test` / `real`, persisted (shared key with ``PSNAccountModel``). Switching it resets
     /// the panel to what is recorded for THAT label (PLAN §13.3).
@@ -83,6 +97,7 @@ final class PSNBuildStepsModel {
         rejectMessage = nil
         failedStep = nil
         pendingConfirm = nil
+        lastActionNote = nil
         rows = PSNBuildStepKind.allCases.map { kind in
             StepRow(kind: kind, status: PSNBuildStepsGate.hasPassed(label: accountLabel, kind: kind) ? .passed : .idle)
         }
@@ -100,25 +115,51 @@ final class PSNBuildStepsModel {
     /// step runs, not while locked, not before sign-in, only when every prerequisite has
     /// passed for this label, and never the failed step (that shows a Retry affordance).
     func isEnabled(_ kind: PSNBuildStepKind) -> Bool {
-        guard !isRunning, rejectMessage == nil, signedIn else { return false }
+        guard !isRunning, rejectMessage == nil, signedIn, pendingConfirm == nil else { return false }
         guard failedStep != kind else { return false }
         return kind.prerequisites.allSatisfy { passed($0) }
     }
 
     /// The failed step, after acknowledging, offers an explicit "Try this step again".
     func needsRetry(_ kind: PSNBuildStepKind) -> Bool {
-        !isRunning && rejectMessage == nil && failedStep == kind
+        !isRunning && rejectMessage == nil && pendingConfirm == nil && failedStep == kind
     }
 
-    var canWipe: Bool { !isRunning && rejectMessage == nil }
+    var canWipe: Bool { !isRunning && rejectMessage == nil && pendingConfirm == nil }
     var canCopyReport: Bool { true }
+
+    // MARK: - Inline confirm state (drives the in-panel confirm row)
+
+    /// Whether `kind` is the step awaiting an inline confirmation right now.
+    func isConfirming(_ kind: PSNBuildStepKind) -> Bool {
+        switch pendingConfirm {
+        case .fullFetch(let k), .retry(let k): return k == kind
+        default: return false
+        }
+    }
+
+    /// Whether the wipe control is awaiting its inline confirmation.
+    var isWipeConfirming: Bool { pendingConfirm == .wipe }
+
+    /// The visible "why nothing started" note for `kind`, if any.
+    func actionNote(for kind: PSNBuildStepKind) -> String? {
+        guard let note = lastActionNote, note.kind == kind else { return nil }
+        return note.text
+    }
+
+    /// The note not tied to a step row (the wipe control's), if any.
+    var generalActionNote: String? {
+        guard let note = lastActionNote, note.kind == nil else { return nil }
+        return note.text
+    }
 
     // MARK: - Button actions
 
-    /// The button tap. Probes run immediately; a full fetch confirms ("up to N — continue?",
-    /// plus a second confirmation on the real account) first.
+    /// The button tap. Probes run immediately; a full fetch opens the inline confirm row
+    /// (a single, stronger confirm on the real account — never a chained second dialog).
     func activate(_ kind: PSNBuildStepKind) {
-        guard isEnabled(kind) else { return }
+        lastActionNote = nil
+        guard isEnabled(kind) else { note(kind, startBlockedReason(kind)); return }
         if kind.isFullFetch {
             pendingConfirm = .fullFetch(kind)
         } else {
@@ -127,34 +168,65 @@ final class PSNBuildStepsModel {
     }
 
     func requestRetry(_ kind: PSNBuildStepKind) {
-        guard needsRetry(kind) else { return }
+        lastActionNote = nil
+        guard needsRetry(kind) else { note(kind, startBlockedReason(kind)); return }
         pendingConfirm = .retry(kind)
     }
 
-    func requestWipe() { guard canWipe else { return }; pendingConfirm = .wipe }
+    func requestWipe() {
+        lastActionNote = nil
+        guard canWipe else { note(nil, "Can't wipe now — a step is running or the panel is locked."); return }
+        pendingConfirm = .wipe
+    }
 
+    /// The inline confirm's primary button. Starts the pending action **through the model in
+    /// the same way the probe buttons do** (``perform``); if it can no longer start, it says
+    /// why in the row instead of doing nothing silently.
     func confirmPending() {
         guard let confirm = pendingConfirm else { return }
         pendingConfirm = nil
         switch confirm {
         case .fullFetch(let kind):
-            if isRealAccount { pendingConfirm = .realFullFetch(kind) } else { perform(kind) }
-        case .realFullFetch(let kind):
-            perform(kind)
+            startStep(kind, allowed: isEnabled(kind))
         case .retry(let kind):
-            perform(kind)
+            startStep(kind, allowed: needsRetry(kind))
         case .wipe:
+            guard canWipe else { note(nil, "Can't wipe now — a step is running or the panel is locked."); return }
             performWipe()
         }
     }
 
     func cancelPending() { pendingConfirm = nil }
 
+    /// Start `kind` if `allowed`; otherwise leave a visible note in its row (never silent).
+    private func startStep(_ kind: PSNBuildStepKind, allowed: Bool) {
+        lastActionNote = nil
+        guard allowed else { note(kind, startBlockedReason(kind)); return }
+        perform(kind)
+    }
+
+    /// A short, redaction-safe reason a step cannot start right now (for the row note).
+    private func startBlockedReason(_ kind: PSNBuildStepKind) -> String {
+        if rejectMessage != nil { return "Can't start — acknowledge the stop first." }
+        if isRunning { return "Can't start — another step is still running." }
+        if !signedIn { return "Can't start — not signed in." }
+        let missing = kind.prerequisites.filter { !passed($0) }
+        if !missing.isEmpty {
+            return "Can't start — run \(missing.map { $0.actionTitle }.joined(separator: ", ")) first."
+        }
+        return "Can't start this step right now."
+    }
+
+    private func note(_ kind: PSNBuildStepKind?, _ text: String) {
+        lastActionNote = ActionNote(kind: kind, text: text)
+    }
+
     /// Clear the reject lock. Re-enables only steps whose prerequisites still hold (the
     /// failed step's flag was never set, so its dependents stay disabled); the failed step
     /// itself needs the explicit Retry (PLAN §13.5).
     func acknowledge() {
         rejectMessage = nil
+        lastActionNote = nil
     }
 
     // MARK: - Execution
@@ -294,10 +366,13 @@ final class PSNBuildStepsModel {
 
     // MARK: - Confirmation copy
 
+    /// "N request(s)".
+    private static func requestCount(_ n: Int) -> String { "\(n) request\(n == 1 ? "" : "s")" }
+
     var confirmTitle: String {
         switch pendingConfirm {
-        case .fullFetch(let k), .realFullFetch(let k):
-            return "Fetch “\(k.title)”?"
+        case .fullFetch(let k):
+            return isRealAccount ? "\(k.actionTitle) — REAL ACCOUNT" : "\(k.actionTitle)?"
         case .retry(let k): return "Try “\(k.title)” again?"
         case .wipe: return "Wipe the dev cache for ‘\(accountLabel)’?"
         case .none: return ""
@@ -306,9 +381,10 @@ final class PSNBuildStepsModel {
     var confirmMessage: String {
         switch pendingConfirm {
         case .fullFetch(let k):
-            return "This makes up to \(k.estimatedRequests) request\(k.estimatedRequests == 1 ? "" : "s") to PlayStation."
-        case .realFullFetch(let k):
-            return "REAL ACCOUNT. Confirm again: up to \(k.estimatedRequests) request\(k.estimatedRequests == 1 ? "" : "s") to PlayStation, on your real account."
+            if isRealAccount {
+                return "This will make up to \(Self.requestCount(k.estimatedRequests)) to PlayStation with your real account (\(requestsUsed) / \(budgetLimit) used this session)."
+            }
+            return "This makes up to \(Self.requestCount(k.estimatedRequests)) to PlayStation."
         case .retry:
             return "This is one new request. It ran once and stopped; run it again only if you understand why."
         case .wipe:
@@ -319,8 +395,10 @@ final class PSNBuildStepsModel {
     }
     var confirmButtonTitle: String {
         switch pendingConfirm {
+        case .fullFetch(let k): return "Fetch (\(Self.requestCount(k.estimatedRequests)))"
+        case .retry: return "Try again"
         case .wipe: return "Wipe"
-        default: return "Continue"
+        case .none: return ""
         }
     }
 }

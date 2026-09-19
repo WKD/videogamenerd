@@ -221,8 +221,8 @@ open the cached body from disk to check the DTO before the next click:
   GraphQL call, the persisted-query hash and the `membership: NONE` DTO. **Most likely to fail.**
 
 The full-fetch buttons (S3b/S4, S5, S6) stay disabled until their probe passes for `test`. On the
-test account you can run them too (they ask "up to N requests — continue?"), but the point of the
-test account is the probes.
+test account you can run them too (an inline confirm row appears in the step, "up to N requests —
+[Fetch] [Cancel]"), but the point of the test account is the probes.
 
 ### 7. Switch to the REAL account (S5b)
 **Sign Out** (optionally tick "also delete cached PlayStation responses"), sign in with the real
@@ -232,9 +232,13 @@ account). Run **one probe per data set** (S2 → S3a → S5 → S6), stopping af
 orchestrator to check the dev cache. The first real `membership: PS_PLUS` shows here.
 
 ### 8. Full fetches on the real account, one at a time
-Only after a data set's probe has passed for `real`, its **Fetch** button enables. Each asks
-"up to N requests — continue?" and, on the real account, a **second confirmation**. Run them one
-at a time, reading the cached bodies between. When every probe and full fetch has passed for a
+Only after a data set's probe has passed for `real`, its **Fetch** button enables. Pressing it
+reveals an **inline confirm row inside the step** — there is exactly **one** confirmation per full
+fetch (never a chained second dialog). On the real account it is a single, stronger confirm:
+titled **"… — REAL ACCOUNT"**, message "up to N request(s) … with your real account (k / 40 used
+this session)", buttons **Fetch (N request(s))** / Cancel. If a step can't start when you press
+Fetch (a prerequisite was undone, another step is running, the panel is locked) the row says why
+instead of doing nothing. Run them one at a time, reading the cached bodies between. When every probe and full fetch has passed for a
 label, the panel has satisfied the **DEBUG normal-Sync gate**: **Sync Now** / File ▸ Import from
 PlayStation… now run the ordinary cache-first sync (0 requests inside the cache window — S8) and
 open the review sheet with the PSN groups (Played · Launched 0 % · Played — no purchase found ·
@@ -272,3 +276,4 @@ importer with `includePurchases: false` until S6 passes.
 - **2026-09-20 — game list has non-games (real account).** `category` ∈ `ps5_native_game`, `ps4_game`, `ps5_native_media_app`, `ps5_web_based_media_app`. A category not ending in `_game` → *Ignored* ("media app"); `category` also gives the platform (the list has no platform field). Types: `concept.id` is an **Int** in the game list, `conceptId` a nullable **String** in purchases (null on every real row) — both decoded through `PSNFlexibleID`, normalised to String; the join falls back to name when the concept id is absent.
 - **2026-09-20 — purchases probe, real account, size 10.** `pageInfo.totalCount = 581`, `isLast = false`; `membership` values `PS_PLUS` (7 of the first 10) and `NONE` — the PS Plus flag works as assumed; `conceptId` null on every row. **Cross-gen twins**: the same game appears as two entitlements (PS4 + PS5) — merged into one game/one copy (ps5 preferred), note "PS4 & PS5 versions", stable external id on the PS5 entitlement; a bought twin beats a PS Plus twin (no flag). **Volume**: 581 entitlements, mostly PS Plus monthly claims never launched. Per **owner 2026-09-20 (PLAN §16 The Vault)**: a `PS_PLUS` entitlement with joined play time **≤ 10 min** (600 s, `ImportPolicy.vaultPlaytimeGateSeconds`, shared with Batocera) is staged *Ignored* "PS Plus — in the Vault (played under 10 min)" for a later lane to move to the Vault; > 10 min → owned-via-subscription. Bought (`NONE`) never vaulted. Full purchases fetch estimate ceil(581/100) = 6. Review header: "PS Plus: N played · M in the Vault".
 - **2026-09-20 — w14/a landed all of the above offline** (no new Sony traffic; all on synthetic fixtures with the same shapes). Panel steps are now S2 · S3a · S5 · S6 · three full fetches; estimates 1 / 2 / 6. Whole suite green (1494 tests). Not yet exercised against the real account beyond the probes above: the **full** real fetches (trophy 265, game list, purchases 581) and the first real review sheet — first run should watch the cross-gen merge and the Vault counts on real names.
+- **2026-09-20 — real-account full-fetch confirm did nothing — fixed (w14/c), no Sony traffic.** On the `real` label, pressing a **Fetch all …** button showed "up to N — continue?", but after the owner confirmed, nothing happened (no request, no dialog, no row change). Root cause: `confirmPending()` set `pendingConfirm = nil` (dismissing the one shared `confirmationDialog`) and, on the real account, *synchronously reassigned* it to `.realFullFetch` to request a **second** dialog — macOS silently drops a presentation requested while another is dismissing, so the second confirm never appeared and `perform` was never reached. On `test` the first confirm called `perform` directly, so it worked. Fix: dropped the chained second dialog and the `confirmationDialog` entirely; the confirmation is now an **inline confirm row inside the panel** (click-testable, no double-presentation trap) — exactly **one** confirm per full fetch, a single stronger one on `real` (title "… — REAL ACCOUNT", "with your real account (k / 40 used this session)", button "Fetch (N request(s))"). The confirm button starts the step through the same `perform` path as the probe buttons; a start that can't proceed now leaves a visible `lastActionNote` in the row instead of failing silently. Same pattern removed from Wipe / Try again / Acknowledge. All `#if DEBUG`; Release still has no `PSNBuildSteps` symbols. New tests: single-confirm on both labels for all three full fetches, cancel-runs-nothing, blocked-confirm-leaves-a-note, and a `ClickProbeWindow` test that clicks Fetch → inline confirm → confirm → exactly one runner call.
