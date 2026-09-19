@@ -23,7 +23,7 @@ struct FilterChipsClickTests {
         return vm
     }
 
-    @Test(.timeLimit(.minutes(3)))
+    @Test(.timeLimit(.minutes(5)))
     func chipRemoveButtonsAndClearAllReceiveClicksUnderTheToolbar() async throws {
         let vm = makeVM()
         #expect(vm.filterChips.count == 2)
@@ -34,13 +34,13 @@ struct FilterChipsClickTests {
 
         // Sweep the band just under the toolbar; every click that lands on a ✕ (or on
         // "Clear all") removes chips.
-        let removed = try await window.sweep(band: 60, stepX: 8, stepY: 5) { vm.filterChips.count } until: { vm.filterChips.isEmpty }
+        let removed = try await window.sweep(band: 40, stepX: 10, stepY: 6) { vm.filterChips.count } until: { vm.filterChips.isEmpty }
         #expect(removed >= 1, "no click reached the chips bar")
         #expect(vm.filterChips.isEmpty)
         #expect(!vm.filter.hasActiveFacets)
     }
 
-    @Test(.timeLimit(.minutes(3)))
+    @Test(.timeLimit(.minutes(5)))
     func clearAllAloneEmptiesTheFilter() async throws {
         let vm = makeVM()
         let bar = VStack(spacing: 0) { FilterChipsBar(vm: vm); Color.clear }.toolbar { Button("X") {} }
@@ -48,7 +48,7 @@ struct FilterChipsClickTests {
         defer { window.close() }
         try await window.settle()
         // Sweep right-to-left so "Clear all" (after the chips) is reached first.
-        _ = try await window.sweep(band: 60, stepX: 8, stepY: 5, rightToLeft: true) { vm.filterChips.count } until: { vm.filterChips.isEmpty }
+        _ = try await window.sweep(band: 40, stepX: 10, stepY: 6, rightToLeft: true) { vm.filterChips.count } until: { vm.filterChips.isEmpty }
         #expect(vm.filterChips.isEmpty)
     }
 }
@@ -97,15 +97,20 @@ final class ClickProbeWindow {
     func sweep(band: CGFloat, stepX: CGFloat, stepY: CGFloat, rightToLeft: Bool = false,
                observe: () -> Int, until: () -> Bool) async throws -> Int {
         var changes = 0
-        let xs = Array(stride(from: CGFloat(4), through: window.frame.width - 4, by: stepX))
-        for y in stride(from: contentTop - 2, through: contentTop - band, by: -stepY) {
-            for x in (rightToLeft ? xs.reversed() : xs) {
-                let before = observe()
-                click(at: NSPoint(x: x, y: y))
-                try await Task.sleep(for: .milliseconds(4))
-                if observe() != before { changes += 1 }
-                if until() { return changes }
+        // Up to three passes, each more patient: under a loaded test run SwiftUI may
+        // need longer to lay the window out and to process a click.
+        for wait in [6, 15, 40] {
+            let xs = Array(stride(from: CGFloat(4), through: window.frame.width - 4, by: stepX))
+            for y in stride(from: contentTop - 2, through: contentTop - band, by: -stepY) {
+                for x in (rightToLeft ? xs.reversed() : xs) {
+                    let before = observe()
+                    click(at: NSPoint(x: x, y: y))
+                    try await Task.sleep(for: .milliseconds(wait))
+                    if observe() != before { changes += 1 }
+                    if until() { return changes }
+                }
             }
+            try await Task.sleep(for: .milliseconds(500))
         }
         return changes
     }

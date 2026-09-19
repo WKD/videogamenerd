@@ -35,8 +35,41 @@ struct AppDatabase: Sendable {
         config.label = "VGN.sqlite"
         config.foreignKeysEnabled = true
         let pool = try DatabasePool(path: url.path, configuration: config)
+        // Data safety: an existing library is snapshotted BEFORE any pending migration
+        // touches it (the rotating launch snapshot only runs after migrating). A failed
+        // snapshot aborts the launch rather than migrating without a way back.
+        try Self.snapshotBeforePendingMigrations(pool, into: AppPaths.backupsDirectory())
         let db = try AppDatabase(pool)
         return db
+    }
+
+    /// If `writer` holds an already-migrated library with migrations still pending,
+    /// write a `VACUUM INTO` copy named `premigration-<first pending>-<timestamp>.sqlite`
+    /// into `directory` and return its URL. Returns nil for a brand-new database or when
+    /// nothing is pending. These files do not match the `vgn-*.sqlite` rotation pattern,
+    /// so they are never rotated away.
+    @discardableResult
+    static func snapshotBeforePendingMigrations(
+        _ writer: any DatabaseWriter,
+        into directory: @autoclosure () throws -> URL,
+        migrator: DatabaseMigrator = AppDatabase.migrator
+    ) throws -> URL? {
+        let applied = try writer.read { db in try migrator.appliedIdentifiers(db) }
+        guard !applied.isEmpty else { return nil }                      // brand-new store
+        guard let firstPending = migrator.migrations.first(where: { !applied.contains($0) }) else {
+            return nil                                                  // up to date
+        }
+        let dir = try directory()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stamp = Self.timestampFormatter.string(from: Date())
+        var url = dir.appendingPathComponent("premigration-\(firstPending)-\(stamp).sqlite")
+        if FileManager.default.fileExists(atPath: url.path) {
+            url = dir.appendingPathComponent("premigration-\(firstPending)-\(stamp)-\(UUID().uuidString.prefix(6)).sqlite")
+        }
+        try writer.writeWithoutTransaction { db in
+            try db.execute(sql: "VACUUM INTO ?", arguments: [url.path])
+        }
+        return url
     }
 
     /// A fresh in-memory database (a `DatabaseQueue`). For tests and previews —
@@ -72,11 +105,9 @@ struct AppDatabase: Sendable {
     /// numbered migrations here (lane A only).
     static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
-        #if DEBUG
-        // In development, wiping-and-recreating on a schema edit beats writing a
-        // throwaway migration for a store that holds nothing precious yet.
-        migrator.eraseDatabaseOnSchemaChange = true
-        #endif
+        // NEVER set `eraseDatabaseOnSchemaChange`: the owner's real library runs on
+        // DEBUG builds. Applied migrations are immutable; schema changes are new
+        // numbered migrations.
         Migrations.registerV1(in: &migrator)
         Migrations.registerV2(in: &migrator)
         Migrations.registerV3(in: &migrator)

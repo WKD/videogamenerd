@@ -120,7 +120,7 @@ extension AppDatabase {
         try restore(from: source, to: AppPaths.databaseURL())
     }
 
-    private static let timestampFormatter: DateFormatter = {
+    static let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC")

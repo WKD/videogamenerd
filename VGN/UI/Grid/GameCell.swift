@@ -30,7 +30,7 @@ struct GameCell: View {
     /// when both are held; Caps Lock, ⌥, ⌃ and fn do not change the meaning.
     enum ClickKind: Equatable { case select, toggle, extend }
 
-    static func clickKind(for flags: NSEvent.ModifierFlags) -> ClickKind {
+    nonisolated static func clickKind(for flags: NSEvent.ModifierFlags) -> ClickKind {
         let relevant = flags.intersection(.deviceIndependentFlagsMask)
         if relevant.contains(.command) { return .toggle }
         if relevant.contains(.shift) { return .extend }
