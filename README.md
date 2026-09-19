@@ -25,14 +25,14 @@ resolved by Xcode). From a clone:
 ```sh
 xcodebuild -project VGN.xcodeproj -scheme VGN -destination 'platform=macOS' \
   -derivedDataPath .build/dd build
-open .build/dd/Build/Products/Debug/VGN.app
+open .build/dd/Build/Products/Debug/Video\ Game\ Nerd.app
 ```
 
 Test: the same command with `test`. Try it without touching your real data by launching
 with sample data:
 
 ```sh
-open .build/dd/Build/Products/Debug/VGN.app --args -VGNSampleData YES
+open .build/dd/Build/Products/Debug/Video\ Game\ Nerd.app --args -VGNSampleData YES
 ```
 
 ## First-run setup

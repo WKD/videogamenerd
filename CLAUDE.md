@@ -18,7 +18,7 @@ xcodebuild -project VGN.xcodeproj -scheme VGN -destination 'platform=macOS' \
 Run the built app:
 
 ```sh
-open .build/dd/Build/Products/Debug/VGN.app
+open .build/dd/Build/Products/Debug/Video\ Game\ Nerd.app
 ```
 
 Run a single test (Swift Testing) by name, or a whole suite:
@@ -50,7 +50,7 @@ Never launch a dev build against the owner's real library. Use:
 - default (no args) → the live on-disk database at `~/Library/Application Support/VGN/`.
 
 ```sh
-open .build/dd/Build/Products/Debug/VGN.app --args -VGNSampleData YES
+open .build/dd/Build/Products/Debug/Video\ Game\ Nerd.app --args -VGNSampleData YES
 ```
 
 ## Toolchain
@@ -193,6 +193,10 @@ strip `Authorization`/`Client-ID` and tokens from anything recorded):
 Fixture rules: bundle resources are flattened, so **fixture file names must be unique**
 per bundle (prefix by topic, e.g. `igdb-search-bloodborne.json`). Swift file basenames
 and top-level type names must be unique across the whole target.
+
+## Identity
+
+Bundle id **`com.pomatelier.VideoGameNerd`** (tests: `…Tests`, `…UITests`), product / display name **"Video Game Nerd"** (`Video Game Nerd.app`). The Swift module, target, scheme and executable/process name stay **`VGN`** (`PRODUCT_MODULE_NAME`, `EXECUTABLE_NAME`), so `@testable import VGN`, `pgrep -x VGN` and the test host path keep working. Keychain service = the bundle id; the data folder stays `~/Library/Application Support/VGN/`.
 
 ## Signing
 

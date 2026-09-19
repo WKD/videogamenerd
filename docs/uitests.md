@@ -68,7 +68,7 @@ automatically). What was added, all in the `AA00…00NN` id namespace:
 - target `VGNUITests` (id `…12`), product type
   `com.apple.product-type.bundle.ui-testing`, build setting `TEST_TARGET_NAME = VGN`
   (no `TEST_HOST`/`BUNDLE_LOADER` — a UI-testing bundle does not host the app),
-  bundle id `com.wkd.VGNUITests`, Swift 6, macOS 15, ad-hoc signing (`CODE_SIGN_IDENTITY = "-"` inherited).
+  bundle id `com.pomatelier.VideoGameNerdUITests`, Swift 6, macOS 15, ad-hoc signing (`CODE_SIGN_IDENTITY = "-"` inherited).
 - its synchronized root group `VGNUITests/` (id `…32`), Sources/Frameworks/Resources
   phases (`…46/47/48`), config list (`…53`), Debug/Release configs (`…66/67`), a
   dependency on the `VGN` app target (`…82` + proxy `…83`), and the product file

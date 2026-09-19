@@ -2,12 +2,12 @@ import Foundation
 import Security
 
 /// A `Sendable` wrapper over the Security framework's generic-password items
-/// (PLAN §5.1). Service defaults to the bundle id `com.wkd.VGN`. Secrets are
+/// (PLAN §5.1). Service defaults to the bundle id `com.pomatelier.VideoGameNerd`. Secrets are
 /// never logged. Signed builds keep these items across rebuilds (PLAN §3).
 struct KeychainStore: SecretStoring {
     let service: String
 
-    init(service: String = "com.wkd.VGN") {
+    init(service: String = "com.pomatelier.VideoGameNerd") {
         self.service = service
     }
 

@@ -29,7 +29,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		AA0000000000000000000020 /* VGN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VGN.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000020 /* Video Game Nerd.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Video Game Nerd.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000021 /* VGNTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VGNTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000022 /* VGNUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VGNUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -91,7 +91,7 @@
 		AA0000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA0000000000000000000020 /* VGN.app */,
+				AA0000000000000000000020 /* Video Game Nerd.app */,
 				AA0000000000000000000021 /* VGNTests.xctest */,
 				AA0000000000000000000022 /* VGNUITests.xctest */,
 			);
@@ -121,7 +121,7 @@
 				AA0000000000000000000071 /* GRDB */,
 			);
 			productName = VGN;
-			productReference = AA0000000000000000000020 /* VGN.app */;
+			productReference = AA0000000000000000000020 /* Video Game Nerd.app */;
 			productType = "com.apple.product-type.application";
 		};
 		AA0000000000000000000011 /* VGNTests */ = {
@@ -421,8 +421,11 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wkd.VGN;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				EXECUTABLE_NAME = VGN;
+				INFOPLIST_KEY_CFBundleDisplayName = "Video Game Nerd";
+				PRODUCT_BUNDLE_IDENTIFIER = com.pomatelier.VideoGameNerd;
+				PRODUCT_MODULE_NAME = VGN;
+				PRODUCT_NAME = "Video Game Nerd";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -447,8 +450,11 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.wkd.VGN;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				EXECUTABLE_NAME = VGN;
+				INFOPLIST_KEY_CFBundleDisplayName = "Video Game Nerd";
+				PRODUCT_BUNDLE_IDENTIFIER = com.pomatelier.VideoGameNerd;
+				PRODUCT_MODULE_NAME = VGN;
+				PRODUCT_NAME = "Video Game Nerd";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -465,11 +471,11 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.wkd.VGNTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pomatelier.VideoGameNerdTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VGN.app/Contents/MacOS/VGN";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Video Game Nerd.app/Contents/MacOS/VGN";
 			};
 			name = Debug;
 		};
@@ -484,11 +490,11 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.wkd.VGNTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pomatelier.VideoGameNerdTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VGN.app/Contents/MacOS/VGN";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Video Game Nerd.app/Contents/MacOS/VGN";
 			};
 			name = Release;
 		};
@@ -503,7 +509,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.wkd.VGNUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pomatelier.VideoGameNerdUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -522,7 +528,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.wkd.VGNUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.pomatelier.VideoGameNerdUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;

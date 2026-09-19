@@ -44,7 +44,7 @@ struct KeychainStoreTests {
     /// never collides with the app's items and cleans itself up. Skips
     /// gracefully if the Keychain is unavailable in the test host.
     @Test func realKeychainRoundTrip() {
-        let service = "com.wkd.VGN.test.\(UUID().uuidString)"
+        let service = "com.pomatelier.VideoGameNerd.test.\(UUID().uuidString)"
         let store = KeychainStore(service: service)
 
         // Probe: if the host can't use the Keychain (CI, no signing), bail out
