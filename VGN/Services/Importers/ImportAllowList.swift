@@ -27,7 +27,7 @@ struct ImportAllowList: Sendable {
     static let psn = ImportAllowList([
         "https://ca.account.sony.com/api/authz/v3/oauth/authorize",
         "https://ca.account.sony.com/api/authz/v3/oauth/token",
-        "https://m.np.playstation.com/api/userProfile/v1/internal/users/me/profiles",
+        "https://us-prof.np.community.playstation.net/userProfile/v1/users/me/profile2",
         "https://m.np.playstation.com/api/trophy/v1/users/me/trophyTitles",
         "https://m.np.playstation.com/api/gamelist/v2/users/me/titles",
         "https://web.np.playstation.com/api/graphql/v1/op",

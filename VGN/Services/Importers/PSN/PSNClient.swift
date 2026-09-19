@@ -63,7 +63,13 @@ actor PSNClient {
     private var hasRefreshedToken = false
     private var hasWaited429 = false
 
-    private static let profileURL = URL(string: "https://m.np.playstation.com/api/userProfile/v1/internal/users/me/profiles")!
+    /// The signed-in account's own profile. The modern endpoint
+    /// (`m.np.playstation.com/api/userProfile/v1/internal/users/{accountId}/profiles`) does
+    /// NOT accept `me` — Sony answered S2 with `400 Bad Request (path: accountId)` on
+    /// 2026-09-19. psn-api resolves "me" through the legacy profile endpoint instead
+    /// (`USER_LEGACY_BASE_URL/:userName/profile2`), which also returns the account id and
+    /// the PS Plus flag. Minimal field list on purpose.
+    private static let profileURL = URL(string: "https://us-prof.np.community.playstation.net/userProfile/v1/users/me/profile2?fields=onlineId,accountId,plus")!
     private static let trophyBase = "https://m.np.playstation.com/api/trophy/v1/users/me/trophyTitles"
     private static let gameListBase = "https://m.np.playstation.com/api/gamelist/v2/users/me/titles"
     private static let graphQLBase = "https://web.np.playstation.com/api/graphql/v1/op"
@@ -384,6 +390,11 @@ actor PSNClient {
         request.httpMethod = spec.method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // psn-api's `call()` sends `Content-Type: application/json` on EVERY request, GETs
+        // included. The REST endpoints do not care, but the GraphQL gateway (Apollo CSRF
+        // prevention) answers a GET without it with HTTP 400 "blocked as a potential
+        // Cross-Site Request Forgery" — S6 probe, 2026-09-19.
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         for (k, v) in spec.extraHeaders { request.setValue(v, forHTTPHeaderField: k) }
         return request
     }

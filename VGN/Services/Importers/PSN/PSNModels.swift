@@ -65,10 +65,13 @@ struct PSNTokenDTO: Decodable, Sendable, Equatable {
 struct PSNProfile: Decodable, Sendable, Equatable {
     let onlineId: String?
     let accountId: String?
+    /// The legacy profile's `plus` flag (0/1, sometimes a Bool): does this account have
+    /// PS Plus. Informational (shown in Settings); nil when absent.
+    let hasPlus: Bool?
 
     enum RootKeys: String, CodingKey { case profile }
     enum ProfileKeys: String, CodingKey {
-        case onlineId, accountId
+        case onlineId, accountId, plus, isPlus
         case onlineIdAlt = "online_id"
         case accountIdAlt = "account_id"
     }
@@ -83,6 +86,13 @@ struct PSNProfile: Decodable, Sendable, Equatable {
             ?? (try? c.decode(String.self, forKey: .onlineIdAlt))
         accountId = (try? c.decode(String.self, forKey: .accountId))
             ?? (try? c.decode(String.self, forKey: .accountIdAlt))
+        if let flag = (try? c.decode(Bool.self, forKey: .plus)) ?? (try? c.decode(Bool.self, forKey: .isPlus)) {
+            hasPlus = flag
+        } else if let number = try? c.decode(Int.self, forKey: .plus) {
+            hasPlus = number != 0
+        } else {
+            hasPlus = nil
+        }
     }
 }
 

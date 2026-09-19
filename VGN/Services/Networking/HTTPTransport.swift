@@ -45,6 +45,39 @@ struct URLSessionTransport: HTTPTransport {
     }
 }
 
+/// Refuses every HTTP redirect, so the 3xx response itself is returned to the caller.
+/// OAuth code flows need this: the authorization endpoint answers `302 Location:
+/// <custom-scheme>://…?code=…`, which `URLSession` cannot follow ("unsupported URL") and
+/// which must be READ, not followed.
+final class NoRedirectSessionDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
+extension URLSessionTransport {
+    /// An ephemeral session: no shared cookie jar, no disk cache, no credential storage —
+    /// what an importer talking to a third-party account API should use. With
+    /// `followRedirects: false` the 3xx response is handed back instead of being followed.
+    static func ephemeral(followRedirects: Bool = true, timeout: TimeInterval = 30,
+                          protocolClasses: [AnyClass]? = nil) -> URLSessionTransport {
+        let config = URLSessionConfiguration.ephemeral
+        if let protocolClasses { config.protocolClasses = protocolClasses }   // tests only
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        config.urlCache = nil
+        config.urlCredentialStorage = nil
+        config.timeoutIntervalForRequest = timeout
+        let session = followRedirects
+            ? URLSession(configuration: config)
+            : URLSession(configuration: config, delegate: NoRedirectSessionDelegate(), delegateQueue: nil)
+        return URLSessionTransport(session: session)
+    }
+}
+
 extension HTTPURLResponse {
     /// Parsed `Retry-After` (seconds only; the http-date form is rare here and
     /// treated as absent).

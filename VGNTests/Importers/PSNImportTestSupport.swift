@@ -41,7 +41,7 @@ func psnHappyPathTransport() throws -> StubHTTPTransport {
         .init(status: 200, body: try Fixtures.data(name), headers: ["Content-Type": "application/json"])
     }
     transport.on(urlContains: "oauth/token", try json("psn-token.json"))
-    transport.on(urlContains: "me/profiles", try json("psn-profile.json"))
+    transport.on(urlContains: "me/profile2", try json("psn-profile.json"))
     // Trophy paging: offset=10 (page 2) must win over the generic trophy2 route.
     transport.on(urlContains: "npServiceName=trophy2&limit=800&offset=10", try json("psn-trophy-page2.json"))
     transport.on(urlContains: "npServiceName=trophy2", try json("psn-trophy-probe.json"))

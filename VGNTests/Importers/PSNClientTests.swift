@@ -116,8 +116,14 @@ import Testing
         _ = try await client.profile()
         #expect(await client.fromNetwork == 1)
         #expect(await client.fromCache == 1)
-        let profileRequests = transport.requests.filter { ($0.url?.absoluteString ?? "").contains("me/profiles") }
+        let profileRequests = transport.requests.filter { ($0.url?.absoluteString ?? "").contains("me/profile2") }
         #expect(profileRequests.count == 1)
+        // Every PSN request carries the reference client's headers — the GraphQL gateway
+        // rejects a GET without a JSON content type as a potential CSRF (live, 2026-09-19).
+        for request in transport.requests {
+            #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+            #expect(request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true)
+        }
     }
 
     // MARK: - Pacer
@@ -160,7 +166,7 @@ final class First401Transport: HTTPTransport, @unchecked Sendable {
             lock.withLock { tokenCalls += 1 }
             return (tokenBody, resp(200))
         }
-        if url.contains("me/profiles") {
+        if url.contains("me/profile2") {
             let first = lock.withLock { () -> Bool in profileCalls += 1; return profileCalls == 1 }
             return (profileBody, resp(first ? 401 : 200))
         }

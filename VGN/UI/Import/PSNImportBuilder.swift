@@ -46,9 +46,12 @@ enum PSNImportBuilder {
         // one tiny probe at a time, with the orchestrator present.
         let armed = AppPreferences.defaults.bool(forKey: PSNImportBuilder.liveEnabledKey)
         if mode == .live, armed, let graph, let platformCatalog {
-            let transport = URLSessionTransport()
+            // Ephemeral sessions: nothing from Sony lands in the app's shared cookie jar or
+            // URL cache. The authorize step gets a session that does NOT follow redirects.
+            let transport = URLSessionTransport.ephemeral()
             let auth = PSNAuth(
                 transport: transport,
+                authorizeTransport: URLSessionTransport.ephemeral(followRedirects: false),
                 configuration: .mobileApp,
                 tokenStore: KeychainPSNTokenStore(secrets: secrets))
 
