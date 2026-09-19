@@ -25,6 +25,9 @@ struct RootView: View {
                 }
                 .toolbar { toolbarContent }
         }
+        // Live tier labels for every `TierChip` tooltip (hover a letter → "S — Masterpiece").
+        .environment(\.tierLabels, Dictionary(
+            vm.tiers.map { ($0.letter.uppercased(), $0.label) }, uniquingKeysWith: { first, _ in first }))
         .task { vm.start() }
         .task { enrichment?.start() }
         .onAppear { vm.undoManager = undoManager }

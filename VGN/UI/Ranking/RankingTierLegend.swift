@@ -16,7 +16,7 @@ struct RankingTierLegend: View {
                     onPick(tier)
                 } label: {
                     VStack(spacing: 4) {
-                        TierChip(letter: tier.letter, colorHex: tier.colorHex, size: 34)
+                        TierChip(letter: tier.letter, colorHex: tier.colorHex, size: 34, showsLabelOnHover: false)
                         Text(tier.label)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
