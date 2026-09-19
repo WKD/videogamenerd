@@ -83,7 +83,10 @@ struct ClaudeCLIRunnerTests {
 
     @Test("Times out and reports timedOut, killing the child")
     func timeout() async throws {
-        let script = try FakeClaudeCLI.make(stdout: FakeClaudeCLI.textEnvelope(result: "late"), sleepSeconds: 5)
+        // The child sleeps far longer than any scheduling hiccup: under a loaded parallel
+        // run the 0.4 s timer can fire seconds late, and a 5 s child then finished first
+        // (flake seen 2026-09-19). The child is killed on timeout, so the test stays fast.
+        let script = try FakeClaudeCLI.make(stdout: FakeClaudeCLI.textEnvelope(result: "late"), sleepSeconds: 120)
         await #expect(throws: ClaudeCLIError.self) {
             _ = try await runner(for: script).runText(
                 prompt: "hi",
