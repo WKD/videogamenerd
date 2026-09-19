@@ -96,18 +96,37 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
 - **Sign-in is OAuth route (a) only** (owner decision, G1). The session-cookie route was not
   modelled. Galaxy client id/secret are the documented public values in
   `GOGAuthConfiguration+Galaxy.swift` — **verify at G1** they still work.
-- **`ProductSource` has no `.gog` case.** `VGN/Model/GameEnums.swift` is outside this lane's
-  owned paths, so committed GOG Products store `source = 'gog'` as a raw string (the DB CHECK
-  was widened in v5). Reads via `ProductSource(rawValue:)` fall back to `.manual`, so a
-  GOG-sourced Product currently *displays* as manual-sourced. **[Model owner: add `.gog`]**
-- **Keychain adapter for the GOG token is not built.** `GOGAuth` depends on a `GOGTokenStoring`
-  seam with an in-memory fake; a `SecretStoring`-backed adapter needs a `SecretKey.gog` case,
-  which lives in the out-of-lane `VGN/Services/Keychain/SecretStoring.swift`. **[Keychain owner
-  / wiring lane]**
-- **Linux-only titles** map to `pc` but carry no persisted "note" (no column for it); the
-  review-sheet lane should surface it from the mapping. **[review-sheet lane]**
-- Nothing is wired into `AppEnvironment`/`ServicesFactory`, and there is no Settings pane,
-  WKWebView login bridge or review sheet yet — those are the next (UI) lane's. **[wave 8+]**
+- ~~`ProductSource` has no `.gog` case~~ **Done (wave 8, lane B):** `ProductSource.gog`
+  ("GOG") added to `VGN/Model/GameEnums.swift`; no exhaustive switch over it existed, so the
+  change is additive.
+- ~~Keychain adapter for the GOG token is not built~~ **Done (wave 8, lane B):**
+  `KeychainGOGTokenStore` over `SecretStoring` with a new `SecretKey.gogTokens` case; the
+  token is one JSON blob under account `gog.tokens`, never logged.
+- ~~Linux-only titles carry no note~~ **Done (wave 8, lane B):** surfaced at presentation time
+  — `GOGMapping` sets transient `macAvailable`/`linuxOnly` flags on the staging row and the
+  review sheet shows a "Linux-only → PC" chip. No schema change.
+- **UI is wired in live mode only.** `AppEnvironment` builds the real `GOGAuth`/`GOGImporter`/
+  coordinator/matcher only in live mode; sample/seeded/test modes use an inert backend (no
+  network, no Keychain) and sign-in is disabled there. So the Settings **GOG pane, the OAuth
+  login sheet and the review sheet cannot be exercised in `-VGNSampleData` mode** — only in a
+  real run, which reaches `gog.com` (hence the live steps G1–G7 must be run by the orchestrator
+  **with the owner**, `docs/gog-import.md`).
+- **Login web view is untested against GOG.** The `WKWebView` bridge and `GOGLoginNavigationPolicy`
+  are unit-tested on synthetic URLs; not one page has been loaded from `gog.com`. The captcha
+  host GOG's login page may pull in is **not** on `allowedNavigationHosts`, so if login shows a
+  "Blocked a page from …" note at G1, add that host to the configuration and retry (stop-and-ask).
+- **Force-refresh per data set** deletes that set's cache rows with a small raw `DELETE` in the
+  live backend (the cache store exposes no per-key delete and is lane A's file); the paged
+  "Library" set is matched by key prefix. If lane A later adds a typed `invalidate(source:key:)`,
+  switch to it.
+- **GOG bundles are imported as single games, not expanded.** PLAN §14.3 wants an IGDB bundle to
+  become a compilation Product with its members; the review sheet's chosen `ScanMatch` does not
+  carry an `isBundle`/member list, so the commit path creates a single game (the owner can
+  "Group as compilation…" afterwards). Bundle expansion in the import review sheet is deferred.
+  **[follow-up]**
+- **IGDB matching is skipped when IGDB is not configured** (`NoMatchImportMatcher`): every title
+  then waits under *New* for manual review. A configured but flaky IGDB lookup can't sink a sync
+  (`ResilientImportMatcher` turns a lookup error into "no match").
 
 ## 5. Out of scope for now [later]
 PSN import (M7, fully planned in PLAN §13) · Polish M9 (Liquid Glass touches, Dark/Tinted icon via Icon Composer — masters in `design/app-icon/`, Top export as image, richer empty states) · HowLongToBeat scraping (the "Open on HowLongToBeat" link exists) · TheGamesDB covers · `ClaudeAPIRecognizer` · editable tier labels/colours (owner: not now) · adjustable snooze.

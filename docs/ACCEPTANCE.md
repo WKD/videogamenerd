@@ -92,6 +92,18 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 - [ ] Dragging **across a divider** changes the tier as before; near a divider the line distinguishes **last of the upper tier** (above the divider) from **first of the lower tier** (below it), and when the destination tier differs from the source it takes the **destination tier's colour + letter** in the knob (check light *and* dark).
 - [ ] With a **filter active** no drag/line/divider-move happens (unchanged). Note the residual: **no auto-scroll** near the top/bottom edge while dragging (drag to a visible row, or scroll first).
 
+### GOG import UI (2026-09-19, wave 8 lane B) — needs owner eyes, runs against real GOG
+> These require the **live build with the owner present** (`docs/gog-import.md` runbook, PLAN §14.5). They cannot be checked in `-VGNSampleData` mode (sign-in is disabled there). Do them as part of the gated live steps G1–G7.
+- [ ] **Sign in** (Settings ▸ Accounts ▸ GOG ▸ *Sign In to GOG…*): the private window shows GOG's own login page, the read-only address line shows only the host, and on success the window closes itself and the pane shows the owner's **username** (never the user id). The owner's password never leaves GOG's page.
+- [ ] The login window **blocks off-allow-list hosts** with a "Blocked a page from …" note and opens nothing externally. If a captcha host is blocked, that is the expected stop-and-ask (add the host, retry).
+- [ ] **Sync Now** shows the small progress sheet (with Cancel) then opens the review sheet. The header reads "n from cache · m from network" and any owned-gap note; the **Mac when available / Always PC** switch re-maps rows; the three buckets (*New / Already matched / Ignored*) look right; DLC/soundtrack/demo land in **Ignored** with a reason and restore in one click; **Linux-only → PC** chip shows where expected.
+- [ ] **Import N Games** commits once; the banner reads "N games imported from GOG · M already in your library"; the games appear **owned, not played** (Backlog), no tier touched. A second **Sync Now** makes **0** requests and proposes nothing new.
+- [ ] **Force Refresh…** on a data set states the request cost and the cached age before confirming; after a new purchase, forcing the **Library** set re-fetches only the pages and only the new title appears.
+- [ ] Each **reject** path (sign out mid-sync, a 403/HTML, etc.) surfaces a clear message in the GOG pane with "VGN stopped and made no further requests." and a redacted excerpt disclosure; the last good cache survives.
+- [ ] **Sign Out…** removes the tokens (pane returns to signed-out); with the **"Also delete cached GOG responses"** tick, the cache is wiped too.
+- [ ] File ▸ **Import from GOG…** starts a sync when signed in, and opens Settings ▸ Accounts when signed out.
+- [ ] With the app idle after a sync, VGN still sits at ~0 % CPU (sample-mode idle already verified headless).
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

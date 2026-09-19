@@ -27,6 +27,7 @@ struct VGNApp: App {
                 .frame(minWidth: 900, minHeight: 600)
                 .environment(\.rankingEnvironment, env.ranking)
                 .photoScanPresentation(env.photoScan)
+                .gogImportPresentation(env.gogImport)
                 .environment(\.playNextEnvironment, env.playNext)
             } else if let failure = env.failure {
                 DatabaseErrorView(failure: failure)
@@ -41,6 +42,7 @@ struct VGNApp: App {
             PlayedMarkCommands()
             StatsCommands()
             PhotoScanCommands()
+            GOGImportCommands()
             LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
         }
 

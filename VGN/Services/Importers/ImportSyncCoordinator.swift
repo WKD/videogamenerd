@@ -8,10 +8,19 @@ struct ImportMatchResult: Sendable, Equatable {
     var outcome: ScanMatchOutcome
 }
 
-/// The outcome of one sync: the summary line data plus the per-row match proposals.
+/// The outcome of one sync: the summary line data, the per-row match proposals, and
+/// the fetched staging rows (carrying the transient mapping info — release year, Mac
+/// availability, Linux-only note — the review sheet needs, PLAN §14.3).
 struct ImportSyncResult: Sendable, Equatable {
     var summary: ImportSyncSummary
     var matches: [ImportMatchResult]
+    var rows: [ImportStagingRow]
+
+    init(summary: ImportSyncSummary, matches: [ImportMatchResult], rows: [ImportStagingRow] = []) {
+        self.summary = summary
+        self.matches = matches
+        self.rows = rows
+    }
 }
 
 /// Runs one sync for any ``LibraryImporter`` (PLAN §14.4): cache-first fetch → staging
@@ -66,9 +75,10 @@ struct ImportSyncCoordinator: Sendable {
             alreadyMatchedCount: buckets[.alreadyMatched]?.count ?? 0,
             ignoredCount: buckets[.ignored]?.count ?? 0,
             budgetUsed: fetched.budgetUsed,
-            rejects: [])
+            rejects: [],
+            ownedGap: fetched.ownedGap)
         onProgress(ImportProgress(phase: .finished))
-        return ImportSyncResult(summary: summary, matches: matches)
+        return ImportSyncResult(summary: summary, matches: matches, rows: fetched.rows)
     }
 
     /// The same sync as an `AsyncStream` of progress values; the final ``ImportSyncResult``

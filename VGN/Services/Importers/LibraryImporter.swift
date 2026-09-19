@@ -30,11 +30,16 @@ struct ImportFetchResult: Sendable, Equatable {
     var fromCache: Int
     var fromNetwork: Int
     var budgetUsed: Int
+    /// Product ids seen on the library pages that were not in the owned-id list
+    /// (PLAN §14.2 — reported, not fatal). Carried into ``ImportSyncSummary/ownedGap``.
+    var ownedGap: Int
 
-    init(rows: [ImportStagingRow], fromCache: Int = 0, fromNetwork: Int = 0, budgetUsed: Int = 0) {
+    init(rows: [ImportStagingRow], fromCache: Int = 0, fromNetwork: Int = 0,
+         budgetUsed: Int = 0, ownedGap: Int = 0) {
         self.rows = rows
         self.fromCache = fromCache
         self.fromNetwork = fromNetwork
         self.budgetUsed = budgetUsed
+        self.ownedGap = ownedGap
     }
 }

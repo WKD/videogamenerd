@@ -248,16 +248,8 @@ private struct PhotoScanRowView: View {
 
     private var alternativesMenu: some View {
         Menu {
-            if !row.alternatives.isEmpty {
-                Section("Alternatives") {
-                    ForEach(Array(row.alternatives.enumerated()), id: \.offset) { _, alt in
-                        Button {
-                            model.chooseMatch(alt, rowID: row.id)
-                        } label: {
-                            Text("\(alt.name)\(alt.releaseYear.map { " (\($0))" } ?? "")")
-                        }
-                    }
-                }
+            MatchAlternativesSection(alternatives: row.alternatives) { alt in
+                model.chooseMatch(alt, rowID: row.id)
             }
             Button("Search IGDB…") { searching = true; searchText = row.printedTitle }
             if row.selectedMatch == nil {

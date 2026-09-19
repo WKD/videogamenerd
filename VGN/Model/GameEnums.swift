@@ -41,9 +41,21 @@ enum ProductKind: String, Hashable, Sendable, Codable, CaseIterable {
     case compilation
 }
 
-/// How a product entered the library (PLAN §4).
+/// How a product entered the library (PLAN §4 / §14.3). `gog` is a GOG-import Product
+/// (owned digital PC/Mac), recognised on re-sync by `(source, external_id)`.
 enum ProductSource: String, Hashable, Sendable, Codable, CaseIterable {
     case manual
     case photo
     case psn
+    case gog
+
+    /// A short, human-readable label for the inspector / exports.
+    var label: String {
+        switch self {
+        case .manual: return "Manual"
+        case .photo: return "Photo scan"
+        case .psn: return "PSN"
+        case .gog: return "GOG"
+        }
+    }
 }
