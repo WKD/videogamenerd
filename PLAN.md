@@ -373,6 +373,7 @@ Order rationale: 0–4 deliver the whole core loop (add → browse → rank) wit
 | Computers | One **Mac** platform, one **PC**, plus distinct retro computers. |
 | Other importers | **GOG** later; Steam / Xbox / Nintendo not planned. |
 | Importer order *(2026-09-19)* | **GOG (M8) is built before PSN (M7)**: lower risk, and it builds the shared importer machinery (§14). Same cache-first / stop-and-ask protocol for both. |
+| PSN copy format *(2026-09-19)* | Existing library copy wins → purchased = digital → played-without-purchase = played only (offer Physical/Digital in the review sheet) → no signal = digital. Bulk "Change Copy Format" ships with M7. No PSNProfiles scraping: the 800 is a page size of *games*, not a trophy cap. |
 | Sample photos | Originals git-ignored; **downsized JPEG fixtures committed**. |
 | Persistence | GRDB stays even with Xcode available (see §1). |
 | ROMs *(added 2026-09-18)* | Third ownership format next to physical/digital. Manual entry only for now — no romlord/emulator import. |
@@ -416,6 +417,15 @@ Every PSN response is validated before anything else happens to it. **Valid ⇒ 
 | Trophy titles PS3/Vita | same with `npServiceName=trophy` | same | same — the only PS3/Vita history there is |
 | Game list | `/api/gamelist/v2/users/me/titles` (paged, limit 200) | play duration (ISO-8601), play count, first/last played, concept + title ids — PS4/PS5 only | `play_duration`, first/last played; signal **played** |
 | Purchases | web GraphQL `getPurchasedGameList` on `web.np.playstation.com` (persisted-query hash — **the fragile one**) | entitlements, product name, platform, PS Plus-claimed vs bought | signal **owned** (digital); Plus claims excluded by default |
+
+**About the "800"** — it is the *page size* of the trophy-**titles** list: one entry per **game** I have trophies in (title, platform, earned counts), not per trophy. A library of more than 800 games simply costs a second page (`offset=800`); individual trophies are never fetched, stored or shown — VGN only needs "≥ 1 earned trophy ⇒ played". So there is no coverage gap to fill, and **PSNProfiles scraping is not needed and not planned** *(decided 2026-09-19)*: it would add a Cloudflare-protected third party whose terms forbid scraping, only works for public profiles, and returns the same title list.
+
+**Physical or digital?** *(decided 2026-09-19)* PSN knows what I *bought*, not what is on my shelf, so the copy format is derived in this order:
+1. **Already in my library** (e.g. a disc added by photo scan) → no new copy at all: the import only adds *played*, playtime and last-played to the existing game. This covers most discs.
+2. **Purchased entitlement** (not a PS Plus claim) → owned, **digital**.
+3. **Played, no entitlement** → the only signal available for a disc (it may also be a game I borrowed, sold, or played on someone else's licence), so it is imported as **played, not owned** by default, listed in the review sheet under "*Played — no purchase found*" with a one-click "own these as ▸ Physical / Digital" for the ticked rows. If a response carries an explicit disc/digital marker (to be checked at S5/S6 — the game list's `service`/category fields and the entitlement's package type are the candidates), that marker wins over this inference.
+4. **No usable signal at all** (the purchases step S6 failed or was skipped) → anything I choose to own from the import defaults to **digital**, and I re-sort later.
+- To make that re-sorting practical the milestone also adds a bulk **Change Copy Format ▸ Physical · Digital · ROM** action for a multi-selection (grid context menu + Game menu; one transaction, one undo step) — with the *Format* filter it turns "fix fifty discs" into three clicks. GOG needs none of this: every GOG copy is digital (§14.3).
 
 Normalisation: one `import_titles` row per (source `psn`, stable external id); the three lists are joined on concept/title id where present, else on normalised name + platform (`TitleNormalizer`). Noise filtered by default and remembered: media apps, demos, betas, themes/avatars, PS Plus claims never launched.
 
