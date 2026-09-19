@@ -34,6 +34,7 @@ struct GRDBLibraryDataSource: LibraryDataSource {
                 let lengths = try LibraryQuery.fetchLengthShelfCounts(db, bounds: bounds, style: style)
                 counts.lengthShelves = lengths.shelves
                 counts.unmeasured = lengths.unmeasured
+                counts.unlinked = try LibraryQuery.fetchUnlinkedCount(db)
                 return counts
             }
             .values(in: store.dbReader)

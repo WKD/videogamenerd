@@ -18,6 +18,12 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     // Play Next recommendation (PLAN §7b) — LIBRARY section, after Unranked.
     case playNext
 
+    /// Games not linked to an IGDB entry (`igdb_id IS NULL`): they get no metadata,
+    /// cover, time-to-beat or traits, and are invisible to the `igdb_id` dedupe, so a
+    /// later import can duplicate them (PLAN §5.1 "Reconciling unlinked games"). A
+    /// LIBRARY row shown **only when its count > 0** (like "Unmeasured").
+    case unlinked
+
     // Ranking views (PLAN §7)
     case tierBoard
     case theTop
@@ -41,6 +47,7 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
         case .backlog: return "backlog"
         case .unranked: return "unranked"
         case .playNext: return "playNext"
+        case .unlinked: return "unlinked"
         case .tierBoard: return "tierBoard"
         case .theTop: return "theTop"
         case .duel: return "duel"

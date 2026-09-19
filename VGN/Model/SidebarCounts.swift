@@ -20,6 +20,9 @@ struct SidebarCounts: Hashable, Sendable {
     var lengthShelves: [LengthShelf: Int]
     /// Games with no time-to-beat estimate at all (the "Unmeasured" row).
     var unmeasured: Int
+    /// Games not linked to an IGDB entry (`igdb_id IS NULL`) — the "Unlinked" row,
+    /// shown only when > 0 (PLAN §5.1). Part of the same single counts query.
+    var unlinked: Int
 
     init(
         all: Int = 0,
@@ -30,7 +33,8 @@ struct SidebarCounts: Hashable, Sendable {
         duelQueue: Int = 0,
         perPlatform: [String: Int] = [:],
         lengthShelves: [LengthShelf: Int] = [:],
-        unmeasured: Int = 0
+        unmeasured: Int = 0,
+        unlinked: Int = 0
     ) {
         self.all = all
         self.owned = owned
@@ -41,6 +45,7 @@ struct SidebarCounts: Hashable, Sendable {
         self.perPlatform = perPlatform
         self.lengthShelves = lengthShelves
         self.unmeasured = unmeasured
+        self.unlinked = unlinked
     }
 
     static let empty = SidebarCounts()
@@ -56,6 +61,7 @@ struct SidebarCounts: Hashable, Sendable {
         case .unranked: return unranked
         case .duel: return duelQueue
         case .tierBoard, .theTop, .playNext: return nil
+        case .unlinked: return unlinked
         case .length(let shelf): return lengthShelves[shelf] ?? 0
         case .unmeasured: return unmeasured
         case .platform(let slug): return perPlatform[slug] ?? 0
