@@ -86,7 +86,8 @@ struct LibraryGridView: View {
 
     /// One handler for the grid: arrows (⇧ extends the selection), ↩/space open the
     /// inspector, ⌫ deletes the selection, ⌘A selects all, and any printable
-    /// character routes to type-to-select vs the tier/ownership keys.
+    /// character routes through ``GridKeyRouter`` — plain letters type-to-select,
+    /// `⇧S…⇧F`/`⇧O`/`⇧P` act, plain `0` clears the tier.
     private func handleKeyPress(_ press: KeyPress, proxy: ScrollViewProxy) -> KeyPress.Result {
         let shift = press.modifiers.contains(.shift)
         switch press.key {
@@ -112,8 +113,11 @@ struct LibraryGridView: View {
             if press.characters.lowercased() == "a" { vm.selectAll(); return .handled }
             return .ignored
         }
-        guard let ch = press.characters.first, ch.isLetter || ch.isNumber else { return .ignored }
-        if let scrollID = vm.handleGridCharacter(ch) { scroll(proxy, scrollID) }
+        guard let action = GridKeyRouter.route(characters: press.characters,
+                                               modifiers: press.modifiers) else {
+            return .ignored
+        }
+        if let scrollID = vm.applyGridAction(action) { scroll(proxy, scrollID) }
         return .handled
     }
 
