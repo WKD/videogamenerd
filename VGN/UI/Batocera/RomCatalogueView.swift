@@ -191,7 +191,15 @@ struct RomCatalogueRow: View {
         HStack(alignment: .center, spacing: 10) {
             RomCatalogThumb(entry: entry, loader: loader)
             VStack(alignment: .leading, spacing: 3) {
-                Text(entry.name).font(.body).lineLimit(1)
+                HStack(spacing: 5) {
+                    if entry.isFavorite {
+                        Image(systemName: "star.fill")
+                            .font(.caption2).foregroundStyle(.orange)
+                            .appKitTooltip("★ a favourite on your Batocera")
+                            .accessibilityIdentifier("romCatalogue.favourite.\(entry.id)")
+                    }
+                    Text(entry.name).font(.body).lineLimit(1)
+                }
                 HStack(spacing: 6) {
                     Text(systemLabel)
                         .font(.caption2)
