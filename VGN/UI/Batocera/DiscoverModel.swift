@@ -75,7 +75,10 @@ final class DiscoverModel {
                 let played = try await backend.playedSystems()
                 if Task.isCancelled { return }
 
-                let options = DiscoverScorer.Options(seed: seed, playedSystems: played)
+                // At most half the visible cards may be pinned favourites, so the row still
+                // discovers (PLAN §15).
+                let options = DiscoverScorer.Options(seed: seed, playedSystems: played,
+                                                     maxPinnedFavourites: max(1, cardCount / 2))
                 // Score off the main actor (pure, ~11 000 entries — PLAN §15 perf).
                 let top = await Task.detached(priority: .userInitiated) {
                     Array(DiscoverScorer.score(entries: pool, ranked: ranked, options: options)
