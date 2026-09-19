@@ -123,11 +123,20 @@ enum RecommendationEngine {
         let timeTerm = timeFit.map { weights.timeFitWeight * ($0.fit - 1) } ?? 0
         let jitter = rotationJitter(seed: options.seed, id: candidate.id, magnitude: weights.rotationMagnitude)
         let pickedPenalty = feedback.picked.contains(candidate.id) ? weights.pickedPenalty : 0
-        // A small, opt-in, backtest-neutral nudge for games that leave with PS Plus
-        // (PLAN §13.3). Its magnitude is below the trait/crowd terms, so it only reorders
-        // near-ties and never overturns a clearly better fit.
-        let subBonus = (options.preferExpiringSubscription && candidate.ownedOnlyViaSubscription)
-            ? weights.subscriptionBonus : 0
+        // PS Plus term (backtest-neutral — off unless the UI passes a date / the toggle):
+        // with a cancellation date, the deadline ramp scaled by finishability (PLAN §16);
+        // otherwise the small constant "Prioritise PS Plus games" nudge (PLAN §13.3). Both
+        // stay below the trait/crowd terms, so they only reorder near-ties.
+        var subBonus = 0.0
+        if candidate.ownedOnlyViaSubscription {
+            if options.psPlusMonthsLeft != nil {
+                subBonus = PSPlusDeadlineBoost.boost(monthsLeft: options.psPlusMonthsLeft,
+                                                     personalLengthSeconds: fullEstimate,
+                                                     pace: options.psPlusPace)
+            } else if options.preferExpiringSubscription {
+                subBonus = weights.subscriptionBonus
+            }
+        }
         // A modest boost for an unplayed library game the owner ★ favourited on his Batocera
         // box (PLAN §15). Same shape as the PS Plus nudge — below the taste terms, only
         // reorders near-ties — and, being applied only here, is backtest-neutral.
@@ -144,7 +153,7 @@ enum RecommendationEngine {
             bracketEstimate: bracketEstimate, fullEstimate: fullEstimate,
             affinity: affinity, links: linkResult.links,
             crowdScore: crowdScore, crowdWeight: crowdWeight,
-            strength: strength, weights: weights
+            strength: strength, weights: weights, options: options
         )
 
         let suggestion = PlayNextSuggestion(
@@ -189,7 +198,8 @@ enum RecommendationEngine {
         crowdScore: Double?,
         crowdWeight: Double,
         strength: MatchStrength,
-        weights: RecommendationWeights
+        weights: RecommendationWeights,
+        options: RecommendationOptions
     ) -> [PlayNextReason] {
         var drivers: [(magnitude: Double, reason: PlayNextReason)] = []
 
@@ -230,9 +240,17 @@ enum RecommendationEngine {
             }
         }
 
-        // A game that leaves with PS Plus is worth flagging (PLAN §13.3) — an informative
-        // tail reason, independent of the scoring option.
-        if candidate.ownedOnlyViaSubscription { reasons.append(.leavesWithSubscription) }
+        // A game that leaves with PS Plus is worth flagging (PLAN §13.3/§16) — an informative
+        // tail reason. With a cancellation date set, it carries the months-left + finishability
+        // detail; otherwise the plain marker.
+        if candidate.ownedOnlyViaSubscription {
+            if let months = options.psPlusMonthsLeft, months > 0 {
+                reasons.append(.leavesWithSubscriptionDeadline(
+                    monthsLeft: max(1, Int(months.rounded())), personalLengthSeconds: fullEstimate))
+            } else {
+                reasons.append(.leavesWithSubscription)
+            }
+        }
         // A ★ favourite you have not played is in the backlog because you flagged it (PLAN §15).
         if candidate.isBatoceraFavourite && candidate.status == .backlog {
             reasons.append(.batoceraFavourite)
