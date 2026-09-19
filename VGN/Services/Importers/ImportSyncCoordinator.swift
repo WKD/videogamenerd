@@ -79,7 +79,8 @@ struct ImportSyncCoordinator: Sendable {
             ignoredCount: buckets[.ignored]?.count ?? 0,
             budgetUsed: fetched.budgetUsed,
             rejects: [],
-            ownedGap: fetched.ownedGap)
+            ownedGap: fetched.ownedGap,
+            fromFile: fetched.fromFile)
         onProgress(ImportProgress(phase: .finished))
         return ImportSyncResult(summary: summary, matches: matches, rows: fetched.rows)
     }
