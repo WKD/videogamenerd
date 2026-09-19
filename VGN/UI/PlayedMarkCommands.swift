@@ -11,6 +11,7 @@ import SwiftUI
 /// **pure** — it only reads the view model; every write is inside a Button action.
 struct PlayedMarkCommands: Commands {
     @FocusedValue(\.library) private var library
+    @FocusedValue(\.hltbFetchPresenter) private var hltb
 
     var body: some Commands {
         CommandMenu("Game") {
@@ -33,6 +34,15 @@ struct PlayedMarkCommands: Commands {
                 }
             }
             .disabled(!enabled)
+
+            Divider()
+
+            // HowLongToBeat gap-fill (PLAN §5.3): the current selection, or the whole
+            // library when nothing is selected.
+            Button("Fetch Missing Time Estimates…") { hltb?.presentBulk() }
+                .disabled(!(hltb?.canRunBulk ?? false))
+                .help("Fill missing time-to-beat estimates from HowLongToBeat for the "
+                      + "current selection, or every game with no estimate.")
         }
     }
 }
