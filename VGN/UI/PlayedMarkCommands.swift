@@ -35,6 +35,17 @@ struct PlayedMarkCommands: Commands {
             }
             .disabled(!enabled)
 
+            // Change Copy Format ▸ Physical / Digital / ROM (PLAN §13.3). Acts on the
+            // selection's single-copy games; several-copy games are skipped (banner).
+            let canFormat = library?.canChangeSelectionCopyFormat ?? false
+            Menu("Change Copy Format") {
+                ForEach(ProductFormat.allCases, id: \.self) { format in
+                    Button(format.label) { library?.changeCopyFormat(to: format) }
+                        .disabled(!canFormat)
+                }
+            }
+            .disabled(!canFormat)
+
             Divider()
 
             // HowLongToBeat gap-fill (PLAN §5.3): the current selection, or the whole
