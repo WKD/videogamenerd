@@ -51,11 +51,14 @@ import Testing
     // MARK: - Filter buckets
 
     @Test func bucketBoundaries() {
-        #expect(PlaytimeBucket.short.contains(5 * h))
-        #expect(!PlaytimeBucket.short.contains(10 * h))         // 10 h is medium
-        #expect(PlaytimeBucket.medium.contains(10 * h))
-        #expect(PlaytimeBucket.medium.contains(39 * h))
-        #expect(!PlaytimeBucket.medium.contains(40 * h))        // 40 h → next band
+        #expect(PlaytimeBucket.under4.contains(3 * h))
+        #expect(!PlaytimeBucket.under4.contains(4 * h))         // 4 h → next band
+        #expect(PlaytimeBucket.h4to10.contains(4 * h))
+        #expect(PlaytimeBucket.h4to10.contains(9 * h))
+        #expect(!PlaytimeBucket.h4to10.contains(10 * h))        // 10 h → next band
+        #expect(PlaytimeBucket.h10to40.contains(10 * h))
+        #expect(PlaytimeBucket.h10to40.contains(39 * h))
+        #expect(!PlaytimeBucket.h10to40.contains(40 * h))       // 40 h → next band
         #expect(PlaytimeBucket.h40to60.contains(40 * h))
         #expect(!PlaytimeBucket.h40to60.contains(60 * h))       // 60 h → next band
         #expect(PlaytimeBucket.h60to80.contains(79 * h))

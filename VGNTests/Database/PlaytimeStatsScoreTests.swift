@@ -13,11 +13,11 @@ import GRDB
 
     @Test func playtimeBucketsFilterOnEffectiveThenIGDB() async throws {
         let store = try await TestDB.makeStore()
-        // Played with manual 5 h → short.
+        // Played with manual 5 h → h4to10.
         let a = try await store.addGame(GameDraft(title: "Short One", igdbID: 1, platformIDs: ["pc"],
                                                   owned: true, played: true))
         try await store.setMyPlaytime(gameID: a.gameID, seconds: 5 * h)
-        // Played with manual 20 h → medium.
+        // Played with manual 20 h → h10to40.
         let b = try await store.addGame(GameDraft(title: "Medium One", igdbID: 2, platformIDs: ["pc"],
                                                   owned: true, played: true))
         try await store.setMyPlaytime(gameID: b.gameID, seconds: 20 * h)
@@ -25,7 +25,7 @@ import GRDB
         let c = try await store.addGame(GameDraft(title: "Long One", igdbID: 3, platformIDs: ["pc"],
                                                   owned: true, played: true))
         try await store.setMyPlaytime(gameID: c.gameID, seconds: 90 * h)
-        // Unplayed, IGDB main = 8 h → short (fallback estimate).
+        // Unplayed, IGDB main = 8 h → h4to10 (fallback estimate).
         let d = try await store.addGame(GameDraft(title: "Unplayed Short", igdbID: 4, platformIDs: ["pc"],
                                                   owned: true))
         try await store.updateMetadata(gameID: d.gameID, MetadataPatch(ttbNormallyS: 8 * h))
@@ -44,13 +44,13 @@ import GRDB
             try await ids(LibraryFilter(playtimes: buckets, scope: .all))
         }
 
-        #expect(try await ids([.short]) == [a.gameID, d.gameID])
-        #expect(try await ids([.medium]) == [b.gameID])
+        #expect(try await ids([.h4to10]) == [a.gameID, d.gameID])
+        #expect(try await ids([.h10to40]) == [b.gameID])
         #expect(try await ids([.h80to100]) == [c.gameID])
         #expect(try await ids([.over200]) == [e.gameID])
         #expect(try await ids([.h40to60]).isEmpty)
         // OR within the kind.
-        #expect(try await ids([.short, .h80to100]) == [a.gameID, c.gameID, d.gameID])
+        #expect(try await ids([.h4to10, .h80to100]) == [a.gameID, c.gameID, d.gameID])
     }
 
     // MARK: - Band bounds through SQL at every edge
@@ -60,7 +60,11 @@ import GRDB
         // Seed one played game per edge value (in minutes, so 39 h 59 m is exact).
         // (label, seconds, expected band)
         let cases: [(String, Int, PlaytimeBucket)] = [
-            ("e1", 39 * h + 59 * 60, .medium),     // 39:59 → 10–40
+            ("e0a", 3 * h + 59 * 60, .under4),     // 3:59 → < 4
+            ("e0b", 4 * h,           .h4to10),     // 4:00 → 4–10
+            ("e0c", 9 * h + 59 * 60, .h4to10),     // 9:59 → 4–10
+            ("e0d", 10 * h,          .h10to40),    // 10:00 → 10–40
+            ("e1", 39 * h + 59 * 60, .h10to40),    // 39:59 → 10–40
             ("e2", 40 * h,           .h40to60),    // 40:00 → 40–60
             ("e3", 79 * h + 59 * 60, .h60to80),    // 79:59 → 60–80
             ("e4", 80 * h,           .h80to100),   // 80:00 → 80–100
@@ -98,18 +102,18 @@ import GRDB
         let onlyCompletely = try await store.addGame(GameDraft(title: "OnlyCompletely", igdbID: 1,
                                                                platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: onlyCompletely.gameID,
-                                       MetadataPatch(ttbCompletelyS: 20 * h))   // → medium
+                                       MetadataPatch(ttbCompletelyS: 20 * h))   // → h10to40
         // Only a *hastily* estimate: banded by it.
         let onlyHastily = try await store.addGame(GameDraft(title: "OnlyHastily", igdbID: 2,
                                                             platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: onlyHastily.gameID,
-                                       MetadataPatch(ttbHastilyS: 5 * h))        // → short
+                                       MetadataPatch(ttbHastilyS: 5 * h))        // → h4to10
         // A *normally* estimate wins over the others when present.
         let normally = try await store.addGame(GameDraft(title: "Normally", igdbID: 3,
                                                          platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: normally.gameID,
                                        MetadataPatch(ttbHastilyS: 5 * h, ttbNormallyS: 20 * h,
-                                                     ttbCompletelyS: 90 * h))    // → medium (normally)
+                                                     ttbCompletelyS: 90 * h))    // → h10to40 (normally)
         // No info at all → No Estimate.
         let none1 = try await store.addGame(GameDraft(title: "NoneA", igdbID: 4,
                                                      platformIDs: ["pc"], owned: true))
@@ -121,9 +125,9 @@ import GRDB
         }
 
         // Fallback: hastily/completely-only games are banded, not dropped.
-        #expect(try await ids(LibraryFilter(playtimes: [.short], scope: .all))
+        #expect(try await ids(LibraryFilter(playtimes: [.h4to10], scope: .all))
                 == [onlyHastily.gameID])
-        #expect(try await ids(LibraryFilter(playtimes: [.medium], scope: .all))
+        #expect(try await ids(LibraryFilter(playtimes: [.h10to40], scope: .all))
                 == [onlyCompletely.gameID, normally.gameID])
 
         // "No Estimate" alone: only the two games with no time info at all.
@@ -131,7 +135,7 @@ import GRDB
                 == [none1.gameID, none2.gameID])
 
         // Combined with a band (OR within the kind).
-        #expect(try await ids(LibraryFilter(playtimes: [.short], includeNoTimeEstimate: true, scope: .all))
+        #expect(try await ids(LibraryFilter(playtimes: [.h4to10], includeNoTimeEstimate: true, scope: .all))
                 == [onlyHastily.gameID, none1.gameID, none2.gameID])
 
         // Across kinds (AND): No Estimate AND scope Played → only the played none.
