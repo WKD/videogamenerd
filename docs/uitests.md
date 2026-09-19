@@ -32,12 +32,24 @@ every flow launches with `-VGNSampleData YES` (in-memory DB, no network).
 ## How to run
 
 ```sh
-# Whole suite, with screenshots exported to .build/uitests/<timestamp>/index.html
+# Whole suite, ONE xcodebuild run, screenshots → .build/uitests/<timestamp>/index.html
 scripts/uitests.sh
 
 # One class or one test
 scripts/uitests.sh -only VGNUITests/DuelFlowTests
 scripts/uitests.sh -only VGNUITests/SearchFlowTests/testSearchFocusFilterAndClear
+
+# One xcodebuild run PER CLASS (each class becomes the "first" test → frontmost window)
+scripts/uitests.sh --per-class                 # all 12 classes
+scripts/uitests.sh --per-class DuelFlowTests SettingsTests   # a subset (bare class names)
+
+# One xcodebuild run PER TEST METHOD (fallback if per-class still foregrounds only one)
+scripts/uitests.sh --per-test
+
+# Dry run — print exactly what WOULD run, execute NOTHING (safe any time)
+scripts/uitests.sh --list                # the whole-suite plan
+scripts/uitests.sh --list --per-class    # the per-class invocations
+scripts/uitests.sh --list --per-test     # the per-method invocations
 ```
 
 Or directly:
@@ -51,6 +63,29 @@ xcodebuild -project VGN.xcodeproj -scheme VGN-UITests -destination 'platform=mac
 machine), then runs, then exports every attached window screenshot to
 `.build/uitests/<timestamp>/attachments/` and writes an `index.html` gallery —
 **look at the screenshots** after a run. `.build/` is git-ignored.
+
+### `--per-class` / `--per-test` (the frontmost-window workaround)
+
+On this macOS only the **first** test of an `xcodebuild` invocation gets a
+frontmost, queryable window (see "The remaining blocker" below), so every flow
+after the first in a single run is blocked. `--per-class` runs one
+`build-for-testing` up front, then **one `test-without-building` invocation per
+test class** so each class is the "first" test of its own run — each with its own
+`.xcresult` and screenshot gallery under `.build/uitests/<timestamp>/<Class>/`, a
+short pause between runs, a `PASS`/`FAIL` line each, a final summary table, and a
+non-zero exit if any class failed. `--per-test` is the same, one invocation per
+`testXxx` method — the fallback if per-class still only foregrounds one window per
+invocation. Classes/methods are discovered by scanning `VGNUITests/*.swift`
+(`final class … : VGNUITestCase`); positional bare class names restrict the run;
+`--list` prints the plan and runs nothing. `-only` applies to the whole-suite
+mode only.
+
+**Timing / takeover:** `--per-class` is ~12 invocations, `--per-test` ~23; each
+launches, runs and quits a sample-data app (plus a ~3 s settle between them), so
+budget roughly **10–20 min** of continuous keyboard/mouse takeover for a full
+per-class run and longer for per-test. Same one-time Accessibility/Automation
+grant as any run (see Prerequisites). Run only when the owner is away from the
+Mac.
 
 Screenshots are always `app.windows.firstMatch.screenshot()` (the VGN window only),
 **never** `app.screenshot()` or `XCUIScreen.main.screenshot()` — on macOS both of
@@ -232,9 +267,13 @@ in both `VGNApp.init` and `RootView.onAppear`. None foregrounded a later test's 
 pass to skip), so it was reverted. `-VGNDisableAnimations` is not enough either.
 
 **What to try next** (each costs one hijacking run — batch them): (1) run each test
-**class in its own `xcodebuild` invocation** so every class is "first" (a `--per-class`
-loop in `scripts/uitests.sh`) — promising, since the first test always foregrounds, but
-unverified for multi-method classes; (2) investigate why the **Duel destination's**
+**class in its own `xcodebuild` invocation** so every class is "first" — now wired as
+`scripts/uitests.sh --per-class` (with `--per-test` as the finer-grained fallback and
+`--list` to preview). Prepared and syntax/`--list`/`build-for-testing`-verified, **not
+yet executed** (needs the owner away from the Mac, ~10–20 min of input takeover);
+promising since the first test always foregrounds, but unverified for multi-method
+classes — if per-class still foregrounds only one window per invocation, use
+`--per-test`; (2) investigate why the **Duel destination's**
 window is frontmost-queryable while the library window (a `NavigationSplitView` whose
 sidebar `List` holds keyboard focus) is not — possibly making the detail pane take key
 focus on appear; (3) an Xcode/OS-level focus workaround for macOS 26 UI tests. Until

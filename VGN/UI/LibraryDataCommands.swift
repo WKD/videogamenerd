@@ -7,42 +7,78 @@ import UniformTypeIdentifiers
 
 /// A restore chosen by the user is applied at the NEXT launch, before the database is
 /// opened (the restore swaps the file, which must not happen under an open pool).
-enum PendingRestore {
+///
+/// The bookkeeping (`UserDefaults`) and the on-disk locations (the live `vgn.sqlite`
+/// and its `backups/` folder) are injected so the glue can be unit-tested without
+/// touching the owner's real preferences or Application Support directory. Production
+/// call sites use ``PendingRestore/live``.
+struct PendingRestore {
     private static let pathKey = "VGNPendingRestorePath"
     private static let resultKey = "VGNLastRestoreResult"
 
-    static func schedule(_ url: URL) { UserDefaults.standard.set(url.path, forKey: pathKey) }
+    /// Where the "restore is pending" / "last restore result" flags live.
+    var defaults: UserDefaults
+    /// The Application Support folder holding `vgn.sqlite` and `backups/`.
+    var supportDirectory: () throws -> URL
+    /// Opens the live database for the pre-restore safety snapshot. A seam so this
+    /// UI-layer type needn't import GRDB and tests can point it at a temp file; it
+    /// must open the database at ``supportDirectory``/`vgn.sqlite`.
+    var openLiveDatabase: () throws -> AppDatabase
+
+    /// Production configuration: the owner's real preferences + real app-support dirs.
+    static var live: PendingRestore {
+        PendingRestore(
+            defaults: .standard,
+            supportDirectory: { try AppPaths.supportDirectory() },
+            openLiveDatabase: { try AppDatabase.live() }
+        )
+    }
+
+    private func databaseURL() throws -> URL {
+        try supportDirectory().appendingPathComponent("vgn.sqlite")
+    }
+
+    private func backupsDirectory() throws -> URL {
+        let dir = try supportDirectory().appendingPathComponent("backups", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    func schedule(_ url: URL) { defaults.set(url.path, forKey: Self.pathKey) }
 
     /// Called first thing in live launches. Takes a safety snapshot of the current
     /// library, then restores. Never throws: a failure leaves the live database untouched
-    /// (restore validates + stages before swapping) and is reported after launch.
-    static func applyIfScheduled() {
-        let defaults = UserDefaults.standard
-        guard let path = defaults.string(forKey: pathKey) else { return }
-        defaults.removeObject(forKey: pathKey)
+    /// (restore validates + stages before swapping) and is reported after launch. The
+    /// pending flag is cleared up front, so a failing restore is attempted only once
+    /// (no restore loop on every launch).
+    func applyIfScheduled() {
+        guard let path = defaults.string(forKey: Self.pathKey) else { return }
+        defaults.removeObject(forKey: Self.pathKey)
         let source = URL(fileURLWithPath: path)
         do {
             try AppDatabase.validateBackup(at: source)
+            let destination = try databaseURL()
+            let backups = try backupsDirectory()
             // Safety net: snapshot what is about to be replaced, then close the pool.
             do {
-                let current = try AppDatabase.live()
-                _ = try current.makeLaunchSnapshot()
+                let current = try openLiveDatabase()
+                _ = try current.backup(intoDirectory: backups)
+                try AppDatabase.rotateBackups(inDirectory: backups, keeping: 10)
                 try current.dbWriter.close()
             }
-            try AppDatabase.restoreLive(from: source)
-            defaults.set("Restored the library from \(source.lastPathComponent).", forKey: resultKey)
+            try AppDatabase.restore(from: source, to: destination)
+            defaults.set("Restored the library from \(source.lastPathComponent).", forKey: Self.resultKey)
         } catch {
             NSLog("VGN: restore from \(path) failed: \(error)")
             defaults.set("Restore failed — your library was left unchanged. (\(error.localizedDescription))",
-                         forKey: resultKey)
+                         forKey: Self.resultKey)
         }
     }
 
     /// One-shot message describing the outcome of the last restore, for a banner.
-    static func consumeResult() -> (message: String, failed: Bool)? {
-        let defaults = UserDefaults.standard
-        guard let message = defaults.string(forKey: resultKey) else { return nil }
-        defaults.removeObject(forKey: resultKey)
+    func consumeResult() -> (message: String, failed: Bool)? {
+        guard let message = defaults.string(forKey: Self.resultKey) else { return nil }
+        defaults.removeObject(forKey: Self.resultKey)
         return (message, message.hasPrefix("Restore failed"))
     }
 }
@@ -109,7 +145,7 @@ struct LibraryDataCommands: Commands {
         alert.addButton(withTitle: "Restore and Quit")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        PendingRestore.schedule(url)
+        PendingRestore.live.schedule(url)
         NSApp.terminate(nil)
     }
 }

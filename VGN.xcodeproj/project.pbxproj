@@ -302,6 +302,7 @@
 				ENABLE_PREVIEWS = YES;
 				EXECUTABLE_NAME = VGN;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/VGN-Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Video Game Nerd";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -331,6 +332,7 @@
 				ENABLE_PREVIEWS = YES;
 				EXECUTABLE_NAME = VGN;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/VGN-Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Video Game Nerd";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
