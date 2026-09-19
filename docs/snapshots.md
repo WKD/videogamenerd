@@ -124,7 +124,7 @@ current capture is downscaled to match before comparing), which keeps the set at
 | `RankingSnapshotTests` | Duel (placement / refine / border / empty), disputes sheet, Triage (active / done), Tier Board (small / empty / 300 tiles), The Top (unfiltered / filtered / short), tier legend, unavailable |
 | `PlayNextSnapshotTests` | Hero + alternatives (wide + compact), small-library banner, empty (nothing fits / no rankings), unavailable, Ask Claude (asking / agreed / disagreed / failed) |
 | `ScanSnapshotTests` | Input, progress rows, review sheet (all three buckets + greyed duplicates), review compact |
-| `MiscSnapshotTests` | Settings (Accounts + Photo Scan tabs), compilation editor, ownership / copy-removal / group-compilation sheets, stats popover, database-error screen, shared components (chips, placeholder covers, ranking covers) |
+| `MiscSnapshotTests` | Settings (Accounts + Photo Scan tabs), compilation editor, ownership / batch-mark-owned / copy-removal / group-compilation sheets, stats popover, database-error screen, shared components (chips, placeholder covers, ranking covers) |
 
 Layout-sensitive screens (main window, Tier Board 300, Play Next, scan review) are
 captured at two sizes (≈ 1200×780 and ≈ 900×600); the rest at one representative

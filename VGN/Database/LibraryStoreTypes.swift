@@ -82,6 +82,21 @@ struct ProductDraft: Sendable, Equatable {
     }
 }
 
+/// One owned copy to add in a batch (see ``LibraryStore/addCopies(_:)``): the
+/// game, the platform its single Product lands on, and the format. Used by the
+/// ask-once "Mark Owned" flow (PLAN §8) so a multi-game mark is one transaction.
+struct BatchCopySpec: Sendable, Equatable {
+    var gameID: Int64
+    var platformID: String
+    var format: ProductFormat
+
+    init(gameID: Int64, platformID: String, format: ProductFormat = .physical) {
+        self.gameID = gameID
+        self.platformID = platformID
+        self.format = format
+    }
+}
+
 /// One member game of a compilation, with its position in the product.
 struct CompilationMemberDraft: Sendable, Equatable {
     var title: String

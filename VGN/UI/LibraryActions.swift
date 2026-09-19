@@ -213,30 +213,61 @@ final class LibraryActions {
         else { await removeOwnership(ids: ids) }
     }
 
-    /// Mark game(s) owned. A single game with several platforms opens a picker;
-    /// otherwise a physical copy is added on each game's primary platform.
+    /// The sticky format for the ask-once batch sheet (persisted; injectable for tests).
+    var batchOwnershipPreferences: any BatchOwnershipPreferenceStoring
+        = UserDefaultsBatchOwnershipPreferences()
+
+    /// Mark game(s) owned. A single game keeps today's behaviour (multi-platform →
+    /// picker; single-platform → immediate). Marking **several** games opens the
+    /// ask-once batch sheet (PLAN §8) instead of silently adding a physical copy
+    /// on each primary platform.
     private func addOwnership(ids: Set<Int64>) async {
         guard let vm else { return }
-        // Single game with a choice of platform → ask.
+        // Single game.
         if ids.count == 1, let id = ids.first,
-           let summary = vm.games.first(where: { $0.id == id }),
-           summary.platformIDs.count > 1 {
-            await requestOwnershipCopy(gameID: id, title: summary.title, platforms: summary.platformIDs)
+           let summary = vm.games.first(where: { $0.id == id }) {
+            if summary.owned { vm.showBanner("Already owned.", kind: .info); return }
+            if summary.platformIDs.count > 1 {
+                await requestOwnershipCopy(gameID: id, title: summary.title, platforms: summary.platformIDs)
+            } else if let platform = summary.platformIDs.first {
+                do { _ = try await store.addCopy(gameID: id, platformID: platform); notifyLibraryChanged() }
+                catch { vm.showBanner("Couldn't add a copy.", kind: .error) }
+            } else {
+                vm.showBanner("No platform to add a copy on.", kind: .warning)
+            }
             return
         }
-        // Bulk / single-platform: add a physical copy on the primary platform.
-        var added = 0
-        var skipped = 0
-        for id in ids {
-            guard let summary = vm.games.first(where: { $0.id == id }) else { continue }
-            if summary.owned { skipped += 1; continue }
-            guard let platform = summary.platformIDs.first else { skipped += 1; continue }
-            do { _ = try await store.addCopy(gameID: id, platformID: platform); added += 1 }
-            catch { vm.showBanner("Couldn't add a copy.", kind: .error); return }
+
+        // Several games → ask once for the whole batch.
+        let games = ids.compactMap { id in vm.games.first { $0.id == id } }
+        guard BatchOwnershipModel.hasPendingGames(games) else {
+            // Nothing to add (all already owned / none has a platform).
+            let owned = games.filter(\.owned).count
+            vm.showBanner(owned > 0 ? "^[\(owned) game](inflect: true) already owned — unchanged."
+                                    : "Nothing to mark owned.", kind: .info)
+            return
         }
-        if added > 0 { notifyLibraryChanged() }
-        if added == 0 && skipped > 0 {
-            vm.showBanner("Already owned.", kind: .info)
+        let allPlatforms = (try? await store.allPlatforms()) ?? PlatformLabels.all
+        vm.batchOwnershipRequest = BatchOwnershipModel(
+            games: games,
+            allPlatforms: allPlatforms.isEmpty ? PlatformLabels.all : allPlatforms,
+            preferences: batchOwnershipPreferences,
+            onConfirm: { [weak self] specs in
+                Task { await self?.performBatchOwn(specs) }
+            }
+        )
+    }
+
+    /// Write a confirmed "Mark Owned" batch in one transaction. No undo — matches
+    /// today's single Mark Owned (which registers none).
+    private func performBatchOwn(_ specs: [BatchCopySpec]) async {
+        guard !specs.isEmpty else { return }
+        do {
+            _ = try await store.addCopies(specs)
+            notifyLibraryChanged()
+            vm?.showBanner("Marked ^[\(specs.count) game](inflect: true) owned.", kind: .info)
+        } catch {
+            vm?.showBanner("Couldn't add the copies.", kind: .error)
         }
     }
 
@@ -271,7 +302,17 @@ final class LibraryActions {
     }
 
     /// Un-own a game: choose which copies to remove; compilation copies warn.
+    ///
+    /// Bulk un-own is intentionally **not** supported (owner: out of scope this
+    /// wave): removing many games' copies safely means per-game copy pickers and
+    /// orphan confirmations, which can't be fully tested headless. A multi-selection
+    /// ⇧O-off shows a banner instead of half-removing copies.
     private func removeOwnership(ids: Set<Int64>) async {
+        guard let vm else { return }
+        if ids.count > 1 {
+            vm.showBanner("Un-own one game at a time — select a single game, then ⇧O.", kind: .info)
+            return
+        }
         guard let id = ids.first else { return }
         guard let detail = try? await store.gameDetail(id: id), !detail.copies.isEmpty else { return }
 
@@ -289,7 +330,7 @@ final class LibraryActions {
                 compilationMembers: copy.isCompilation ? compilationMemberTitles(copy) : []
             )
         }
-        vm?.copyRemovalRequest = CopyRemovalRequest(
+        vm.copyRemovalRequest = CopyRemovalRequest(
             title: detail.title,
             copies: choices,
             perform: { [weak self] productIDs in
