@@ -211,8 +211,21 @@ owner's `/Volumes`). See `docs/batocera-import.md` for the first-run walkthrough
   gets read next sync; `mame*`/`cps*` stay skipped). Unmounting the share → *Not mounted*, and a sync
   reports "Batocera share not mounted" quietly.
 - [ ] **Auto-sync + review banner.** With auto-sync on and the share mounted, launching VGN runs the
-  sync in the background (no launch delay) and, when candidates turn up, shows **"N Batocera games
-  ready to review"** with **Review…** — and **never** adds anything to the library on its own.
+  sync in the background (no launch delay). With *"Add my favourites automatically"* **off** it shows
+  **"N Batocera games ready to review"** with **Review…** and adds nothing on its own; with it **on**
+  (default) the confident favourites are added (see below) and only the rest wait for review.
+- [ ] **Auto-add my favourites (§15, wave 13).** With *"Add my favourites automatically"* on and IGDB
+  configured, a sync adds your ★ favourites that get a confident match. First sync over ~247
+  favourites shows **"60 added · 187 still to match"** (the 60-per-run cap) — and adds no more than 60
+  in that pass; relaunch/Sync Now adds the next batch, and **no favourite is matched twice**. The
+  banner's **Undo** removes exactly what that batch added (and un-links the catalogue rows). Ambiguous
+  or unmatched favourites (and anything played > 5 min) still appear only in *Review…*. A favourite
+  whose IGDB match is a game you already own on that platform gets play time only, no second copy.
+  Un-favouriting on the box then re-syncing never removes a game from the library.
+- [ ] **Favourite in the picks + Discover.** An unplayed favourite you own shows **"★ a favourite on
+  your Batocera"** in Play Next's regular picks (and is nudged up among near-ties). A never-played
+  favourite still only in the catalogue is **pinned at the top** of *Discover on your Batocera* with
+  **"★ your favourite"**, but never more than half the row.
 - [ ] **Promotion review.** *Review…* opens *Import from Batocera*: the ~290 candidates match to IGDB
   (a progress sheet with a cancel; a couple of minutes the first time), each row shows the play-time
   line and, where you already own the ROM, "Already in your library — adds play time only".

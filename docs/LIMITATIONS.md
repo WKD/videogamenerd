@@ -296,6 +296,33 @@ sufficed). Watch items / follow-ups:
   share (tests never read `/Volumes`; the loader has a nil root there). Idle CPU with the catalogue
   open is a launch check (no timers, mount checked on demand only).
 
+## 5f. Batocera favourites — auto-add / boost / pin (§15, wave 13 — lane B) — **as built**
+No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` sufficed). Watch items:
+- **One undo step, banner-scoped [watch].** The "N favourites added · Undo" banner registers an
+  undo step and its button both call the same idempotent inverse (`BatoceraPromoter.undoAutoAdd`),
+  which deletes the ROM copies the batch created, deletes the newly-created games (orphan-safe —
+  a pre-existing owned game survives) and clears `promoted_game_id`. **Play-time-only** additions
+  to a *pre-existing* game (a favourite whose match already owned a ROM copy) are **not** reverted
+  by undo — only the link is cleared; reverting an imported play time is out of scope (and, since
+  favourites usually have no play time, rarely relevant).
+- **Auto-add is live + IGDB-configured only [expected].** The background matcher/promoter pass runs
+  only when a real `ImportMatcher` exists (live mode with IGDB credentials) and the setting is on;
+  in sample/seeded/test it never runs (the sync itself is inert there — `/Volumes` untouched). With
+  IGDB unconfigured the old "N ready to review" banner shows and nothing is staged/queried.
+- **"Nothing queried twice" is per staged row [watch].** A favourite is staged in `import_titles`
+  *before* it is matched, so a later auto-add pass skips it (`favouritesNeedingMatch` excludes
+  rows with a staging entry) — even the ones that were **not** confident. Opening *Review…* later
+  still re-matches those `.new` rows (that path always re-runs the coordinator's matching); the
+  "never twice" guarantee is about the unattended background pass, not the explicit review.
+- **Favourite boost is backtest-neutral like PS Plus [by design].** `batoceraFavouriteBonus`
+  (default 0.05, below the taste/crowd terms) is applied in `RecommendationEngine.score` only,
+  gated on `status == .backlog` — the backtest's `predict` never sees it. Reason
+  `.batoceraFavourite` ("★ a favourite on your Batocera"); Discover's pin uses a separate reason
+  `.batoceraFavouritePinned` ("★ your favourite").
+- **First-run batch cap is a constant [owner].** One pass caps at
+  `BatoceraFavouriteAutoAdd.batchCap = 60`; the owner's ~247 favourites take ~4 syncs to fully
+  match. Tunable in one place if that feels slow.
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.
