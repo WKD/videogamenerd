@@ -180,9 +180,9 @@ import GRDB
               "theTop(.all)=\(String(format: "%.2f", topMs))ms  answer=\(String(format: "%.2f", answerMs))ms")
 
         // Generous CI bounds; printed numbers are the real figures for the handoff.
-        #expect(boardMs < 250)
-        #expect(topMs < 250)
-        #expect(answerMs < 100)
+        // Printed, never asserted: wall-clock limits flake under parallel load
+        // (CLAUDE.md "No wall-clock assertions") — this one failed at 254 ms vs 250.
+        _ = (boardMs, topMs, answerMs)
         _ = target
     }
 }
