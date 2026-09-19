@@ -176,6 +176,8 @@ extension LibraryStore {
             ttbSource: g["ttb_source"],
             hltbID: g["hltb_id"],
             origin: GameOrigin(storage: g["origin"]),
+            firstPlayedAt: g["first_played_at"],
+            lastPlayedAt: g["last_played_at"],
             addedAt: g["added_at"],
             updatedAt: g["updated_at"],
             copies: copies

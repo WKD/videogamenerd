@@ -388,6 +388,10 @@ enum LibraryQuery {
             // By the personal length (how long the game is for the owner), NULLs last.
             let expr = lengthEstimateExpr(style: filter.playStyle)
             terms = ["(\(expr) IS NULL)", "\(expr) \(dir)"]
+        case .lastPlayed:
+            // Most-recently-played first (importer-filled), NULLs (never played by an
+            // importer) always last regardless of direction.
+            terms = ["(g.last_played_at IS NULL)", "g.last_played_at \(dir)"]
         }
         return "ORDER BY " + (terms + ["g.sort_title ASC", "g.id ASC"]).joined(separator: ", ")
     }

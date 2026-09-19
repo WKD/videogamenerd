@@ -102,6 +102,9 @@ struct LibraryExporter: Sendable {
         var hltbID: Int64?
         /// How the game entered the library (v6, debugging). See ``GameOrigin``.
         var origin: String?
+        /// Earliest / latest known play date, importer-filled (v9, PLAN §13.3).
+        var firstPlayedAt: Date?
+        var lastPlayedAt: Date?
         var addedAt: Date
         var updatedAt: Date
         var platforms: [GamePlatform]
@@ -179,7 +182,8 @@ struct LibraryExporter: Sendable {
                    played, status, tier_id, rank_key, my_playtime_s, psn_playtime_s,
                    ttb_hastily_s, ttb_normally_s, ttb_completely_s, ttb_source,
                    igdb_cover_image_id, cover_file, igdb_rating, igdb_rating_count,
-                   user_edited, hltb_id, origin, added_at, updated_at
+                   user_edited, hltb_id, origin, first_played_at, last_played_at,
+                   added_at, updated_at
             FROM games ORDER BY id
             """).map { r -> Game in
             let altRaw: String = r["alt_titles"]
@@ -195,6 +199,7 @@ struct LibraryExporter: Sendable {
                 igdbCoverImageID: r["igdb_cover_image_id"], coverFile: r["cover_file"],
                 igdbRating: r["igdb_rating"], igdbRatingCount: r["igdb_rating_count"],
                 userEdited: r["user_edited"], hltbID: r["hltb_id"], origin: r["origin"],
+                firstPlayedAt: r["first_played_at"], lastPlayedAt: r["last_played_at"],
                 addedAt: r["added_at"], updatedAt: r["updated_at"],
                 platforms: platformsByGame[id] ?? [], genres: genresByGame[id] ?? [],
                 traits: traitsByGame[id] ?? [])
@@ -229,8 +234,16 @@ struct LibraryExporter: Sendable {
     static let csvHeader = [
         "title", "year", "platforms", "owned", "played", "status", "tier",
         "overall_rank", "score", "my_playtime_hours", "igdb_main_hours",
-        "igdb_rating", "formats", "compilation", "origin",
+        "igdb_rating", "formats", "compilation", "origin", "last_played",
     ]
+
+    /// ISO-8601 (date only) formatter for the CSV `last_played` column. Read-only after
+    /// configuration; `ISO8601DateFormatter` is thread-safe for formatting.
+    nonisolated(unsafe) static let csvDateFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withFullDate]
+        return f
+    }()
 
     static func buildCSV(_ db: Database) throws -> String {
         // Ranking snapshot for derived score + overall rank.
@@ -269,7 +282,8 @@ struct LibraryExporter: Sendable {
         var lines: [String] = [csvHeader.map(escapeCSV).joined(separator: ",")]
         let rows = try Row.fetchAll(db, sql: """
             SELECT id, title, year, played, status, tier_id,
-                   my_playtime_s, psn_playtime_s, ttb_normally_s, igdb_rating, origin
+                   my_playtime_s, psn_playtime_s, ttb_normally_s, igdb_rating, origin,
+                   last_played_at
             FROM games ORDER BY sort_title, id
             """)
         for r in rows {
@@ -297,6 +311,7 @@ struct LibraryExporter: Sendable {
                 formats,
                 compilationByGame[id] ?? "",
                 (r["origin"] as String?) ?? "",
+                (r["last_played_at"] as Date?).map { csvDateFormatter.string(from: $0) } ?? "",
             ]
             lines.append(field.map(escapeCSV).joined(separator: ","))
         }

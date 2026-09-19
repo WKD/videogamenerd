@@ -234,9 +234,20 @@ private struct SingleGameInspector: View {
                 StatusPickerRow(current: detail.status) { status in
                     Task { await vm.actions?.setStatus(ids: ids, status: status) }
                 }
+                if let last = detail.lastPlayedAt {
+                    Text("Last played \(Self.playedDateFormatter.string(from: last))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
     }
+
+    /// "12 Mar 2021" for the importer-filled last-played date (PLAN §13.3).
+    private static let playedDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("d MMM yyyy")
+        return f
+    }()
 
     // MARK: Tier + rank
 

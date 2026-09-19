@@ -171,8 +171,8 @@ enum LibraryFilterEvaluator {
                 let r = (rhs.tierID ?? Int64.max, rhs.rankKey ?? Int64.max, rhs.id)
                 return l < r
             }
-        case .dateAdded, .playtime, .length:
-            // No date/playtime/estimate on GameSummary — keep a stable id order.
+        case .dateAdded, .playtime, .length, .lastPlayed:
+            // No date/playtime/estimate/last-played on GameSummary — keep a stable id order.
             ordered = games.sorted { $0.id < $1.id }
         }
         return ascending ? ordered : ordered.reversed()

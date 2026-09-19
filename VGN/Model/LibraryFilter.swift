@@ -8,6 +8,7 @@ enum LibrarySort: String, Hashable, Sendable, Codable, CaseIterable, Identifiabl
     case tierRank    // tier.sort, then rank_key
     case playtime    // effective playtime (my/PSN), most-played first
     case length      // time-to-beat *estimate* (how long the game is), NULLs last
+    case lastPlayed  // most-recently-played first, NULLs last (PSN import, §13.3)
 
     var id: String { rawValue }
 
@@ -19,6 +20,7 @@ enum LibrarySort: String, Hashable, Sendable, Codable, CaseIterable, Identifiabl
         case .tierRank: return "Tier & Rank"
         case .playtime: return "Playtime"
         case .length: return "Length"
+        case .lastPlayed: return "Last Played"
         }
     }
 
@@ -31,6 +33,7 @@ enum LibrarySort: String, Hashable, Sendable, Codable, CaseIterable, Identifiabl
         case .tierRank: return true     // best first
         case .playtime: return false    // most-played first
         case .length: return true       // shortest first (the "By Length" default)
+        case .lastPlayed: return false  // most-recently-played first
         }
     }
 }

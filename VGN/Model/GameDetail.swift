@@ -51,6 +51,11 @@ struct GameDetail: Sendable, Hashable, Identifiable {
     /// surfaced minimally (inspector footer + export).
     var origin: GameOrigin? = nil
 
+    /// Earliest / latest known play date, filled only by importers (PSN, PLAN §13.3).
+    /// The inspector shows "Last played 12 Mar 2021" in the played section when present.
+    var firstPlayedAt: Date? = nil
+    var lastPlayedAt: Date? = nil
+
     var addedAt: Date
     var updatedAt: Date
 
