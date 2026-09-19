@@ -166,21 +166,25 @@ actor PSNClient {
     /// unlock (PLAN §13.5).
     func hasProbe(for dataSet: DataSet) async throws -> Bool {
         try await cache.manifest(source: ImportSourceID.psn,
-                                 key: markerKey(dataSet)) != nil
+                                 key: try await markerKey(dataSet)) != nil
     }
 
     private func recordProbe(_ dataSet: DataSet) async throws {
         try await cache.storeManifest(
-            source: ImportSourceID.psn, key: markerKey(dataSet),
+            source: ImportSourceID.psn, key: try await markerKey(dataSet),
             ImportPageManifest(totalItems: 1, totalPages: 1),
             fetchedAt: wallClock(), expiresAt: wallClock().addingTimeInterval(cacheTTL))
     }
 
-    private func markerKey(_ dataSet: DataSet) -> String { "\(dataSet.probeMarkerKey):\(accountLabel)" }
+    /// Probe markers are scoped to the login session as well as the label: signing in as
+    /// another account (or again) means every data set must be probed afresh.
+    private func markerKey(_ dataSet: DataSet) async throws -> String {
+        "\(try await auth.cacheScope())|\(dataSet.probeMarkerKey):\(accountLabel)"
+    }
 
     private func requireProbe(_ dataSet: DataSet) async throws {
         guard try await hasProbe(for: dataSet) else {
-            throw ClientError.probeRequired(markerKey(dataSet))
+            throw ClientError.probeRequired(dataSet.probeMarkerKey)
         }
     }
 
@@ -285,6 +289,10 @@ actor PSNClient {
                                 spec: PSNRequestSpec,
                                 context baseContext: ImportValidationContext) async throws -> Data {
         try allowList.check(spec.url)
+
+        // Every cache key belongs to ONE login session (see `PSNStoredToken.cacheScope`):
+        // a response fetched for one account must never be served to another.
+        let key = "\(try await auth.cacheScope())|\(key)"
 
         // Cache first: inside the 30-day window a sync makes zero requests (PLAN §13.2).
         if let fresh = try await cache.freshEntry(source: ImportSourceID.psn, key: key, now: wallClock()) {

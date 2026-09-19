@@ -21,12 +21,16 @@ func fakePSNConfig() -> PSNAuthConfiguration {
 /// A `PSNAuth` whose token store already holds a valid token, so no auth request is made
 /// during a sync. `now` is the fixed wall instant; the token expires an hour later, the
 /// refresh token two months later.
-func seededPSNAuth(transport: HTTPTransport, now: Date = importFixedNow) -> PSNAuth {
+/// `scope` is the login session's cache scope: the same value = the same signed-in
+/// session across app launches (the default); a different value = another sign-in.
+func seededPSNAuth(transport: HTTPTransport, now: Date = importFixedNow,
+                   scope: String = "test-session") -> PSNAuth {
     let store = InMemoryPSNTokenStore(seed: PSNStoredToken(
         accessToken: "SYNTHETIC.ACCESS.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         refreshToken: "SYNTHETIC-REFRESH-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         expiresAt: now.addingTimeInterval(3600),
-        refreshExpiresAt: now.addingTimeInterval(60 * 24 * 3600)))
+        refreshExpiresAt: now.addingTimeInterval(60 * 24 * 3600),
+        cacheScope: scope))
     return PSNAuth(transport: transport, configuration: fakePSNConfig(),
                    tokenStore: store, now: { now })
 }

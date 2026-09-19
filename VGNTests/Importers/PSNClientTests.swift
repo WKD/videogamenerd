@@ -50,7 +50,7 @@ import Testing
             _ = try await client.trophyTitlesPage(service: "trophy2", limit: 800, offset: 0)
             Issue.record("expected probeRequired")
         } catch let error as PSNClient.ClientError {
-            #expect(error == .probeRequired("probe:trophyTitles:trophy2:real"))
+            #expect(error == .probeRequired("probe:trophyTitles:trophy2"))
         }
         // After a probe, the full page proceeds.
         _ = try await client.probe(.trophyTitles(service: "trophy2"))

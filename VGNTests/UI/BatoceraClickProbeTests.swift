@@ -41,11 +41,15 @@ struct BatoceraClickProbeTests {
         // dismisses it (it happened, 2026-09-19). Never sweep over a Menu / menu-style Picker.
         let xs = Array(stride(from: width * 0.55, through: width - 6, by: 11))
         let ordered = rightToLeft ? xs.reversed() : Array(xs)
-        for y in stride(from: top, through: top - height, by: -9) {
-            for x in ordered {
-                w.click(at: NSPoint(x: x, y: y))
-                try? await Task.sleep(for: .milliseconds(25))
-                if until() { return }
+        // Up to three passes, each more patient: under a loaded parallel run SwiftUI can
+        // need longer to process a click (one pass at 25 ms missed the button once).
+        for wait in [25, 60, 120] {
+            for y in stride(from: top, through: top - height, by: -9) {
+                for x in ordered {
+                    w.click(at: NSPoint(x: x, y: y))
+                    try? await Task.sleep(for: .milliseconds(wait))
+                    if until() { return }
+                }
             }
         }
     }

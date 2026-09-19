@@ -105,6 +105,21 @@ actor PSNAuth {
         return try await refresh(refreshToken).accessToken
     }
 
+    /// The current login session's cache scope (see ``PSNStoredToken/cacheScope``). Stable
+    /// across token refreshes, new at every interactive sign-in. Throws
+    /// ``ImportError/notAuthenticated`` when there is no session.
+    func cacheScope() throws -> String {
+        guard let stored = cached ?? (try? tokenStore.loadToken()) else {
+            throw ImportError.notAuthenticated
+        }
+        if cached == nil {
+            // First read of a token that may have been stored without a scope: persist the
+            // one decoding minted, so it stays stable for the rest of the session.
+            try persist(stored)
+        }
+        return stored.cacheScope
+    }
+
     /// Sign out: forget and delete the tokens (PLAN §13.1 rule 5).
     func signOut() throws {
         cached = nil
@@ -174,7 +189,11 @@ actor PSNAuth {
     private func refresh(_ refreshToken: String) async throws -> PSNStoredToken {
         if let refreshTask { return try await refreshTask.value }
         let task = Task<PSNStoredToken, Error> { [self] in
-            let token = try await exchange(grant: .refreshToken(refreshToken))
+            var token = try await exchange(grant: .refreshToken(refreshToken))
+            // A refresh continues the same login session: keep its cache scope.
+            if let scope = (cached ?? (try? tokenStore.loadToken()))?.cacheScope {
+                token.cacheScope = scope
+            }
             try persist(token)
             return token
         }
