@@ -114,8 +114,8 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 - [ ] With the app idle after a sync, VGN still sits at ~0 % CPU (sample-mode idle already verified headless).
 
 ## HowLongToBeat fallback (wave 9, PLAN §5.3) — live only
-The whole feature is tested on synthetic fixtures; these need the **real site** (live mode).
-- [ ] First, sanity-check the port against the live endpoint: `swift scripts/record-hltb-fixtures.swift` (≤ 12 requests, ≥ 2 s apart). It should discover the endpoint and save `VGNTests/Fixtures/hltb-*.json` for Bloodborne / Celeste / Final Fantasy VII and a miss. **If it STOPS** (HTML/captcha/403/non-JSON/shape) the private endpoint has rotated — update `HLTBEndpoint.swift` per `docs/hltb.md`, then re-run.
+The request shape was **verified live 2026-09-19** (wave 10, lane B) and the fixtures are recorded from real searches; the checks below still need the **real site** through the app (live mode) because the unit suite runs offline.
+- [x] Port verified against the live endpoint 2026-09-19: `scripts/record-hltb-fixtures.swift` discovered `api/search/site`, fetched a per-session token, and recorded Bloodborne / Celeste / Final Fantasy VII / Wind Waker + a miss (9 requests). To re-verify after a future rotation, re-run it (≤ 25 requests, ≥ 2 s apart); **if it STOPS** (HTML/captcha/403/non-JSON/shape) the endpoint or token scheme has rotated — fix `HLTBEndpoint.swift` per `docs/hltb.md`, then re-run.
 - [ ] Inspector ▸ a game with a missing time shows **Fetch from HowLongToBeat**. A clear match fills the three rows and shows a banner; **⌘Z undoes** it. The source line reads **HowLongToBeat**; "Open on HowLongToBeat" now goes to the **exact game page**.
 - [ ] A title with two same-name games (different years) opens the **picker sheet** (name, year, platforms, the three times, "Open page"); picking one fills it.
 - [ ] Game ▸ **Fetch Missing Time Estimates…** with nothing selected runs over every game with no estimate: progress "n of m" + current title + **Cancel**, then the summary "n filled · m not found · k ambiguous"; ambiguous games list for a one-by-one pick. With a selection, it scopes to that.

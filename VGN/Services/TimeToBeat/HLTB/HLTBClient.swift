@@ -8,8 +8,8 @@ import Foundation
 ///
 /// Results are read cache-first through ``ImportResponseCacheStore`` with
 /// `source = "hltb"`: a found match is cached 180 days, a "no result" 30 days, and a
-/// cached answer (hit or miss) costs **zero** requests. The endpoint discovery is done
-/// once per run and reused.
+/// cached answer (hit or miss) costs **zero** requests. The endpoint discovery and the
+/// per-session `/init` auth token are resolved once per run and reused.
 ///
 /// One instance is a single run: it owns that run's budget and cache/network tallies.
 /// The transport, clock and wall clock are injected, so tests run entirely offline.
@@ -26,10 +26,13 @@ actor HLTBClient: HLTBSearching {
     private let missTTL: TimeInterval
     /// A pre-resolved endpoint (tests inject a fixed one; live discovery finds it).
     private let injectedDiscovery: HLTBEndpoint.Discovery?
+    /// Pre-resolved per-session auth (tests inject it to skip the `/init` round-trip).
+    private let injectedAuth: HLTBEndpoint.Auth?
     private let maxDiscoveryScripts: Int
 
     private var budget: ImportRequestBudget
     private var discovery: HLTBEndpoint.Discovery?
+    private var auth: HLTBEndpoint.Auth?
 
     private(set) var fromCache = 0
     private(set) var fromNetwork = 0
@@ -47,7 +50,8 @@ actor HLTBClient: HLTBSearching {
          hitTTL: TimeInterval = ImportPolicy.hltbHitTTL,
          missTTL: TimeInterval = ImportPolicy.hltbMissTTL,
          discovery: HLTBEndpoint.Discovery? = nil,
-         maxDiscoveryScripts: Int = 4,
+         auth: HLTBEndpoint.Auth? = nil,
+         maxDiscoveryScripts: Int = 12,
          pacer: ImportRequestPacer? = nil) {
         self.transport = transport
         self.cache = cache
@@ -59,6 +63,7 @@ actor HLTBClient: HLTBSearching {
         self.hitTTL = hitTTL
         self.missTTL = missTTL
         self.injectedDiscovery = discovery
+        self.injectedAuth = auth
         self.maxDiscoveryScripts = maxDiscoveryScripts
         self.budget = ImportRequestBudget(limit: pacing.budget)
         self.pacer = pacer ?? ImportRequestPacer(pacing: pacing, clock: clock)
@@ -77,8 +82,8 @@ actor HLTBClient: HLTBSearching {
             return (try? HLTBEndpoint.parseCandidates(fresh.body)) ?? []
         }
 
-        let discovery = try await ensureDiscovery()
-        let request = HLTBEndpoint.searchRequest(title: title, discovery: discovery)
+        let (discovery, auth) = try await ensureSession()
+        let request = HLTBEndpoint.searchRequest(title: title, discovery: discovery, auth: auth)
         try allowList.check(request.url!)
         try budget.consume()
         try await pacer.waitBeforeNextRequest()
@@ -111,8 +116,29 @@ actor HLTBClient: HLTBSearching {
 
     static let searchEndpoint = "hltb/search"
     static let discoveryEndpoint = "hltb/discovery"
+    static let authEndpoint = "hltb/auth"
 
-    // MARK: - Endpoint discovery (once per run)
+    // MARK: - Session (endpoint discovery + per-session auth token, once per run)
+
+    /// Resolve — once per run — the search endpoint and the `/init` auth token, and
+    /// cache both in memory. Done lazily on the first search that misses the cache, so a
+    /// fully-cached run makes zero requests. The auth token embeds the caller IP + UA
+    /// and expires; a lapse later surfaces as a 403 reject on the search (we stop, the
+    /// owner re-runs) — no in-run refresh (PLAN §5.3: no retries, no variants).
+    private func ensureSession() async throws -> (HLTBEndpoint.Discovery, HLTBEndpoint.Auth) {
+        let discovery = try await ensureDiscovery()
+        if let a = auth { return (discovery, a) }
+        if let injected = injectedAuth { auth = injected; return (discovery, injected) }
+
+        let data = try await getData(request: HLTBEndpoint.authInitRequest(discovery: discovery),
+                                     endpoint: Self.authEndpoint)
+        guard let resolved = HLTBEndpoint.parseAuth(data) else {
+            try await recordAndThrow(reason: .schemaMismatch, endpoint: Self.authEndpoint,
+                                     status: 200, body: data)
+        }
+        auth = resolved
+        return (discovery, resolved)
+    }
 
     private func ensureDiscovery() async throws -> HLTBEndpoint.Discovery {
         if let d = discovery { return d }
@@ -135,18 +161,22 @@ actor HLTBClient: HLTBSearching {
         return fb
     }
 
-    /// GET a discovery document (homepage or app chunk). Any non-200 or empty body is
-    /// a discovery failure → a `schemaMismatch` reject ("discovery failed"), stop.
-    private func getText(request: URLRequest) async throws -> String {
+    /// GET a discovery / auth document (homepage, app chunk, or `/init`). Any non-200 or
+    /// empty body is a failure → a `schemaMismatch` reject (a clean stop).
+    private func getData(request: URLRequest, endpoint: String) async throws -> Data {
         try allowList.check(request.url!)
         try budget.consume()
         try await pacer.waitBeforeNextRequest()
         let (data, response) = try await transport.data(for: request)
         guard response.statusCode == 200, !data.isEmpty else {
-            try await recordAndThrow(reason: .schemaMismatch, endpoint: Self.discoveryEndpoint,
+            try await recordAndThrow(reason: .schemaMismatch, endpoint: endpoint,
                                      status: response.statusCode, body: data)
         }
-        return String(decoding: data, as: UTF8.self)
+        return data
+    }
+
+    private func getText(request: URLRequest) async throws -> String {
+        String(decoding: try await getData(request: request, endpoint: Self.discoveryEndpoint), as: UTF8.self)
     }
 
     // MARK: - Reject

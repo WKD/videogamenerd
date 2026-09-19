@@ -2,63 +2,117 @@ import Foundation
 import Testing
 @testable import VGN
 
-/// The isolated HLTB request/response mechanics (PLAN §5.3): endpoint discovery
-/// parsing, the search payload, and DTO decoding — all pure, driven by the committed
-/// synthetic fixtures built from the reference client's documented shapes.
+/// The isolated HLTB request/response mechanics (PLAN §5.3): endpoint discovery,
+/// per-session auth parsing, the search payload, and DTO decoding — all pure, driven by
+/// fixtures recorded / shaped from the live site (verified 2026-09-19).
 @Suite struct HLTBEndpointTests {
 
-    @Test func scriptPathsExtractedAndAppChunkFirst() throws {
+    // MARK: - Discovery
+
+    @Test func scriptPathsExtractedInDocumentOrder() throws {
         let html = try String(decoding: Fixtures.data("hltb-discovery-home.html"), as: UTF8.self)
         let paths = HLTBEndpoint.scriptPaths(inHTML: html)
         #expect(paths.count == 2)
-        // The _app chunk (which carries the fetch) is tried first.
-        #expect(paths.first?.contains("_app") == true)
+        #expect(paths.allSatisfy { $0.hasPrefix("/_next/static/chunks/") })
+        // Turbopack names are opaque hashes — no _app/main to prioritise; order kept.
+        #expect(paths.first == "/_next/static/chunks/1ygls5xciw8_y.js")
     }
 
-    @Test func discoveryResolvesConcatenatedToken() throws {
+    @Test func discoveryResolvesPostFetchEndpoint() throws {
         let js = try String(decoding: Fixtures.data("hltb-discovery-app.js"), as: UTF8.self)
         let d = HLTBEndpoint.resolveDiscovery(fromScript: js)
-        #expect(d?.searchPath == "api/seek/abcd12ef")
-        #expect(d?.searchURL.absoluteString == "https://howlongtobeat.com/api/seek/abcd12ef")
+        // The POST fetch marks the real search endpoint; the init GET is ignored.
+        #expect(d?.searchPath == "api/search/site")
+        #expect(d?.searchURL.absoluteString == "https://howlongtobeat.com/api/search/site")
+        #expect(d?.initPath == "api/search/site/init")
     }
 
-    @Test func discoveryHandlesBareLiteralEndpoint() {
+    @Test func discoveryTakesTheWholeSlashedPath() {
+        let js = #"x=fetch("/api/finder/v2",{method:"POST",body:b});"#
+        #expect(HLTBEndpoint.resolveDiscovery(fromScript: js)?.searchPath == "api/finder/v2")
+    }
+
+    @Test func discoveryStripsTrailingSlashOnBareEndpoint() {
         let js = #"var f=function(a){return fetch("/api/s/",{method:"POST",body:a})};"#
-        let d = HLTBEndpoint.resolveDiscovery(fromScript: js)
-        #expect(d?.searchPath == "api/s/")
+        #expect(HLTBEndpoint.resolveDiscovery(fromScript: js)?.searchPath == "api/s")
     }
 
-    @Test func discoveryHandlesPlusConcatenation() {
-        let js = #"fetch("/api/seek/"+"aa"+"bb",{method:"POST"})"#
-        let d = HLTBEndpoint.resolveDiscovery(fromScript: js)
-        #expect(d?.searchPath == "api/seek/aabb")
+    @Test func discoveryIgnoresApiGetsWithoutPost() {
+        // A GET to /api/... (no method:"POST") is not the search endpoint.
+        let js = #"fetch("/api/user/profile",{headers:{a:1}}); fetch(`/api/ping?t=${x}`);"#
+        #expect(HLTBEndpoint.resolveDiscovery(fromScript: js) == nil)
     }
 
     @Test func discoveryFailsGracefullyOnUnrelatedScript() {
-        let d = HLTBEndpoint.resolveDiscovery(fromScript: "console.log('no endpoint here');")
-        #expect(d == nil)
+        #expect(HLTBEndpoint.resolveDiscovery(fromScript: "console.log('no endpoint here');") == nil)
     }
 
+    // MARK: - Auth
+
+    @Test func parseAuthReadsTokenAndKeyValDefensively() throws {
+        let auth = HLTBEndpoint.parseAuth(try Fixtures.data("hltb-init.json"))
+        #expect(auth?.token == "VEVTVF9UT0tFTl9OT19SRUFMX0lQX09SX1VBX0hFUkVfMDAwMQ==")
+        #expect(auth?.key == "ign_test1234")     // field name contains "key" (hpKey)
+        #expect(auth?.value == "deadbeefcafe0001") // field name contains "val" (hpVal)
+    }
+
+    @Test func parseAuthRejectsNonTokenEnvelope() {
+        #expect(HLTBEndpoint.parseAuth(Data(#"{"nope":true}"#.utf8)) == nil)
+        #expect(HLTBEndpoint.parseAuth(Data(#"<html/>"#.utf8)) == nil)
+        // token present but no key/val pair → not usable.
+        #expect(HLTBEndpoint.parseAuth(Data(#"{"token":"t"}"#.utf8)) == nil)
+    }
+
+    // MARK: - Payload
+
     @Test func searchPayloadCarriesTermsAndType() {
-        let data = HLTBEndpoint.searchPayload(title: "Hollow Knight", discovery: .fallback)
+        let data = HLTBEndpoint.searchPayload(title: "Hollow Knight", auth: nil)
         let json = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
         #expect(json["searchType"] as? String == "games")
         #expect(json["searchTerms"] as? [String] == ["Hollow", "Knight"])
         #expect(json["size"] as? Int == HLTBEndpoint.searchPageSize)
     }
 
+    @Test func searchPayloadInjectsAuthField() {
+        let auth = HLTBEndpoint.Auth(token: "t", key: "ign_abc", value: "xyz")
+        let json = try! JSONSerialization.jsonObject(
+            with: HLTBEndpoint.searchPayload(title: "X", auth: auth)) as! [String: Any]
+        #expect(json["ign_abc"] as? String == "xyz")   // body[hpKey] = hpVal
+        // Without auth the dynamic field is absent.
+        let plain = try! JSONSerialization.jsonObject(
+            with: HLTBEndpoint.searchPayload(title: "X", auth: nil)) as! [String: Any]
+        #expect(plain["ign_abc"] == nil)
+    }
+
+    @Test func searchRequestCarriesAuthHeaders() {
+        let auth = HLTBEndpoint.Auth(token: "TKN", key: "ign_abc", value: "xyz")
+        let req = HLTBEndpoint.searchRequest(title: "X", discovery: .fallback, auth: auth)
+        #expect(req.httpMethod == "POST")
+        #expect(req.value(forHTTPHeaderField: "x-auth-token") == "TKN")
+        #expect(req.value(forHTTPHeaderField: "x-hp-key") == "ign_abc")
+        #expect(req.value(forHTTPHeaderField: "x-hp-val") == "xyz")
+    }
+
+    @Test func authInitRequestTargetsInitPath() {
+        let req = HLTBEndpoint.authInitRequest(discovery: .init(searchPath: "api/search/site"))
+        #expect(req.httpMethod == "GET")
+        #expect(req.url?.absoluteString.hasPrefix("https://howlongtobeat.com/api/search/site/init?t=") == true)
+    }
+
+    // MARK: - DTO
+
     @Test func parseCandidatesMapsFieldsAndSeconds() throws {
         let data = try Fixtures.data("hltb-search-bloodborne.json")
         let candidates = try HLTBEndpoint.parseCandidates(data)
-        #expect(candidates.count == 1)
+        #expect(!candidates.isEmpty)
         let c = candidates[0]
-        #expect(c.id == 2600)
+        #expect(c.id == 21262)
         #expect(c.name == "Bloodborne")
         #expect(c.releaseYear == 2015)
-        #expect(c.mainSeconds == 115200)          // comp_main
-        #expect(c.mainExtraSeconds == 154800)     // comp_plus
-        #expect(c.completionistSeconds == 259200) // comp_100
-        #expect(c.platforms == ["PlayStation 4", "PlayStation 5"])
+        #expect(c.mainSeconds == 115887)          // comp_main (seconds ≈ 32 h)
+        #expect(c.mainExtraSeconds == 156000)     // comp_plus
+        #expect(c.completionistSeconds == 270258) // comp_100
+        #expect(c.platforms == ["PlayStation 4"])
     }
 
     @Test func parseEmptyResultYieldsNoCandidates() throws {
