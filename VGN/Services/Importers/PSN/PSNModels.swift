@@ -191,6 +191,14 @@ struct PSNPurchasedGamesEnvelope: Decodable, Sendable, Equatable {
     }
     struct Retrieve: Decodable, Sendable, Equatable {
         let games: [PSNPurchasedGame]?
+        /// Seen live at S6 (2026-09-19): `{ isLast, offset, size, totalCount }`.
+        let pageInfo: PageInfo?
+    }
+    struct PageInfo: Decodable, Sendable, Equatable {
+        let isLast: Bool?
+        let offset: Int?
+        let size: Int?
+        let totalCount: Int?
     }
 }
 

@@ -154,7 +154,12 @@ struct PSNImporter: LibraryImporter, Sendable {
                 let games = page.data?.purchasedTitlesRetrieve?.games ?? []
                 purchases.append(contentsOf: games)
                 if await client.reachedRateLimitEnd { break }
-                guard games.count == Self.purchasesPageSize else { break }
+                // Sony tells us when to stop (`pageInfo.isLast` / `totalCount`, seen live);
+                // the short-page rule stays as the fallback when `pageInfo` is absent.
+                let info = page.data?.purchasedTitlesRetrieve?.pageInfo
+                if info?.isLast == true { break }
+                if let total = info?.totalCount, purchases.count >= total { break }
+                guard !games.isEmpty, games.count == Self.purchasesPageSize else { break }
                 start += Self.purchasesPageSize
             }
         }
