@@ -113,12 +113,14 @@ struct TheTopView: View {
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(model.items) { item in
+                    ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         switch item {
                         case .divider(let divider):
-                            TopDividerView(divider: divider, model: model)
+                            TopDividerView(divider: divider, model: model,
+                                           flatIndex: index, anchorID: item.id)
                         case .game(let row):
-                            TopRowView(row: row, model: model, loader: loader)
+                            TopRowView(row: row, model: model, loader: loader,
+                                       flatIndex: index, anchorID: item.id)
                                 .accessibilityIdentifier(A11yID.topRow(row.id))
                         }
                     }
@@ -177,6 +179,9 @@ struct TheTopView: View {
 private struct TopDividerView: View {
     let divider: TopDivider
     let model: TheTopModel
+    let flatIndex: Int
+    let anchorID: String
+    @State private var rowHeight: CGFloat = TheTopModel.dividerStepHeight
 
     /// A divider can be dragged only when it has a tier above it and no filter.
     private var draggable: Bool { divider.upperTierID != nil && !model.filterActive }
@@ -211,8 +216,22 @@ private struct TopDividerView: View {
         }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
         .contentShape(Rectangle())
+        .background(RowHeightReader($rowHeight))
+        .overlay(alignment: .top) {
+            if model.insertionEdge(for: anchorID) == .above {
+                TopInsertionLine(colorHex: model.dropLineColorHex, letter: model.dropLineTierLetter)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if model.insertionEdge(for: anchorID) == .below {
+                TopInsertionLine(colorHex: model.dropLineColorHex, letter: model.dropLineTierLetter)
+            }
+        }
         .onTapGesture { if draggable { model.focusDivider(lowerTierID: divider.tier.id) } }
         .gesture(draggable ? dragGesture : nil)
+        .onDrop(of: [.vgnRankingItem],
+                delegate: TopDropDelegate(model: model, flatIndex: flatIndex,
+                                          anchorID: anchorID, rowHeight: rowHeight))
         .help(draggable ? "Drag to move the S/A boundary; ⌥↑/⌥↓ when focused" : "")
     }
 
@@ -233,8 +252,10 @@ private struct TopRowView: View {
     let row: TopGameRow
     let model: TheTopModel
     let loader: any CoverLoading
+    let flatIndex: Int
+    let anchorID: String
 
-    @State private var dropEdge: Edge?
+    @State private var rowHeight: CGFloat = 44
 
     private var coverSize: CGFloat {
         switch row.bucket {
@@ -257,18 +278,24 @@ private struct TopRowView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, row.bucket == .top3 ? 8 : 4)
         .background(model.focusedID == row.id ? Color.accentColor.opacity(0.12) : .clear)
-        .overlay(alignment: dropEdge == .top ? .top : .bottom) {
-            if dropEdge != nil { Rectangle().fill(Color.accentColor).frame(height: 2) }
+        .background(RowHeightReader($rowHeight))
+        .overlay(alignment: .top) {
+            if model.insertionEdge(for: anchorID) == .above {
+                TopInsertionLine(colorHex: model.dropLineColorHex, letter: model.dropLineTierLetter)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if model.insertionEdge(for: anchorID) == .below {
+                TopInsertionLine(colorHex: model.dropLineColorHex, letter: model.dropLineTierLetter)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture { model.focus(row.id) }
-        .modifier(DraggableIf(enabled: !model.filterActive && row.isPlaced,
-                              item: RankingDragItem(gameIDs: [row.id], sourceTierID: row.tier?.id)))
-        .dropDestination(for: RankingDragItem.self) { items, location in
-            drop(items, location: location)
-        } isTargeted: { hovering in
-            if !hovering { dropEdge = nil }
-        }
+        .modifier(TopDragSource(enabled: !model.filterActive && row.isPlaced,
+                                gameID: row.id, sourceTierID: row.tier?.id, model: model))
+        .onDrop(of: [.vgnRankingItem],
+                delegate: TopDropDelegate(model: model, flatIndex: flatIndex,
+                                          anchorID: anchorID, rowHeight: rowHeight))
     }
 
     private var rankColumn: some View {
@@ -325,24 +352,112 @@ private struct TopRowView: View {
         }
     }
 
-    private func drop(_ items: [RankingDragItem], location: CGPoint) -> Bool {
-        dropEdge = nil
-        guard !model.filterActive, let id = items.flatMap(\.gameIDs).first,
-              let tier = row.tier, let tierIndex = row.tierIndex else { return false }
-        let before = location.y < coverSize * 2.0 / 3.0
-        let gap = before ? tierIndex : tierIndex + 1
-        Task { await model.reorder(gameID: id, toTier: tier.id, gap: gap) }
-        return true
+}
+
+// MARK: - Drag source / drop feedback
+
+/// Conditionally makes a row a drag source. Uses `.onDrag` (not `.draggable`) so
+/// the dragged game id is captured **synchronously** at drag start into the model
+/// — hover feedback then never has to decode the pasteboard provider (which is
+/// async). The provider still carries the private `RankingDragItem` UTType so a
+/// `DropDelegate` (and only in-app targets) accept it.
+private struct TopDragSource: ViewModifier {
+    let enabled: Bool
+    let gameID: Int64
+    let sourceTierID: Int64?
+    let model: TheTopModel
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.onDrag {
+                model.beginDrag(gameID: gameID, sourceTierID: sourceTierID)
+                return Self.provider(gameID: gameID, sourceTierID: sourceTierID)
+            }
+        } else {
+            content
+        }
+    }
+
+    private static func provider(gameID: Int64, sourceTierID: Int64?) -> NSItemProvider {
+        let item = RankingDragItem(gameIDs: [gameID], sourceTierID: sourceTierID)
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.vgnRankingItem.identifier,
+                                             visibility: .ownProcess) { completion in
+            completion(try? JSONEncoder().encode(item), nil)
+            return nil
+        }
+        return provider
     }
 }
 
-/// Conditionally attaches `.draggable` (macOS 15 has no boolean form).
-private struct DraggableIf: ViewModifier {
-    let enabled: Bool
-    let item: RankingDragItem
+/// Per-row/-divider drop target. `dropUpdated` gives `info.location` in the row's
+/// coordinate space (unlike `.dropDestination`'s `isTargeted` Bool), so it can set
+/// the insertion line; `performDrop` lands the game exactly where that line shows.
+private struct TopDropDelegate: DropDelegate {
+    let model: TheTopModel
+    let flatIndex: Int
+    let anchorID: String
+    let rowHeight: CGFloat
 
-    func body(content: Content) -> some View {
-        if enabled { content.draggable(item) } else { content }
+    func validateDrop(info: DropInfo) -> Bool {
+        !model.filterActive && info.hasItemsConforming(to: [.vgnRankingItem])
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        let edge = TheTopDropGeometry.edge(locationY: info.location.y, rowHeight: rowHeight)
+        model.updateDropTarget(flatIndex: flatIndex, edge: edge)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        model.clearDropTarget(ownedBy: anchorID)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        model.commitDrop()
+    }
+}
+
+/// A 2 pt accent (or destination-tier) insertion line with the small leading knob
+/// of an AppKit table view. When the drop would change tier, the knob carries the
+/// destination tier's letter and the line takes its colour (a subtle hint that
+/// reads in light and dark).
+private struct TopInsertionLine: View {
+    var colorHex: String?
+    var letter: String?
+
+    private var color: Color { colorHex.flatMap { Color(hex: $0) } ?? .accentColor }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ZStack {
+                Circle().fill(color).frame(width: 10, height: 10)
+                if let letter {
+                    Text(letter)
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+            Rectangle().fill(color).frame(height: 2)
+        }
+        .padding(.horizontal, 12)
+        .allowsHitTesting(false)
+        .transition(.identity)
+    }
+}
+
+/// Reports its container's height into a binding (to size the upper/lower-half
+/// split for the drop delegate). Writes only on change.
+private struct RowHeightReader: View {
+    @Binding var height: CGFloat
+    init(_ height: Binding<CGFloat>) { _height = height }
+
+    var body: some View {
+        GeometryReader { geo in
+            Color.clear
+                .onAppear { height = geo.size.height }
+                .onChange(of: geo.size.height) { _, new in height = new }
+        }
     }
 }
 

@@ -235,6 +235,107 @@ final class TheTopModel {
         return nil
     }
 
+    // MARK: Drag hover feedback (insertion line) — PLAN §7
+
+    /// The game id currently being dragged, captured at drag start so hover
+    /// feedback never has to decode the pasteboard provider (async). Cleared when
+    /// the drag ends.
+    private(set) var draggingID: Int64?
+    /// Where the insertion line is drawn + the move it maps to. Written **only**
+    /// from `DropDelegate` callbacks / drag actions (never a `body`), and only when
+    /// the value actually changes — `dropUpdated` fires continuously, so the guard
+    /// keeps a mouse-move from re-rendering the list (the app once idled at 100 %).
+    private(set) var dropTarget: TheTopDropTarget?
+    /// Slots snapshot for the active drag (built once at drag start so each hover
+    /// is O(1)ish and never rebuilds the display items per mouse-move).
+    private var dragSlots: [TheTopDropGeometry.Slot] = []
+
+    /// Begin a drag of `gameID`. Snapshots the current chart into slots.
+    func beginDrag(gameID: Int64, sourceTierID: Int64?) {
+        draggingID = gameID
+        dragSlots = Self.slots(from: items)
+        dropTarget = nil
+    }
+
+    /// A row/divider `DropDelegate` reports the pointer is over the slot at
+    /// `flatIndex`, on `edge`. Recompute the target; write only on change.
+    func updateDropTarget(flatIndex: Int, edge: TopInsertionEdge) {
+        guard !filterActive, let id = draggingID else { return }
+        let new = TheTopDropGeometry.resolve(slots: dragSlots, hoveredIndex: flatIndex,
+                                             edge: edge, draggedID: id)
+        if new != dropTarget { dropTarget = new }
+    }
+
+    /// Clear the line when the drag leaves a slot — but only if that slot still
+    /// owns the line (moving between rows fires the old slot's exit after the new
+    /// slot's update, so this must not clobber the fresh target).
+    func clearDropTarget(ownedBy anchorID: String) {
+        if dropTarget?.anchorID == anchorID { dropTarget = nil }
+    }
+
+    /// End the drag (drop committed, cancelled, or dropped outside).
+    func endDrag() {
+        draggingID = nil
+        dragSlots = []
+        dropTarget = nil
+    }
+
+    /// The edge of the line for `anchorID`, or nil — a cheap id compare so a
+    /// target change re-renders only the (few, visible) rows that read it.
+    func insertionEdge(for anchorID: String) -> TopInsertionEdge? {
+        guard let t = dropTarget, t.anchorID == anchorID else { return nil }
+        return t.edge
+    }
+
+    /// The line's colour hex: the destination tier's colour when the drop would
+    /// change the game's tier (a subtle cross-tier hint), else nil ⇒ the accent.
+    var dropLineColorHex: String? {
+        guard let t = dropTarget, t.crossesTier else { return nil }
+        return tier(t.destinationTierID)?.colorHex
+    }
+
+    /// The destination tier letter shown inside the line's leading knob when the
+    /// drop crosses into a different tier (nil ⇒ no letter, plain accent line).
+    var dropLineTierLetter: String? {
+        guard let t = dropTarget, t.crossesTier else { return nil }
+        return tier(t.destinationTierID)?.letter
+    }
+
+    /// Synchronous drop entry point for the `DropDelegate`: land the game exactly
+    /// where the line showed. Returns whether a move was accepted.
+    func commitDrop() -> Bool {
+        guard !filterActive, draggingID != nil, dropTarget != nil else { endDrag(); return false }
+        Task { await applyDrop() }
+        return true
+    }
+
+    /// The async body of a drop — testable directly (the sync `commitDrop`
+    /// dispatches into it). Applies the reorder for the current `dropTarget`.
+    @discardableResult
+    func applyDrop() async -> Bool {
+        guard !filterActive, let id = draggingID, let t = dropTarget else { endDrag(); return false }
+        let toTier = t.toTier
+        let gap = t.gap
+        endDrag()
+        await reorder(gameID: id, toTier: toTier, gap: gap)
+        return true
+    }
+
+    /// Flatten the display items into pure drop slots (same order/count, so a
+    /// view's `ForEach` index lines up with the slot index).
+    nonisolated static func slots(from items: [TopDisplayItem]) -> [TheTopDropGeometry.Slot] {
+        items.map { item in
+            switch item {
+            case .divider(let d):
+                return .divider(id: item.id, tierID: d.tier.id)
+            case .game(let g):
+                return .game(id: item.id, gameID: g.id,
+                             tierID: g.row.tierID ?? g.tier?.id ?? -1,
+                             placedIndex: g.tierIndex)
+            }
+        }
+    }
+
     // MARK: Reorder (drag / keyboard) — only meaningful when unfiltered
 
     /// Convert the filtered/unfiltered rows into a Tier-Board-shaped board so the

@@ -30,7 +30,7 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 - [ ] **Duel**: `←`/`→` pick, `↓` skip, `space` peek, `⌘Z` undo; "Placing X · 3 of ~6" reads right; quit mid-placement and relaunch → it resumes. Keys must not leak into the search field or re-tier the grid.
 - [ ] Border duel card (promote/demote): `↩` accept, `esc` dismiss. Disputes chip lists cycles ("Settle" re-places the games involved — a precise "duel this pair" API is a follow-up).
 - [ ] **Tier Board**: drag within a row, across rows, onto the dimmed unplaced tail; multi-select drag (a 5-game drop is currently 5 undo steps — batch move is a follow-up); `⌥←/→` nudge, `⌥↑/↓` change tier; insertion bar placement feels right?
-- [ ] **The Top**: podium proportions, inline dividers; select a platform/decade in the library → Top shows derived *and* overall positions; drag reorder when unfiltered (no insertion line while hovering — known limitation); `⌘E` CSV opens cleanly in Numbers/Excel.
+- [ ] **The Top**: podium proportions, inline dividers; select a platform/decade in the library → Top shows derived *and* overall positions; drag reorder when unfiltered; `⌘E` CSV opens cleanly in Numbers/Excel.
 - [ ] **Movable dividers**: drag the S/A line in The Top — is 44 pt per game a good feel? live "S 7 → 9 · A 14 → 12" preview, `esc` cancels, one `⌘Z` undoes; `⌥↑/↓` on a focused divider.
 - [ ] **Derived scores** ("#4 · 9.6"): do the bands feel right? S 9.0–10 · A 8.0–8.9 · B 7.0–7.9 · C 5.5–6.9 · D 3.0–5.4 · F 1.0–2.9 (one constant file: `VGN/Ranking/DerivedScore.swift`).
 - Console note "type com.videogamenerd.ranking-item is not declared" during drags is benign (fix = declare an exported type in Info.plist, milestone 9 polish).
@@ -85,6 +85,12 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 ### Filters & tier tooltips (2026-09-19, wave 7 lane C)
 - [ ] Toolbar **Tier ▸ "Unrated"**, **Status ▸ "Not Played" / "No Status"**, **Format ▸ "Not Owned"**: each finds the right games, OR-combines with the real values (e.g. S + Unrated), shows a removable chip, fills the menu icon, and clears with the menu's Clear / "Clear all".
 - [ ] **Tier badge hover** shows the tier label everywhere a tier is drawn: the **grid cell badge** (also shows the derived score, e.g. "S — Masterpiece · 9.4"; an unplaced game shows "~8.5"), the **inspector** tier picker (the current tier's chip shows the score), the **Tier Board** row headers, **The Top** rows (with score) and dividers, **Triage** and **Duel** empty-state tiers, the **border-suggestion** card, and the sidebar **stats popover** per-tier letters. The **legend** keeps its "(press S)" text; the **Duel** side badge shows the label from the environment.
+
+### The Top — insertion line while reordering (2026-09-19, wave 7 lane F)
+- [ ] Drag a game in **The Top** (unfiltered): a 2 pt accent insertion line with a small leading knob appears in the gap where it would land — **above** the hovered row when the pointer is in its upper half, **below** in the lower half; exactly one line at a time; it vanishes on drop, on leaving the list, and on `esc` / dropping outside. Does the half-row boundary feel right? (Only a human drag can confirm the `DropInfo.location` coordinate assumption.)
+- [ ] The game **lands exactly where the line showed** (same up/down-half rule), and dropping a game directly above or below itself shows **no line and does nothing**.
+- [ ] Dragging **across a divider** changes the tier as before; near a divider the line distinguishes **last of the upper tier** (above the divider) from **first of the lower tier** (below it), and when the destination tier differs from the source it takes the **destination tier's colour + letter** in the knob (check light *and* dark).
+- [ ] With a **filter active** no drag/line/divider-move happens (unchanged). Note the residual: **no auto-scroll** near the top/bottom edge while dragging (drag to a visible row, or scroll first).
 
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line

@@ -132,6 +132,21 @@ struct RankingSnapshotTests {
         }
     }
 
+    @Test func theTopInsertionLine() async {
+        // A forced cross-tier drop target: dragging an A-tier game to above the
+        // 2nd S game shows the insertion line tinted with the destination tier.
+        let model = TheTopModel(backend: ScriptedRankingBackend.previewTop(n: 24))
+        await model.start()
+        model.beginDrag(gameID: 8, sourceTierID: nil)
+        model.updateDropTarget(flatIndex: 2, edge: .above)
+        await SnapshotHarness.settle(rounds: 4)
+        await SnapshotHarness.capture(group: group, "ranking-top-insertion-line",
+                                      size: SnapSize(width: 760, height: 760),
+                                      appearances: SnapAppearance.allCases) {
+            TheTopView(model: model, loader: NoopCoverLoader())
+        }
+    }
+
     @Test func theTopShort() async {
         let model = TheTopModel(backend: ScriptedRankingBackend.previewTop(n: 5))
         await model.start()
