@@ -48,7 +48,11 @@ extension RecommendationStore {
         let rows = try Row.fetchAll(db, sql: """
             SELECT g.id, g.igdb_id, g.title, g.year, g.played, g.status,
                    g.my_playtime_s, g.ttb_normally_s, g.ttb_completely_s,
-                   g.igdb_rating, g.igdb_rating_count, g.cover_file
+                   g.igdb_rating, g.igdb_rating_count, g.cover_file,
+                   NOT EXISTS (
+                       SELECT 1 FROM product_games pgx JOIN products px ON px.id = pgx.product_id
+                       WHERE pgx.game_id = g.id AND px.subscription IS NULL
+                   ) AS sub_only
             FROM games g
             WHERE EXISTS (SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)
               AND (g.status IS NULL OR g.status NOT IN ('finished','completed'))
@@ -82,7 +86,8 @@ extension RecommendationStore {
                 coverFile: row["cover_file"],
                 platformIDs: feature?.platformSlugs ?? [],
                 formats: formats[id] ?? [],
-                playStatus: statusRaw.flatMap(PlayStatus.init(rawValue:))
+                playStatus: statusRaw.flatMap(PlayStatus.init(rawValue:)),
+                ownedOnlyViaSubscription: row["sub_only"]
             )
         }
     }

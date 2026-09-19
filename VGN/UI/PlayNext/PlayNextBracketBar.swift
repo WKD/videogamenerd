@@ -156,6 +156,10 @@ struct PlayNextBracketBar: View {
             Toggle("Include played (no status)", isOn: Binding(
                 get: { model.includePlayedWithoutStatus },
                 set: { model.setIncludePlayedWithoutStatus($0) }))
+            Divider()
+            Toggle("Prefer expiring PS Plus games", isOn: Binding(
+                get: { model.preferExpiringSubscription },
+                set: { model.setPreferExpiringSubscription($0) }))
         } label: {
             barLabel("Options", systemImage: "slider.horizontal.3", iconOnly: iconOnly)
         }

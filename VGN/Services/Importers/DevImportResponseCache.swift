@@ -124,6 +124,27 @@ struct DevImportResponseCache: Sendable {
         try? FileManager.default.removeItem(at: root)
     }
 
+    /// Delete just one account's folders and index entries (the panel's "Wipe dev cache
+    /// (this account)"), keeping the other build account's bodies. Best-effort.
+    func wipe(account: Account) {
+        // Remove `<root>/<source>/<account>/` for every source folder.
+        if let sources = try? FileManager.default.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: nil) {
+            for source in sources where source.hasDirectoryPath {
+                try? FileManager.default.removeItem(
+                    at: source.appendingPathComponent(account.folder, isDirectory: true))
+            }
+        }
+        let kept = indexEntries().filter { $0.account != account.folder }
+        if let data = try? JSONEncoder.dev.encode(kept) {
+            try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try? data.write(to: indexURL)
+        }
+    }
+
+    /// The absolute file URL a recorded index entry points at (for "reveal in Finder").
+    func fileURL(for entry: IndexEntry) -> URL { root.appendingPathComponent(entry.file) }
+
     // MARK: - Paths
 
     private var indexURL: URL { root.appendingPathComponent("index.json") }

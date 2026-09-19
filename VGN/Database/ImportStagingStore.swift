@@ -409,6 +409,29 @@ struct ImportStagingStore: Sendable {
         }
     }
 
+    /// Apply the owner-confirmed subscription-copy removals (PLAN §13.3 — a PS Plus claim
+    /// the latest sync no longer lists, removed only after an explicit confirm in the review
+    /// sheet). One transaction: delete each product, then delete any game left neither owned
+    /// nor played (a lapsed claim never played is gone). A game still played (its trophy
+    /// record) survives as *played, not owned*. Returns the number of products removed.
+    @discardableResult
+    func applySubscriptionRemovals(_ productIDs: [Int64]) async throws -> Int {
+        guard !productIDs.isEmpty else { return 0 }
+        return try await dbWriter.write { db in
+            var removed = 0
+            for pid in productIDs {
+                guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM products WHERE id = ?)",
+                                        arguments: [pid]) ?? false else { continue }
+                let members = try Int64.fetchAll(
+                    db, sql: "SELECT game_id FROM product_games WHERE product_id = ?", arguments: [pid])
+                try db.execute(sql: "DELETE FROM products WHERE id = ?", arguments: [pid])
+                _ = try LibraryStore.resolveOrphans(members, confirmOrphanDelete: true, db: db)
+                removed += 1
+            }
+            return removed
+        }
+    }
+
     private static func markMatched(source: String, externalID: String, gameID: Int64, db: Database) throws {
         try db.execute(sql: """
             UPDATE import_titles SET matched_game_id = ? WHERE source = ? AND external_id = ?

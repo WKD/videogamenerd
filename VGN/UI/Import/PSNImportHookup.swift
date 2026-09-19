@@ -16,6 +16,11 @@ final class PSNImportPresenter {
     /// The Settings account model, so a sync's errors surface there and state refreshes.
     weak var account: PSNAccountModel?
 
+    /// Whether the live-PSN safety latch was armed at launch (PLAN §13.5). When false the
+    /// live objects were never built (the backend is inert), so File ▸ Import from
+    /// PlayStation… is disabled with a "turn it on in Settings" hint.
+    let liveEnabled: Bool
+
     /// The PlayStation platform slugs offered in the review sheet's per-row platform menu.
     static let platformChoices = ["ps5", "ps4", "ps3", "ps2", "ps1", "vita", "psp"]
 
@@ -28,8 +33,10 @@ final class PSNImportPresenter {
     private let onLibraryChanged: () -> Void
     @ObservationIgnored private var syncTask: Task<Void, Never>?
 
-    init(backend: any ImportBackend, onLibraryChanged: @escaping () -> Void = {}) {
+    init(backend: any ImportBackend, liveEnabled: Bool = false,
+         onLibraryChanged: @escaping () -> Void = {}) {
         self.backend = backend
+        self.liveEnabled = liveEnabled
         self.onLibraryChanged = onLibraryChanged
     }
 
@@ -42,10 +49,29 @@ final class PSNImportPresenter {
         }
     }
 
+    /// In DEBUG live builds the normal sync refuses until the build-steps panel has run
+    /// every probe and full fetch once for the current account label (PLAN §13.5 D10).
+    /// Release is unchanged — the client's own probe-before-full guard still applies.
+    /// Returns true when the sync may proceed; false surfaces the "run the build steps" note.
+    private func passesBuildStepsGate() -> Bool {
+        #if DEBUG
+        guard liveEnabled else { return true }
+        // The build-steps panel and this gate share the persisted account label, so read it
+        // from the preference rather than the (possibly stale) account model copy.
+        let label = AppPreferences.defaults.string(forKey: PSNAccountModel.accountLabelKey) ?? "test"
+        guard PSNBuildStepsGate.hasPassedAll(label: label) else {
+            account?.presentBuildStepsGate()
+            return false
+        }
+        #endif
+        return true
+    }
+
     /// Run one sync and open the review sheet on success (PLAN §13.5). Cache-first, so a
     /// second sync inside the window makes no requests.
     func syncNow() {
         guard reviewModel == nil, !isSyncing else { return }
+        guard passesBuildStepsGate() else { return }
         isSyncing = true
         progress = ImportProgress(phase: .authenticating)
         let backend = self.backend
@@ -170,8 +196,10 @@ struct PSNImportCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button("Import from PlayStation…") { presenter?.importFromSource() }
-                .disabled(presenter == nil)
-                .help("Import your PlayStation library. Sign in first in Settings ▸ PlayStation.")
+                .disabled(presenter == nil || presenter?.liveEnabled != true)
+                .help(presenter?.liveEnabled == true
+                      ? "Import your PlayStation library. Sign in first in Settings ▸ PlayStation."
+                      : "Enable it in Settings ▸ PlayStation")
         }
     }
 }

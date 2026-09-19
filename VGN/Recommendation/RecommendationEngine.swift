@@ -123,7 +123,12 @@ enum RecommendationEngine {
         let timeTerm = timeFit.map { weights.timeFitWeight * ($0.fit - 1) } ?? 0
         let jitter = rotationJitter(seed: options.seed, id: candidate.id, magnitude: weights.rotationMagnitude)
         let pickedPenalty = feedback.picked.contains(candidate.id) ? weights.pickedPenalty : 0
-        let finalScore = clamp(blended + timeTerm + jitter - pickedPenalty)
+        // A small, opt-in, backtest-neutral nudge for games that leave with PS Plus
+        // (PLAN §13.3). Its magnitude is below the trait/crowd terms, so it only reorders
+        // near-ties and never overturns a clearly better fit.
+        let subBonus = (options.preferExpiringSubscription && candidate.ownedOnlyViaSubscription)
+            ? weights.subscriptionBonus : 0
+        let finalScore = clamp(blended + timeTerm + jitter - pickedPenalty + subBonus)
 
         let evidenceMass = affinity.evidence + linkResult.links.map { abs($0.contribution) }.reduce(0, +)
         let strength = matchStrength(evidenceMass: evidenceMass, rankedCount: rankedCount,
@@ -219,6 +224,10 @@ enum RecommendationEngine {
                 reasons.append(.fitsBracket(estimateSeconds: estimate, bracket: bracket))
             }
         }
+
+        // A game that leaves with PS Plus is worth flagging (PLAN §13.3) — an informative
+        // tail reason, independent of the scoring option.
+        if candidate.ownedOnlyViaSubscription { reasons.append(.leavesWithSubscription) }
 
         if !candidate.hasMetadata { reasons.append(.noMetadata) }
         if strength == .weak { reasons.append(.weakEvidence) }

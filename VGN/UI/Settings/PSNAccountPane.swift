@@ -50,6 +50,44 @@ final class PSNAccountModel {
     var showLogin = false
     /// The "Paste NPSSO instead" disclosure is expanded.
     var pasteExpanded = false
+
+    // MARK: Safety latch (PLAN §13.5)
+
+    /// The live-PSN safety latch (`psn.liveEnabled`). Read **at launch** by
+    /// ``PSNImportBuilder`` to decide whether to build the real PSN objects; this pane only
+    /// reads and writes the preference and then asks the owner to relaunch — it never
+    /// hot-swaps the wiring, because the sign-in/importer/coordinator are composed once at
+    /// launch. Default false = inert everywhere (no stray click can reach Sony).
+    private(set) var liveEnabled: Bool
+    /// The "Enable PlayStation sync" confirmation is up.
+    var enableConfirming = false
+    /// The "Turn off PlayStation sync" confirmation is up.
+    var disableConfirming = false
+    /// The latch was flipped this run, so the effective wiring is stale until relaunch.
+    private(set) var latchChanged = false
+
+    /// Preference key of the live-PSN safety latch (shared with ``PSNImportBuilder``).
+    static var liveEnabledKey: String { PSNImportBuilder.liveEnabledKey }
+
+    func requestEnableLive() { enableConfirming = true }
+    func confirmEnableLive() {
+        enableConfirming = false
+        AppPreferences.defaults.set(true, forKey: Self.liveEnabledKey)
+        liveEnabled = true
+        latchChanged = true
+    }
+    func cancelEnableLive() { enableConfirming = false }
+
+    func requestDisableLive() { disableConfirming = true }
+    /// Turn the latch off. Tokens are left untouched (Sign Out clears those); this only
+    /// stops the live objects from being built on the next launch.
+    func confirmDisableLive() {
+        disableConfirming = false
+        AppPreferences.defaults.set(false, forKey: Self.liveEnabledKey)
+        liveEnabled = false
+        latchChanged = true
+    }
+    func cancelDisableLive() { disableConfirming = false }
     /// The NPSSO the owner pastes — never echoed anywhere but this SecureField; cleared
     /// the instant it is used.
     var npssoInput = ""
@@ -69,6 +107,14 @@ final class PSNAccountModel {
     }
     static let accountLabelKey = "psn.buildSteps.accountLabel"
 
+    #if DEBUG
+    /// The DEBUG-only build-steps panel model (PLAN §13.5), attached by ``PSNImportBuilder``
+    /// in DEBUG live mode when the latch is armed. nil elsewhere (no panel).
+    @ObservationIgnored var buildSteps: PSNBuildStepsModel?
+    /// The build-steps sheet is up.
+    var showBuildSteps = false
+    #endif
+
     /// Wired by the presenter: run one sync and present the review sheet.
     var onSyncRequested: () -> Void = {}
     /// Injected in tests for deterministic ages/relative strings.
@@ -85,6 +131,7 @@ final class PSNAccountModel {
         self.backend = backend
         self.login = login
         self.accountLabel = AppPreferences.defaults.string(forKey: Self.accountLabelKey) ?? "test"
+        self.liveEnabled = AppPreferences.defaults.bool(forKey: PSNImportBuilder.liveEnabledKey)
     }
 
     /// Reload account state (on appear / after a sign-in or sync).
@@ -175,6 +222,13 @@ final class PSNAccountModel {
         pendingError = ImportErrorSurface.make(from: error, sourceLabel: sourceLabel)
     }
 
+    /// Surface the DEBUG "run the build steps first" gate message (PLAN §13.5 D10).
+    func presentBuildStepsGate() {
+        pendingError = ImportErrorSurface(
+            title: "Run the PSN build steps first",
+            message: "In this development build, sync is gated until every probe and full fetch has succeeded once for the ‘\(accountLabel)’ account. Open Settings ▸ PlayStation ▸ PSN build steps.")
+    }
+
     // MARK: Text helpers
 
     func costText(for dataSet: ImportDataSet) -> String {
@@ -218,16 +272,58 @@ struct PSNAccountPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if model.signedIn {
-                signedIn
+            if !model.liveEnabled {
+                latchOff
             } else {
-                signedOut
+                if model.latchChanged { relaunchNote }
+                if model.signedIn {
+                    signedIn
+                } else {
+                    signedOut
+                }
+                turnOffRow
+                #if DEBUG
+                buildStepsButton
+                #endif
             }
             if let error = model.pendingError {
                 errorSurface(error)
             }
         }
         .task { await model.refresh() }
+        #if DEBUG
+        .sheet(isPresented: $model.showBuildSteps) {
+            if let steps = model.buildSteps {
+                VStack(spacing: 0) {
+                    PSNBuildStepsPanel(model: steps)
+                    Divider()
+                    HStack {
+                        Spacer()
+                        Button("Done") { model.showBuildSteps = false }.keyboardShortcut(.defaultAction)
+                    }.padding(12)
+                }
+                .frame(minWidth: 480, minHeight: 520)
+            }
+        }
+        #endif
+        .confirmationDialog(
+            "Enable PlayStation sync?",
+            isPresented: $model.enableConfirming, titleVisibility: .visible
+        ) {
+            Button("Enable") { model.confirmEnableLive() }
+            Button("Cancel", role: .cancel) { model.cancelEnableLive() }
+        } message: {
+            Text("This turns on VGN's use of Sony's unofficial, read-only account API. It runs only when you ask and stops at the first odd response. You'll need to relaunch VGN, then sign in.")
+        }
+        .confirmationDialog(
+            "Turn off PlayStation sync?",
+            isPresented: $model.disableConfirming, titleVisibility: .visible
+        ) {
+            Button("Turn Off", role: .destructive) { model.confirmDisableLive() }
+            Button("Cancel", role: .cancel) { model.cancelDisableLive() }
+        } message: {
+            Text("VGN will make no PlayStation requests until you turn it back on and relaunch. Your sign-in tokens are kept until you Sign Out.")
+        }
         .sheet(isPresented: $model.showLogin) {
             if let login = model.login {
                 PSNLoginSheet(
@@ -247,6 +343,52 @@ struct PSNAccountPane: View {
             Button("Cancel", role: .cancel) { model.forceRefreshConfirmation = nil }
         }
     }
+
+    // MARK: Safety latch (off / turn-off / relaunch)
+
+    /// Shown when the latch is off (all builds): the sync is inert, and enabling it needs a
+    /// confirmation + a relaunch (the wiring is composed at launch, never hot-swapped).
+    private var latchOff: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("PlayStation sync is off").font(.headline)
+            riskNote
+            Button("Enable PlayStation sync (unofficial API)…") { model.requestEnableLive() }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("psn.latch.enable")
+            if model.latchChanged { relaunchNote }
+        }
+    }
+
+    /// A prominent "relaunch to apply" note shown after the latch is flipped this run.
+    private var relaunchNote: some View {
+        Label("Relaunch VGN to apply.", systemImage: "arrow.clockwise.circle")
+            .font(.callout).foregroundStyle(.orange)
+            .padding(8)
+            .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// The "Turn off…" action shown while the latch is on (clears the latch; tokens are
+    /// left untouched until Sign Out).
+    private var turnOffRow: some View {
+        Button("Turn off PlayStation sync…") { model.requestDisableLive() }
+            .controlSize(.small)
+            .accessibilityIdentifier("psn.latch.disable")
+    }
+
+    #if DEBUG
+    /// Opens the DEBUG build-steps panel (only present in DEBUG live builds with the latch
+    /// armed) in a sheet, so this pane keeps its `settingsPane()` sizing.
+    @ViewBuilder
+    private var buildStepsButton: some View {
+        if model.buildSteps != nil {
+            Divider()
+            Button("PSN build steps…") { model.showBuildSteps = true }
+                .controlSize(.small)
+                .accessibilityIdentifier("psn.buildSteps.open")
+                .help("Run the gated live steps (S2–S6) one request at a time.")
+        }
+    }
+    #endif
 
     // MARK: Signed out
 
