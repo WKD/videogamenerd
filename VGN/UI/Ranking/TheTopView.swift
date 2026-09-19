@@ -317,7 +317,8 @@ private struct TopRowView: View {
     @ViewBuilder
     private var trailing: some View {
         if let letter = row.tier?.letter {
-            TierChip(letter: letter, colorHex: row.tier?.colorHex, size: 18)
+            TierChip(letter: letter, colorHex: row.tier?.colorHex, size: 18,
+                     label: row.tier?.label, score: row.score)
         }
         if !row.isPlaced {
             Button("Place") { model.goToDuel() }.buttonStyle(.borderless).font(.caption)

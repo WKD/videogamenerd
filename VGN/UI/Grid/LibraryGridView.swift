@@ -53,6 +53,7 @@ struct LibraryGridView: View {
                             model: vm.cellModel(for: game.id),
                             coverLoader: vm.coverLoader,
                             isSelected: vm.selectedGameIDs.contains(game.id),
+                            score: vm.scoresByGameID[game.id],
                             cellWidth: CGFloat(vm.gridCellWidth),
                             onTap: { vm.selectOnly(game.id); gridFocused = true },
                             onCommandTap: { vm.toggle(game.id); gridFocused = true },

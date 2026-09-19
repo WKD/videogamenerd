@@ -128,6 +128,11 @@ final class LibraryViewModel {
     /// unranked or unselected game.
     private(set) var selectedScoreLine: DerivedScoreLine?
 
+    /// Every tiered game's live derived 1–10 score, for the grid badge tooltip
+    /// ("S — Masterpiece · 9.4"). Fed by a single library-wide observation; assigned
+    /// only when it actually changes so unrelated writes don't re-render the grid.
+    private(set) var scoresByGameID: [Int64: DerivedScoreValue] = [:]
+
     // MARK: Per-cell boxes (PLAN §9)
     private var cellModels: [Int64: GameCellModel] = [:]
 
@@ -138,6 +143,7 @@ final class LibraryViewModel {
     private var gamesTask: Task<Void, Never>?
     private var detailTask: Task<Void, Never>?
     private var scoreLineTask: Task<Void, Never>?
+    private var scoresTask: Task<Void, Never>?
     private var genresTask: Task<Void, Never>?
     private var decadesTask: Task<Void, Never>?
     private var bannerDismissTask: Task<Void, Never>?
@@ -206,6 +212,13 @@ final class LibraryViewModel {
         decadesTask = Task { [dataSource] in
             for await value in dataSource.decadesInUse() { self.decadesInUse = value }
         }
+        scoresTask = Task { [dataSource] in
+            for await value in dataSource.scoresStream() {
+                // Assign only on a real change so an unrelated write (that leaves
+                // every score untouched) never re-renders the grid cells.
+                if value != self.scoresByGameID { self.scoresByGameID = value }
+            }
+        }
         restartGames()
     }
 
@@ -216,6 +229,7 @@ final class LibraryViewModel {
         gamesTask?.cancel(); gamesTask = nil
         detailTask?.cancel(); detailTask = nil
         scoreLineTask?.cancel(); scoreLineTask = nil
+        scoresTask?.cancel(); scoresTask = nil
         genresTask?.cancel(); genresTask = nil
         decadesTask?.cancel(); decadesTask = nil
     }

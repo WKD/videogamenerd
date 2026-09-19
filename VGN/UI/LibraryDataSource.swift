@@ -43,6 +43,11 @@ protocol LibraryDataSource: Sendable {
     /// any duel / drag / divider move so "#4 overall" stays current.
     func scoreLineStream(for gameID: Int64) -> AsyncStream<DerivedScoreLine?>
 
+    /// Live map of every tiered game's derived 1–10 score, for the grid badge
+    /// tooltips (PLAN §7). Re-yields after any tier/rank change. Scores are never
+    /// stored — always derived from the ranking snapshot.
+    func scoresStream() -> AsyncStream<[Int64: DerivedScoreValue]>
+
     /// A cheap aggregate snapshot for the sidebar stats popover (PLAN §6.4).
     func libraryStats() async -> LibraryStats
 }
@@ -51,6 +56,7 @@ extension LibraryDataSource {
     // Defaults so preview sources need not implement these explicitly.
     func compilationMemberIDs(productID: Int64) async -> [Int64] { [] }
     func scoreLineStream(for gameID: Int64) -> AsyncStream<DerivedScoreLine?> { onceStream(nil) }
+    func scoresStream() -> AsyncStream<[Int64: DerivedScoreValue]> { onceStream([:]) }
     func libraryStats() async -> LibraryStats { .empty }
 }
 

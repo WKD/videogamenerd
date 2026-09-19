@@ -48,6 +48,14 @@ extension RankingStore {
         try await dbReader.read { db in DerivedScore.scores(try Self.loadSnapshot(db)) }
     }
 
+    /// Live map of every tiered game's derived score, for the grid badge tooltips.
+    /// Recomputes from the ranking snapshot on any tier/rank change (PLAN §7).
+    /// Scores are never stored — always derived from the snapshot here.
+    func derivedScoresObservation() -> AsyncValueObservation<[Int64: DerivedScoreValue]> {
+        ValueObservation.tracking { db in DerivedScore.scores(try Self.loadSnapshot(db)) }
+            .values(in: dbReader)
+    }
+
     /// One game's derived score (for the inspector — see the handoff for the call).
     func derivedScore(for gameID: Int64) async -> DerivedScoreValue? {
         let value = try? await dbReader.read { db in

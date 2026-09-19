@@ -10,6 +10,10 @@ struct TierChip: View {
     var size: CGFloat = 20
     /// The tier's human label, when the caller has it at hand.
     var label: String? = nil
+    /// The game's derived 1–10 score, when the chip stands for a specific game
+    /// (grid cell, The Top row, the inspector's current tier). Appended to the
+    /// tooltip as "· 9.4" (or "· ~8.5" when approximate). Nil ⇒ label-only text.
+    var score: DerivedScoreValue? = nil
     /// False where an enclosing control already carries a richer tooltip.
     var showsLabelOnHover: Bool = true
 
@@ -28,13 +32,22 @@ struct TierChip: View {
                     .strokeBorder(.white.opacity(0.35), lineWidth: 0.5)
             )
             .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
-            .help(showsLabelOnHover ? TierChip.hoverText(letter: letter, label: label, labels: tierLabels) : "")
+            .help(showsLabelOnHover
+                  ? TierChip.hoverText(letter: letter, label: label, labels: tierLabels, score: score)
+                  : "")
     }
 
-    /// "S — Masterpiece"; just the letter's tier name when no label is known.
-    static func hoverText(letter: String, label: String?, labels: [String: String]) -> String {
+    /// "S — Masterpiece" (label-only), or "S — Masterpiece · 9.4" when a game's
+    /// derived score is given ("· ~8.5" for an approximate/unplaced score). Falls
+    /// back to just the letter's tier name when no label is known.
+    static func hoverText(
+        letter: String, label: String?, labels: [String: String],
+        score: DerivedScoreValue? = nil
+    ) -> String {
         let resolved = (label ?? labels[letter.uppercased()])?.trimmingCharacters(in: .whitespaces) ?? ""
-        return resolved.isEmpty ? "Tier \(letter)" : "\(letter) — \(resolved)"
+        let base = resolved.isEmpty ? "Tier \(letter)" : "\(letter) — \(resolved)"
+        guard let score else { return base }
+        return "\(base) · \(score.formatted())"
     }
 }
 

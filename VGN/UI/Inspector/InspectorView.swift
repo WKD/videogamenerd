@@ -181,7 +181,8 @@ private struct SingleGameInspector: View {
 
     private var tierSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TierPickerRow(tiers: vm.tiers, current: detail.tierLetter) { letter in
+            TierPickerRow(tiers: vm.tiers, current: detail.tierLetter,
+                          score: vm.selectedScoreLine?.score) { letter in
                 vm.setTier(letter, for: ids)
             }
             .accessibilityIdentifier(A11yID.inspectorTierChip)
@@ -400,6 +401,9 @@ private struct SingleGameInspector: View {
 private struct TierPickerRow: View {
     let tiers: [TierInfo]
     let current: String?
+    /// The current game's derived score, shown in the tooltip of the button for
+    /// the game's *current* tier (nil for the multi-selection picker).
+    var score: DerivedScoreValue? = nil
     let onPick: (String?) -> Void
 
     var body: some View {
@@ -418,7 +422,9 @@ private struct TierPickerRow: View {
                             .opacity(current == nil || current == tier.letter ? 1 : 0.4)
                     }
                     .buttonStyle(.plain)
-                    .help(TierChip.hoverText(letter: tier.letter, label: tier.label, labels: [:]))
+                    // Only the game's current tier carries its derived score.
+                    .help(TierChip.hoverText(letter: tier.letter, label: tier.label, labels: [:],
+                                             score: tier.letter == current ? score : nil))
                 }
                 Button {
                     onPick(nil)
