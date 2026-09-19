@@ -143,6 +143,9 @@ struct PlayNextBody: View {
                 }
                 alternatives(result)
                 unknownLane(result)
+                // "Discover on your Batocera" (PLAN §15) — a separate pool below the picks,
+                // hidden when the catalogue is empty / Play Next has too little data.
+                DiscoverRowView()
                 exclusionsFootnote(result.exclusions)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

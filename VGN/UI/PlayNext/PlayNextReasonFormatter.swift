@@ -35,6 +35,18 @@ enum PlayNextReasonFormatter {
         suggestion.reasons.prefix(limit).map { sentence(for: $0, exemplars: exemplars, bracket: bracket) }
     }
 
+    /// Sentences for a bare reason list with **no** time bracket (Batocera "Discover",
+    /// PLAN §15 — a catalogue entry rarely has a knowable length, so Discover never produces
+    /// a time reason). A nominal bracket is passed for the switch's exhaustiveness only.
+    static func sentences(
+        for reasons: [PlayNextReason],
+        exemplars: [Int64: ExemplarInfo],
+        limit: Int = maxReasons
+    ) -> [String] {
+        let nominal = TimeBracket(shelf: .evening)
+        return reasons.prefix(limit).map { sentence(for: $0, exemplars: exemplars, bracket: nominal) }
+    }
+
     /// One reason as a sentence.
     static func sentence(
         for reason: PlayNextReason,

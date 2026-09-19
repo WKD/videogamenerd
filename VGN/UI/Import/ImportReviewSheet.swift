@@ -48,6 +48,18 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     }
 }
 
+/// A committable review row projected for a source-specific committer (Batocera, PLAN §15):
+/// the resolved match (an existing library game, or an IGDB id for a new game) plus the
+/// chosen platform. The committer turns these into its own commit shape.
+struct ImportReviewCommitRow: Sendable, Equatable {
+    var externalID: String
+    var platformID: String?
+    var matchedGameID: Int64?
+    var igdbID: Int64?
+    var title: String
+    var releaseYear: Int?
+}
+
 /// The PSN-specific review groups (PLAN §13.3). Used only when the sheet's source is PSN;
 /// GOG/Delicious keep the generic *New / Already matched / Ignored* buckets. A row lands in
 /// the first matching group (see ``ImportReviewModel/psnGroup(for:)``).
@@ -110,6 +122,18 @@ final class ImportReviewModel {
     let platformChoices: [String]
     /// Whether to detect "already on your shelf" duplicates (Delicious only, PLAN §5.5).
     let detectShelfDuplicates: Bool
+    /// **(Batocera, PLAN §15)** ROM-promotion mode: a matched game that already owns a ROM
+    /// copy on that platform is annotated "Already in your library — adds play time only" and
+    /// stays committable (the play data still lands; no second copy). Off for GOG/PSN/Delicious.
+    let romPromotion: Bool
+    /// A source-supplied per-row caption shown under the title (Batocera play line
+    /// "4 h 12 · last played Apr 2025 · ★"). Generic; empty for other sources.
+    let rowDetailByID: [String: String]
+    /// **(Batocera, PLAN §15)** When set, replaces the default `store.commit(commitItems())`:
+    /// the ticked, resolved rows are handed to a source-specific committer (Batocera promotes
+    /// ROM copies with the box's play data and links the catalogue rows through
+    /// ``BatoceraPromoter``). Returns the commit result for the success banner.
+    @ObservationIgnored private let customCommit: (@Sendable ([ImportReviewCommitRow]) async throws -> ImportCommitResult)?
     /// A file source shows a header toggle to use its own cover art where a game has none.
     let showsSourceCoverToggle: Bool
     var useSourceCovers: Bool
@@ -144,6 +168,9 @@ final class ImportReviewModel {
     /// duplicate); a different format on the same platform lands in `otherFormatKeys`.
     @ObservationIgnored private var sameFormatKeys: [String: Int64] = [:]
     @ObservationIgnored private var otherFormatKeys: Set<String> = []
+    /// **(Batocera)** "gameID|platform" for an existing ROM copy — the duplicate check for a
+    /// row matched to a game already in the library (adds play time only, no second copy).
+    @ObservationIgnored private var romCopyGameKeys: Set<String> = []
 
     /// Header line: file source → "N games read from …"; network source → cache/network.
     var summaryLine: String { summary.summaryLine(sourceLabel: sourceLabel) }
@@ -157,6 +184,9 @@ final class ImportReviewModel {
          platformChoices: [String] = ["pc", "mac"],
          detectShelfDuplicates: Bool = false,
          showsSourceCoverToggle: Bool = false,
+         romPromotion: Bool = false,
+         rowDetailByID: [String: String] = [:],
+         customCommit: (@Sendable ([ImportReviewCommitRow]) async throws -> ImportCommitResult)? = nil,
          afterCommit: (@Sendable (ImportCommitResult, Bool) async -> Void)? = nil,
          onLibraryChanged: @escaping () -> Void = {}) {
         self.source = source
@@ -168,6 +198,9 @@ final class ImportReviewModel {
         self.platformChoices = platformChoices
         self.detectShelfDuplicates = detectShelfDuplicates
         self.showsSourceCoverToggle = showsSourceCoverToggle
+        self.romPromotion = romPromotion
+        self.rowDetailByID = rowDetailByID
+        self.customCommit = customCommit
         self.useSourceCovers = showsSourceCoverToggle
         self.afterCommit = afterCommit
         self.onLibraryChanged = onLibraryChanged
@@ -183,6 +216,12 @@ final class ImportReviewModel {
                 let key = "\(copy.igdbID)|\(copy.platform)"
                 if copy.format == productFormat { sameFormatKeys[key] = copy.gameID }
                 else { otherFormatKeys.insert(key) }
+            }
+        }
+        if romPromotion {
+            for copy in (try? await staging.ownedCopies()) ?? [] where copy.format == .rom {
+                sameFormatKeys["\(copy.igdbID)|\(copy.platform)"] = copy.gameID
+                romCopyGameKeys.insert("\(copy.gameID)|\(copy.platform)")
             }
         }
         let titles = (try? await staging.titles(source: source)) ?? []
@@ -234,6 +273,21 @@ final class ImportReviewModel {
             } else if otherFormatKeys.contains(key) {
                 row.duplicateNote = "You already own a different copy — this adds your \(productFormat.label.lowercased()) one"
             }
+        }
+
+        // Batocera ROM promotion (PLAN §15): a row whose match already owns a ROM copy on
+        // this platform is annotated "adds play time only" but stays committable — the box's
+        // play data still lands, no second copy is made.
+        if romPromotion, !row.ignored, let platform = row.platform {
+            let hasCopy: Bool
+            if let gameID = row.matchedGameID {
+                hasCopy = romCopyGameKeys.contains("\(gameID)|\(platform)")
+            } else if let igdbID = row.proposedMatch?.igdbID {
+                hasCopy = sameFormatKeys["\(igdbID)|\(platform)"] != nil
+            } else {
+                hasCopy = false
+            }
+            if hasCopy { row.duplicateNote = "Already in your library — adds play time only" }
         }
 
         // PSN pre-tick: everything ticked except Launched-0 % and Ignored (PLAN §13.3).
@@ -467,11 +521,27 @@ final class ImportReviewModel {
             lastPlayedAt: t.lastPlayedAt)
     }
 
+    /// The committable rows projected for a source-specific committer (Batocera, PLAN §15).
+    /// Carries the resolved match so the committer can build its own commit shape.
+    func commitRows() -> [ImportReviewCommitRow] {
+        rows.filter(\.isCommittable).map { row in
+            ImportReviewCommitRow(
+                externalID: row.externalID,
+                platformID: row.platform,
+                matchedGameID: row.matchedGameID,
+                igdbID: row.proposedMatch?.igdbID,
+                title: row.proposedMatch?.name ?? row.sourceTitle,
+                releaseYear: row.releaseYear)
+        }
+    }
+
     func commit() {
         guard canCommit else { return }
         isCommitting = true
         commitError = nil
         let items = commitItems()
+        let custom = customCommit
+        let customRows = commitRows()
         // Snapshot the imported/updated split before commit (the PSN banner reads it).
         let psnBanner = isPSN ? psnSuccessMessage() : nil
         let store = staging
@@ -479,7 +549,9 @@ final class ImportReviewModel {
         let useCovers = useSourceCovers
         Task {
             do {
-                let result = try await store.commit(items)
+                let result: ImportCommitResult
+                if let custom { result = try await custom(customRows) }
+                else { result = try await store.commit(items) }
                 // File sources (Delicious) can apply their own covers to games left
                 // without one — a background step, never blocking the success banner.
                 if let after { await after(result, useCovers) }
@@ -827,6 +899,9 @@ private struct ImportReviewRowView: View {
                 if let reason = row.ignoreReason, row.bucket == .ignored {
                     Text(reason.label).font(.caption2).foregroundStyle(.secondary)
                 }
+            }
+            if let detail = model.rowDetailByID[row.externalID], !detail.isEmpty {
+                Text(detail).font(.caption2).foregroundStyle(.secondary)
             }
             unlinkedWarning
         }

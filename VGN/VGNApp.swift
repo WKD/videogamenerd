@@ -30,10 +30,12 @@ struct VGNApp: App {
                 .gogImportPresentation(env.gogImport)
                 .psnImportPresentation(env.psnImport)
                 .deliciousImportPresentation(env.deliciousImport)
+                .batoceraImportPresentation(env.batoceraImport)
                 .hltbFetchPresentation(env.hltb)
                 .igdbLinkPresentation(env.igdbLink)
                 .environment(\.igdbCatalogSearcher, env.catalogSearcher)
                 .environment(\.playNextEnvironment, env.playNext)
+                .environment(\.batoceraEnvironment, env.batocera)
             } else if let failure = env.failure {
                 DatabaseErrorView(failure: failure)
             } else {
@@ -51,6 +53,7 @@ struct VGNApp: App {
             GOGImportCommands()
             PSNImportCommands()
             DeliciousImportCommands()
+            BatoceraImportCommands()
             LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
         }
 

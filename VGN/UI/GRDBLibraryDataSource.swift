@@ -87,6 +87,13 @@ struct GRDBLibraryDataSource: LibraryDataSource {
         (try? await store.libraryStats()) ?? .empty
     }
 
+    func romCatalogueCount() -> AsyncStream<Int> {
+        // A SEPARATE observation over `rom_catalog` (same AppDatabase), so a catalogue sync
+        // never re-runs the library counts stream (PLAN §15 — the catalogue is invisible to
+        // the library).
+        Self.bridge(RomCatalogStore(store.database).countObservation())
+    }
+
     /// Republish a GRDB `ValueObservation` async sequence (itself `Sendable`) as
     /// a non-throwing `AsyncStream`. Cancelling the stream cancels the consuming
     /// task, which ends the observation — no leaks when the grid re-subscribes on

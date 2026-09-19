@@ -35,6 +35,12 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     /// Games with no time-to-beat estimate at all (the "Unmeasured" catch-all row).
     case unmeasured
 
+    /// The Batocera ROM catalogue browser (PLAN §15) — a "Batocera" section row after
+    /// "By Length", shown only when the catalogue is non-empty. It routes to a **separate**
+    /// view (``RomCatalogueView``), never the library grid, and never affects any library
+    /// count, stat, ranking or export.
+    case romCatalogue
+
     // A single platform, keyed by its slug (e.g. "ps5", "snes", "pc").
     case platform(String)
 
@@ -53,6 +59,7 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
         case .duel: return "duel"
         case .length(let shelf): return "length:\(shelf.id)"
         case .unmeasured: return "unmeasured"
+        case .romCatalogue: return "romCatalogue"
         case .platform(let slug): return "platform:\(slug)"
         }
     }

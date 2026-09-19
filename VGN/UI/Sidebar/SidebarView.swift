@@ -54,6 +54,21 @@ struct SidebarView: View {
 
             lengthSection
 
+            // "Batocera" — the ROM catalogue browser (PLAN §15). Shown ONLY when the
+            // catalogue is non-empty; its count comes from a SEPARATE observation
+            // (`vm.romCatalogueCount`), never the library counts, so 11 000 ROMs never touch
+            // any library number.
+            if vm.romCatalogueCount > 0 {
+                Section("Batocera") {
+                    taggedRow(.romCatalogue) {
+                        Label(Self.title(for: .romCatalogue), systemImage: Self.icon(for: .romCatalogue))
+                            .badge(vm.romCatalogueCount)
+                    }
+                    .appKitTooltip("Your Batocera ROMs — a browsable shelf that never counts "
+                                   + "in your library, stats or ranking. Add the ones you want.")
+                }
+            }
+
             if !platformGroups.isEmpty {
                 Section("Platforms") {
                     ForEach(platformGroups) { group in
@@ -186,6 +201,7 @@ struct SidebarView: View {
         case .duel: return "Duel"
         case .length(let shelf): return shelf.name
         case .unmeasured: return LengthShelf.unmeasuredName
+        case .romCatalogue: return "ROM Catalogue"
         case .platform(let slug): return PlatformLabels.info(slug)?.name ?? slug
         }
     }
@@ -204,6 +220,7 @@ struct SidebarView: View {
         case .duel: return "flag.2.crossed"
         case .length(let shelf): return shelf.symbol
         case .unmeasured: return LengthShelf.unmeasuredSymbol
+        case .romCatalogue: return "externaldrive"
         case .platform: return "gamecontroller"
         }
     }

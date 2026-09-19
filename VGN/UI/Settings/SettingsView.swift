@@ -26,6 +26,9 @@ final class SettingsModel {
     /// PlayStation account pane state (PLAN §13), injected once the app has built services.
     /// Nil in the test host / DB-failure path (the tab is omitted).
     var psnAccount: PSNAccountModel?
+    /// Batocera ROM-collection pane state (PLAN §15), injected once the app has built
+    /// services. Nil in the test host / DB-failure path (the tab is omitted).
+    var batoceraAccount: BatoceraSettingsModel?
     /// Called after credentials are saved or cleared so the enrichment coordinator
     /// can resume / idle (`coordinator.credentialsDidChange()`).
     var onCredentialsChanged: () -> Void = {}
@@ -138,6 +141,12 @@ struct SettingsView: View {
                     .settingsPane()
                     .accessibilityIdentifier("settings.tab.psn")
                     .tabItem { Label("PlayStation", systemImage: "gamecontroller.fill") }
+            }
+            if let batocera = model.batoceraAccount {
+                BatoceraSettingsTab(model: batocera)
+                    .settingsPane()
+                    .accessibilityIdentifier("settings.tab.batocera")
+                    .tabItem { Label("Batocera", systemImage: "externaldrive") }
             }
             PhotoScanSettingsTab()
                 .settingsPane()
