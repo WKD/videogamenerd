@@ -87,22 +87,44 @@ actor IGDBClient {
     /// otherwise fall back to the reverse lookup `where bundles = (id)`. Returns
     /// search-result DTOs; never fails hard on imperfect coverage (returns `[]`).
     func bundleMembers(of bundle: IGDBGameMetadata) async throws -> [IGDBSearchResult] {
-        if !bundle.bundleMemberIDs.isEmpty {
-            let members = try await games(ids: bundle.bundleMemberIDs)
-            return members.map(searchResult(from:))
-        }
-        return try await bundleMembers(ofBundleID: bundle.id)
+        // NOTE: a game's own `bundles` field lists the bundles it BELONGS TO (its
+        // parents) — e.g. "God of War Collection".bundles = ["God of War Trilogy"] —
+        // never its members. Members are only reachable through the reverse lookup.
+        try await bundleMembers(ofBundleID: bundle.id)
     }
 
-    /// Reverse bundle lookup by id: games that list `id` in their `bundles` relation.
+    /// Members of bundle `id`: the games that list `id` in their `bundles` relation
+    /// (reverse lookup). Nested bundles are expanded (a trilogy made of a two-game
+    /// collection + a third game yields the three games), add-on content is dropped,
+    /// results are de-duplicated and keep IGDB's order.
     func bundleMembers(ofBundleID id: Int64) async throws -> [IGDBSearchResult] {
+        var visited: Set<Int64> = [id]
+        return try await expandedMembers(ofBundleID: id, depth: 0, visited: &visited)
+    }
+
+    private func expandedMembers(
+        ofBundleID id: Int64, depth: Int, visited: inout Set<Int64>
+    ) async throws -> [IGDBSearchResult] {
         let query = IGDBQuery()
             .fields(IGDBFields.search)
             .filter("bundles = (\(id))")
             .limit(50)
         let data = try await requestData(endpoint: "games", body: query.build())
-        let dtos = try decode([IGDBGameDTO].self, from: data)
-        return dtos.map(searchResult(from:))
+        let direct = try decode([IGDBGameDTO].self, from: data).map(searchResult(from:))
+
+        var members: [IGDBSearchResult] = []
+        for member in direct where !visited.contains(member.id) {
+            visited.insert(member.id)
+            if member.gameType.isAddOnContent { continue }   // DLC / packs / updates / mods
+            if member.gameType == .bundle, depth < 3 {
+                let nested = try await expandedMembers(ofBundleID: member.id, depth: depth + 1, visited: &visited)
+                // A nested bundle IGDB knows nothing about stays as one entry.
+                members.append(contentsOf: nested.isEmpty ? [member] : nested)
+            } else {
+                members.append(member)
+            }
+        }
+        return members
     }
 
     /// Average completion times, batched by game id (PLAN §5.1 / §6.4).

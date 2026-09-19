@@ -72,4 +72,13 @@ enum IGDBGameType: Sendable, Equatable, Hashable {
         default: return false
         }
     }
+
+    /// Content that is not a game in its own right (DLC, packs, updates, mods) — never
+    /// listed as a compilation member.
+    var isAddOnContent: Bool {
+        switch self {
+        case .dlcAddon, .mod, .pack, .update: return true
+        default: return false
+        }
+    }
 }

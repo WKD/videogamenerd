@@ -34,11 +34,27 @@ struct GameCell: View {
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(game.year.map(String.init) ?? " ")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Year, then the platform(s) as small grey pills. Fixed height so every
+            // cell keeps the same size whether or not it has a year / platforms.
+            HStack(spacing: 4) {
+                if let year = game.year {
+                    Text(String(year))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(Self.platformPills(for: game.platformIDs), id: \.self) { label in
+                    Text(label)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                        .fixedSize()
+                }
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, minHeight: 16, maxHeight: 16, alignment: .leading)
+            .clipped()
         }
         .padding(6)
         .background(
@@ -70,6 +86,19 @@ struct GameCell: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(game.title)
         .accessibilityValue(a11yStateValue)
+    }
+
+    /// Labels for the platform pills shown after the year: short names, de-duplicated,
+    /// in the order given; at most two are spelled out, the rest collapse into "+n"
+    /// (a 140 pt cell has room for the year and about two pills).
+    static func platformPills(for platformIDs: [String]) -> [String] {
+        var shorts: [String] = []
+        for id in platformIDs {
+            let label = PlatformLabels.short(id)
+            if !shorts.contains(label) { shorts.append(label) }
+        }
+        guard shorts.count > 2 else { return shorts }
+        return Array(shorts.prefix(2)) + ["+\(shorts.count - 2)"]
     }
 
     /// The tile's visual-only state as a spoken/queried value (PLAN §8 badges).

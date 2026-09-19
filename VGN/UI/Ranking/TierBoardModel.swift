@@ -103,15 +103,30 @@ final class TierBoardModel {
     private func subscribeLive() {
         guard liveTasks.isEmpty else { return }
         liveTasks.append(Task { [backend] in
+            // Treat an emission as a "something changed" signal and re-read, rather than
+            // adopting its payload: an emission produced BEFORE a local move can be
+            // delivered AFTER that move's reconcile, and adopting it would overwrite the
+            // fresh board with a stale one (seen as a flaky test and, in the app, as a
+            // tile snapping back until the next emission).
             for await board in backend.tierBoardStream() {
                 self.latestBoard = board
-                if self.inFlight == 0 { self.rows = board }
+                guard self.inFlight == 0 else { continue }
+                if let fresh = try? await backend.tierBoardOnce() {
+                    if self.inFlight == 0 { self.rows = fresh; self.latestBoard = fresh }
+                } else {
+                    self.rows = board
+                }
             }
         })
         liveTasks.append(Task { [backend] in
             for await tray in backend.unrankedGamesStream() {
                 self.latestTray = tray
-                if self.inFlight == 0 { self.unrankedTray = tray }
+                guard self.inFlight == 0 else { continue }
+                if let fresh = try? await backend.unrankedPlayedGames() {
+                    if self.inFlight == 0 { self.unrankedTray = fresh; self.latestTray = fresh }
+                } else {
+                    self.unrankedTray = tray
+                }
             }
         })
     }

@@ -111,12 +111,17 @@ final class TheTopModel {
     private func subscribeLive() {
         guard liveTask == nil else { return }
         liveTask = Task { [backend, filter] in
+            // An emission is a "something changed" signal: re-read rather than adopt its
+            // payload, which may predate a local move whose reconcile already ran (same
+            // stale-overwrite race as the Tier Board).
             for await value in backend.theTopStream(filter: filter) {
                 self.latestRows = value
-                if self.inFlight == 0 {
-                    self.rows = value
-                    self.scores = (try? await backend.derivedScores()) ?? self.scores
-                }
+                guard self.inFlight == 0 else { continue }
+                let fresh = (try? await backend.theTopOnce(filter: filter)) ?? value
+                guard self.inFlight == 0 else { continue }
+                self.rows = fresh
+                self.latestRows = fresh
+                self.scores = (try? await backend.derivedScores()) ?? self.scores
             }
         }
     }
