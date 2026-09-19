@@ -26,10 +26,13 @@ struct RecognitionAccuracyHarness {
         var model: String?
         var maxConcurrent: Int
         var dryRun: Bool = false
+        /// Experimental tile geometry (`tile:1400x1500` or `tile:1400x1500x300`);
+        /// nil = the shipping `ShelfTilerConfig.default`.
+        var tiler: ShelfTilerConfig? = nil
     }
 
     /// Read `<worktree>/.build/vgn-live-scan`. Absent → nil (skip). Optional lines:
-    /// `photos:IMG_3686,IMG_3687`, `model:opus`, `concurrent:3`.
+    /// `photos:IMG_3686,IMG_3687`, `model:opus`, `concurrent:3`, `tile:1400x1500[x300]`.
     static func liveConfig() -> Config? {
         let sentinel = worktreeRoot().appendingPathComponent(".build/vgn-live-scan")
         guard let text = try? String(contentsOf: sentinel, encoding: .utf8) else {
@@ -40,6 +43,7 @@ struct RecognitionAccuracyHarness {
         var model: String? = nil
         var concurrent = 3
         var dryRun = false
+        var tiler: ShelfTilerConfig? = nil
         for line in text.split(separator: "\n") {
             let parts = line.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
             guard parts.count == 2, !parts[1].isEmpty else { continue }
@@ -48,10 +52,17 @@ struct RecognitionAccuracyHarness {
             case "model": model = parts[1]
             case "concurrent": concurrent = Int(parts[1]) ?? 3
             case "dryrun": dryRun = parts[1] == "1"
+            case "tile":
+                let dims = parts[1].lowercased().split(separator: "x").compactMap { Int($0) }
+                if dims.count >= 2 {
+                    var custom = ShelfTilerConfig(tileWidth: dims[0], maxTileHeight: dims[1])
+                    if dims.count >= 3 { custom.overlap = dims[2] }
+                    tiler = custom
+                }
             default: break
             }
         }
-        return Config(photos: photos, model: model, maxConcurrent: concurrent, dryRun: dryRun)
+        return Config(photos: photos, model: model, maxConcurrent: concurrent, dryRun: dryRun, tiler: tiler)
     }
 
     static let allPhotos = ["IMG_3683", "IMG_3684", "IMG_3685", "IMG_3686", "IMG_3687"]
@@ -94,19 +105,23 @@ struct RecognitionAccuracyHarness {
                 maxConcurrent: config.maxConcurrent
             ) { tileID, metrics in costs.record(tileID: tileID, metrics: metrics) }
 
-        let pipeline = ScanPipeline(recognizer: recognizer, searcher: igdb, catalog: catalog)
+        var pipeline = ScanPipeline(recognizer: recognizer, searcher: igdb, catalog: catalog)
+        if let tiler = config.tiler {
+            pipeline.tiler = ShelfTiler(config: tiler)
+            print("HARNESS: experimental tiles \(tiler.tileWidth)x\(tiler.maxTileHeight) overlap \(tiler.overlap)")
+        }
         let truth = try loadTruth()
 
         // Only a full run may replace the committed report; subset runs (diagnostics)
         // go to the git-ignored build folder so they never clobber it.
-        let isFullRun = Set(config.photos) == Set(Self.allPhotos)
+        let isFullRun = Set(config.photos) == Set(Self.allPhotos) && config.tiler == nil
         let out: URL
         if isFullRun {
             out = docsDir().appendingPathComponent("recognition-accuracy.md")
         } else {
             let dir = worktreeRoot().appendingPathComponent(".build/scan-accuracy", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            out = dir.appendingPathComponent("recognition-accuracy-\(config.photos.joined(separator: "+")).md")
+            out = dir.appendingPathComponent("recognition-accuracy-\(config.photos.joined(separator: "+"))\(config.tiler.map { "-tile\($0.tileWidth)x\($0.maxTileHeight)" } ?? "").md")
         }
         var reports: [PhotoReport] = []
         let overallStart = Date()

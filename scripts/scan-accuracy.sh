@@ -13,6 +13,8 @@
 #   scripts/scan-accuracy.sh IMG_3686 IMG_3687      # a subset
 #   VGN_SCAN_MODEL=opus scripts/scan-accuracy.sh IMG_3686
 #   VGN_SCAN_CONCURRENT=2 scripts/scan-accuracy.sh
+#   VGN_SCAN_TILE=1400x1500 scripts/scan-accuracy.sh IMG_3683   # experimental tile size
+#                                     (WxH or WxHxOverlap; report goes to .build/scan-accuracy/)
 #
 # Requires: `claude` installed and logged in; IGDB creds in ~/.config/vgn/igdb.env;
 # the original photos in ../samples (git-ignored).
@@ -31,6 +33,8 @@ xcodebuild -project "$WT/VGN.xcodeproj" -scheme VGN -destination 'platform=macOS
   if [ "$#" -gt 0 ]; then printf 'photos:%s\n' "$(echo "$@" | tr ' ' ',')"; fi
   if [ -n "$VGN_SCAN_MODEL" ]; then printf 'model:%s\n' "$VGN_SCAN_MODEL"; fi
   if [ -n "$VGN_SCAN_CONCURRENT" ]; then printf 'concurrent:%s\n' "$VGN_SCAN_CONCURRENT"; fi
+  if [ -n "$VGN_SCAN_TILE" ]; then printf 'tile:%s\n' "$VGN_SCAN_TILE"; fi
+  if [ -n "$VGN_SCAN_DRYRUN" ]; then printf 'dryrun:%s\n' "$VGN_SCAN_DRYRUN"; fi
 } > "$SENTINEL"
 trap 'rm -f "$SENTINEL"' EXIT INT TERM
 
