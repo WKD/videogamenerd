@@ -239,6 +239,12 @@ final class AppEnvironment {
             catalog: searcher,
             catalogCache: built?.graph.catalogCache,   // instant/offline cached rows
             library: LiveLibraryAdder(store: store),
+            // Sample / seeded modes must not touch the owner's real UserDefaults:
+            // the sticky owned/played/format flags stay in-memory there (a UI smoke
+            // run would otherwise flip the owner's real Quick Add stickiness).
+            preferences: mode == .live
+                ? UserDefaultsQuickAddPreferences()
+                : InMemoryQuickAddPreferences(),
             platforms: PlatformLabels.all
         )
         quickAdd.onOpenInspector = { [weak vm] id in
