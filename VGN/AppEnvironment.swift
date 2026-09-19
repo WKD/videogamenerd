@@ -76,7 +76,7 @@ final class AppEnvironment {
         }
 
         let mode = LaunchMode.current
-        if mode == .live { PendingRestore.applyIfScheduled() }
+        if mode == .live { PendingRestore.live.applyIfScheduled() }
         do {
             let database = try mode.usesInMemoryDB
                 ? AppDatabase.inMemory()
@@ -102,7 +102,7 @@ final class AppEnvironment {
             )
 
             bootstrap(store: store, database: database, mode: mode)
-            if mode == .live, let outcome = PendingRestore.consumeResult() {
+            if mode == .live, let outcome = PendingRestore.live.consumeResult() {
                 vm.showBanner(outcome.message, kind: outcome.failed ? .error : .info)
             }
 
