@@ -8,7 +8,7 @@ private struct ScoresStubDataSource: LibraryDataSource {
     var base: PreviewLibraryDataSource
     var scores: [Int64: DerivedScoreValue]
 
-    func sidebarCounts() -> AsyncStream<SidebarCounts> { base.sidebarCounts() }
+    func sidebarCounts(pace: PlayPace) -> AsyncStream<SidebarCounts> { base.sidebarCounts(pace: pace) }
     func platformsInUse() -> AsyncStream<[PlatformInfo]> { base.platformsInUse() }
     func tiers() -> AsyncStream<[TierInfo]> { base.tiers() }
     func genresInUse() -> AsyncStream<[String]> { base.genresInUse() }

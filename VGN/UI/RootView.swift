@@ -171,6 +171,7 @@ struct RootView: View {
             tierMenu
             statusMenu
             formatMenu
+            copiesMenu
             playtimeMenu
             platformMenu
             sortMenu
@@ -299,7 +300,27 @@ struct RootView: View {
         }
     }
 
-    // Playtime bands (< 10 h … > 200 h) over effective playtime, falling back to the
+    // "Owns multiple copies" — games I own in more than one copy or format
+    // (≥ 2 owned products). Its own facet, ANDed across kinds (owner request 2026-09-19).
+    private var copiesMenu: some View {
+        Menu {
+            Toggle("Owns multiple copies", isOn: flag(\.multipleCopies))
+                .help("Games you own more than once — several copies or formats (e.g. physical + digital).")
+            if vm.filter.multipleCopies {
+                Divider()
+                Button("Clear") {
+                    var f = vm.filter
+                    f.multipleCopies = false
+                    vm.setFilter(f)
+                }
+            }
+        } label: {
+            Label("Copies", systemImage: "square.on.square")
+                .symbolVariant(vm.filter.multipleCopies ? .fill : .none)
+        }
+    }
+
+    // Playtime bands (< 4 h … > 200 h) over effective playtime, falling back to the
     // best IGDB estimate (main → rushed → completionist) when unplayed; plus
     // "No Estimate" for games with no time info at all (PLAN §6.4/§8, §5.3).
     private var playtimeMenu: some View {

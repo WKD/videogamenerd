@@ -29,6 +29,7 @@ struct VGNApp: App {
                 .photoScanPresentation(env.photoScan)
                 .gogImportPresentation(env.gogImport)
                 .deliciousImportPresentation(env.deliciousImport)
+                .hltbFetchPresentation(env.hltb)
                 .environment(\.playNextEnvironment, env.playNext)
             } else if let failure = env.failure {
                 DatabaseErrorView(failure: failure)

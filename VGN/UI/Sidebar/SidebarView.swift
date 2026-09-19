@@ -12,9 +12,15 @@ struct SidebarView: View {
     /// The background-enrichment status footer (PLAN §9); nil in previews.
     var enrichment: EnrichmentStatusModel?
 
+    /// Whether the "By Length" pace popover is open (view-local UI state).
+    @State private var showPacePopover = false
+
     private var platformGroups: [SidebarPlatformGrouping.Group] {
         SidebarPlatformGrouping.groups(platforms: vm.platforms, counts: vm.counts)
     }
+
+    /// The current pace-derived shelf edges (for row subtitles + tooltips).
+    private var lengthBounds: LengthBounds { LengthShelf.bounds(for: vm.playPace) }
 
     var body: some View {
         List(selection: vm.sidebarSelectionBinding) {
@@ -35,6 +41,8 @@ struct SidebarView: View {
                     }
                 }
             }
+
+            lengthSection
 
             if !platformGroups.isEmpty {
                 Section("Platforms") {
@@ -67,6 +75,66 @@ struct SidebarView: View {
                 SidebarStatsBar(vm: vm)
             }
         }
+    }
+
+    // MARK: "By Length" section (PLAN §8)
+
+    /// Five smart lists grouping games by their time-to-beat *estimate* (never the
+    /// owner's playtime — see ``LengthShelf``), placed after RANKINGS and before
+    /// PLATFORMS. Shelves stay visible when empty (dimmed); the "Unmeasured" catch-all
+    /// shows only when it has games. The header carries the weekly-play-pace control.
+    @ViewBuilder
+    private var lengthSection: some View {
+        Section {
+            ForEach(SidebarSelection.lengthShelves) { sel in
+                if case .length(let shelf) = sel {
+                    taggedRow(sel) { lengthRow(shelf) }
+                        .appKitTooltip(shelf.tooltip(pace: vm.playPace, bounds: lengthBounds))
+                }
+            }
+            if (vm.counts.count(for: .unmeasured) ?? 0) > 0 {
+                taggedRow(.unmeasured) {
+                    Label(LengthShelf.unmeasuredName, systemImage: LengthShelf.unmeasuredSymbol)
+                        .badge(badge(for: .unmeasured))
+                }
+                .appKitTooltip(LengthShelf.unmeasuredTooltip)
+            }
+        } header: {
+            HStack {
+                Text(LengthShelf.sectionHeader)
+                Spacer(minLength: 4)
+                PaceHeaderButton(label: vm.paceModel.headerLabel, isCTA: !vm.hasChosenPace) {
+                    showPacePopover = true
+                }
+            }
+            .popover(isPresented: $showPacePopover, arrowEdge: .trailing) {
+                PaceEditor(model: vm.paceModel)
+                    .padding(16)
+                    .frame(width: 300)
+            }
+        }
+    }
+
+    /// One shelf row: symbol · literary name · the hours as caption · live count.
+    /// Empty shelves stay visible but dimmed (the vocabulary is fixed, unlike platforms).
+    private func lengthRow(_ shelf: LengthShelf) -> some View {
+        let count = vm.counts.count(for: .length(shelf)) ?? 0
+        return Label {
+            // Baseline-aligned: a caption centred against the larger name floats too high.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(shelf.name)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text(shelf.subtitle(bounds: lengthBounds))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        } icon: {
+            Image(systemName: shelf.symbol)
+        }
+        .badge(badge(for: .length(shelf)))
+        .opacity(count == 0 ? 0.45 : 1)
     }
 
     /// The single choke point where a row is tagged. The tag is always exactly
@@ -103,6 +171,8 @@ struct SidebarView: View {
         case .tierBoard: return "Tier Board"
         case .theTop: return "The Top"
         case .duel: return "Duel"
+        case .length(let shelf): return shelf.name
+        case .unmeasured: return LengthShelf.unmeasuredName
         case .platform(let slug): return PlatformLabels.info(slug)?.name ?? slug
         }
     }
@@ -118,6 +188,8 @@ struct SidebarView: View {
         case .tierBoard: return "square.stack.3d.up"
         case .theTop: return "trophy"
         case .duel: return "flag.2.crossed"
+        case .length(let shelf): return shelf.symbol
+        case .unmeasured: return LengthShelf.unmeasuredSymbol
         case .platform: return "gamecontroller"
         }
     }

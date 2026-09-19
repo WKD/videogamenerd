@@ -101,7 +101,8 @@ Requires `xcode-select -s /Applications/Xcode.app`.
 - `VGN/Database/` — GRDB. `AppDatabase` (pool/queue factories + migrator),
   `Migrations` (**one closure per version, lane A only** — v1 is the whole PLAN §4
   schema; v2 FTS/sort rebuild; v3 `rom` format; v4 Play Next tables; v5 shared importer
-  cache `import_cache`/`import_cache_rejects` + `products.external_id` idempotency, GOG/PSN §14.2). `LibraryStore`
+  cache `import_cache`/`import_cache_rejects` + `products.external_id` idempotency, GOG/PSN §14.2;
+  v6 `games.hltb_id` (HLTB fallback §5.3) + `games.origin`, backfilled from each game's oldest product). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`
@@ -186,6 +187,7 @@ strip `Authorization`/`Client-ID` and tokens from anything recorded):
 - `record-igdb-fixtures.swift` — refresh the IGDB search/game/bundle/time-to-beat JSON in
   `VGNTests/Fixtures/`.
 - `record-libretro-fixture.swift` / `record-vision-fixture.swift` — libretro tree + Vision OCR fixtures.
+- `record-hltb-fixtures.swift` — bounded (≤ 12 requests, ≥ 2 s apart, stop on first unexpected response) HowLongToBeat recorder → `VGNTests/Fixtures/hltb-*.json` (PLAN §5.3, `docs/hltb.md`). No credentials.
 - `crop-tiles.swift` — regenerate shelf tiles from the (git-ignored) originals in `../samples/` (see `docs/fixtures.md`).
 - `smoke-live.swift` — one live IGDB round-trip to sanity-check credentials.
 - `scan-accuracy.sh` — arms the gated photo-scan accuracy harness (`docs/recognition-accuracy.md`); inert otherwise.

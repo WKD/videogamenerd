@@ -23,6 +23,12 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     case theTop
     case duel
 
+    // "By Length" smart lists (PLAN §8) — games grouped by their time-to-beat
+    // *estimate*, in the section after RANKINGS and before PLATFORMS.
+    case length(LengthShelf)
+    /// Games with no time-to-beat estimate at all (the "Unmeasured" catch-all row).
+    case unmeasured
+
     // A single platform, keyed by its slug (e.g. "ps5", "snes", "pc").
     case platform(String)
 
@@ -38,6 +44,8 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
         case .tierBoard: return "tierBoard"
         case .theTop: return "theTop"
         case .duel: return "duel"
+        case .length(let shelf): return "length:\(shelf.id)"
+        case .unmeasured: return "unmeasured"
         case .platform(let slug): return "platform:\(slug)"
         }
     }
@@ -47,6 +55,10 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
 
     /// The ranking destinations under the "Rankings" header, in order.
     static let rankingViews: [SidebarSelection] = [.tierBoard, .theTop, .duel]
+
+    /// The "By Length" shelves under the "By Length" header, in order (the
+    /// "Unmeasured" catch-all is shown separately, only when it has games).
+    static let lengthShelves: [SidebarSelection] = LengthShelf.allCases.map(SidebarSelection.length)
 
     /// The platform slug when this selection is a platform, else nil.
     var platformSlug: String? {

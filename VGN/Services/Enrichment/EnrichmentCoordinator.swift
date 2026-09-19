@@ -304,15 +304,20 @@ actor EnrichmentCoordinator {
                 continue
             }
             // Only fill when empty (don't clobber a manual/PSN value), unless force.
-            // 'igdb' source marks "tried" even when there is no data, so the game is
-            // not re-enqueued forever.
+            // `ttb_source` is tagged 'igdb' **only when IGDB actually supplied a
+            // value** — a game IGDB has no time for keeps `ttb_source = NULL` (so it
+            // is not mislabelled as sourced-from-IGDB, and the HLTB fallback / "No
+            // Estimate" filter see it as truly empty). It is not re-enqueued forever
+            // because the completed `timeToBeat` job row still satisfies the
+            // enqueue-missing NOT EXISTS guard.
             if forced.contains(job.gameID) || row.ttbSource == nil {
                 let ttb = ttbByIGDB[igdbID]
+                let hasAny = (ttb?.hastily ?? 0) > 0 || (ttb?.normally ?? 0) > 0 || (ttb?.completely ?? 0) > 0
                 let patch = MetadataPatch(
                     ttbHastilyS: ttb?.hastily,
                     ttbNormallyS: ttb?.normally,
                     ttbCompletelyS: ttb?.completely,
-                    ttbSource: "igdb"
+                    ttbSource: hasAny ? "igdb" : nil
                 )
                 try? await libraryStore.updateMetadata(gameID: job.gameID, patch)
             }

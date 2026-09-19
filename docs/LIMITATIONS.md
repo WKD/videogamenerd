@@ -48,6 +48,12 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 - Compilation members keep IGDB's order (e.g. Mass Effect 2 · 1 · 3); reorder in the editor. [later: sort by release date on creation]
 - Grid query ≈ 33 ms at 2 000 games (DEBUG), one full re-query per emission, no paging. [watch]
 - **Mark Played As** (wave 7, ⇧M / context menu / Game menu): the ⇧M shortcut is displayed as **text only** ("Mark as Finished   ⇧M"), not a SwiftUI menu key equivalent — a shift-only equivalent would register globally and steal a capital "M" typed in the search field / Quick Add. The key itself is handled by the pure `GridKeyRouter`, so it is unit-tested; that the menus *render* the hint and that ⇧M does not leak into text fields is window-only (see `docs/ACCEPTANCE.md`). Selection reselection after a Backlog mark is keyed to the next grid observation emission (fine for a single window; an unrelated emission arriving first would cancel the plan). [watch]
+- **BY LENGTH shelves + weekly play pace** (wave 9, lane C):
+  - The pace store defaults to `UserDefaultsPlayPacePreferences` over `AppPreferences.defaults` (a throw-away suite under the test host; real `.standard` otherwise). **Sample mode is not special-cased**, so a pace set while running `-VGNSampleData` persists to the real `.standard` domain — harmless (a UI preference, not library data), but if the owner wants sample mode isolated, `AppEnvironment` (off-limits this wave) should pass an `InMemoryPlayPacePreferences()` into `LibraryViewModel` and Settings for the sample `LaunchMode`. [wiring, AppEnvironment]
+  - The sidebar popover and Settings ▸ General share the **same store**, so a change in one shows up in the other on its **next open** (`reload`), not live across the two open windows simultaneously — full live cross-window sync was not built. [watch]
+  - In **sample/preview mode** every "By Length" shelf count reads 0 and Unmeasured stays hidden, because `GameSummary` carries no time-to-beat estimate; the in-memory `LibraryFilterEvaluator` treats a length scope as "no constraint" there. The live GRDB path bands for real. [by design]
+  - The pace is exposed as `vm.playPace` for a **later Play Next alignment** but nothing consumes it yet: the recommendation engine's time-fit still uses its own bracket, not the weekly pace. A follow-up could seed the default Play Next bracket / weight time-fit from `playPace`. [later — did NOT touch `VGN/UI/PlayNext/**` or `VGN/Recommendation/**`]
+  - Adding the section changes the existing **sidebar snapshot references** (`snap-library-sidebar@light/dark.png`); per the brief they were **not** re-recorded — the snapshot suite (opt-in, not the default gate) will flag them until a hardening lane re-records. [handoff]
 
 ### Library Stats window (wave 7, lane D)
 - **Clicking a chart bar does nothing** in v1. Possible follow-up: click-through from a bar (platform / decade / tier / genre) to the main grid pre-filtered to that slice. [later]
@@ -128,10 +134,32 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   then waits under *New* for manual review. A configured but flaky IGDB lookup can't sink a sync
   (`ResilientImportMatcher` turns a lookup error into "no match").
 
+### HowLongToBeat fallback (wave 9, lane A — PLAN §5.3)
+Fills only the *gaps* IGDB leaves, on demand (inspector ▸ Fetch from HowLongToBeat; Game ▸
+Fetch Missing Time Estimates…). Built and tested **entirely on synthetic fixtures** from the
+reference client's documented shapes — **no `howlongtobeat.com` request was made by this lane**.
+- **The request shape is an assumption.** Ported from `ScrappyCocco/HowLongToBeat-PythonAPI`
+  (master, 2026-09-19) and **isolated in one file** (`VGN/Services/TimeToBeat/HLTB/HLTBEndpoint.swift`),
+  cross-checked with `ckatzorke/howlongtobeat`. The **endpoint discovery** (finding the rotating
+  `/api/<word>/<token>` path by scraping the Next.js app chunk and re-assembling the token from
+  string literals) is the **first thing that will break** and the first to re-verify on the real
+  site. Symptom of a break: a clean `schemaMismatch` / discovery-failure stop, nothing corrupted;
+  the feature degrades to the "Open on HowLongToBeat" link. Fix in that one file, then re-record
+  fixtures with `scripts/record-hltb-fixtures.swift` (≤ 12 requests). See `docs/hltb.md`.
+- **`ttb_source = 'igdb'` on empty games:** the enrichment write no longer tags a game
+  `ttb_source = 'igdb'` when IGDB returned no time (it stays `NULL`, so the value is not
+  mislabelled). **Existing rows were not backfilled** — a library enriched before wave 9 may still
+  carry `ttb_source = 'igdb'` with no times. Harmless: the "no estimate" scope keys on the three
+  value columns, not the source, so the fallback still reaches those games.
+- **v6 migration adds `games.hltb_id` and `games.origin`** (the latter an owner request: the
+  source a game *first* entered by, backfilled from the oldest product, else `manual`). `origin` is
+  surfaced only in the inspector footer + export; it is set once at creation and never changed by a
+  later copy.
+
 ## 5. Out of scope for now [later]
 Filed ideas (PLAN §7b "Ideas filed for later", owner 2026-09-19): a **personal pace factor** that inflates advertised completion times from my own finished games (median of mine ÷ advertised), applied to Play Next, the BY LENGTH shelves and the backlog-hours stat; and **"finish what you started"** pools in Play Next (*almost there* — most of the estimate already played; *worth another try* — abandoned early but a strong taste match). Both wait for per-game playtime, i.e. the PSN import.
 
-PSN import (M7, fully planned in PLAN §13) · Polish M9 (Liquid Glass touches, Dark/Tinted icon via Icon Composer — masters in `design/app-icon/`, Top export as image, richer empty states) · HowLongToBeat scraping (the "Open on HowLongToBeat" link exists) · TheGamesDB covers · `ClaudeAPIRecognizer` · editable tier labels/colours (owner: not now) · adjustable snooze.
+PSN import (M7, fully planned in PLAN §13) · Polish M9 (Liquid Glass touches, Dark/Tinted icon via Icon Composer — masters in `design/app-icon/`, Top export as image, richer empty states) · TheGamesDB covers · `ClaudeAPIRecognizer` · editable tier labels/colours (owner: not now) · adjustable snooze.
 
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
