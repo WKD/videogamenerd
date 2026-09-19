@@ -32,7 +32,7 @@ struct TierChip: View {
                     .strokeBorder(.white.opacity(0.35), lineWidth: 0.5)
             )
             .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
-            .help(showsLabelOnHover
+            .appKitTooltip(showsLabelOnHover
                   ? TierChip.hoverText(letter: letter, label: label, labels: tierLabels, score: score)
                   : "")
     }

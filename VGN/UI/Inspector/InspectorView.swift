@@ -191,7 +191,8 @@ private struct SingleGameInspector: View {
     private var tierSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             TierPickerRow(tiers: vm.tiers, current: detail.tierLetter,
-                          score: vm.selectedScoreLine?.score) { letter in
+                          score: vm.selectedScoreLine?.score,
+                          isRankable: detail.played) { letter in
                 vm.setTier(letter, for: ids)
             }
             .accessibilityIdentifier(A11yID.inspectorTierChip)
@@ -206,7 +207,7 @@ private struct SingleGameInspector: View {
     @ViewBuilder
     private var scoreLineView: some View {
         if !detail.played {
-            Text("Only played games can be ranked.")
+            Text("Only played games can be ranked — mark it as played first.")
                 .font(.caption).foregroundStyle(.secondary)
         } else if detail.tierID == nil {
             Text("Unranked — press ⇧S…⇧F to place it in a tier.")
@@ -413,6 +414,10 @@ private struct TierPickerRow: View {
     /// The current game's derived score, shown in the tooltip of the button for
     /// the game's *current* tier (nil for the multi-selection picker).
     var score: DerivedScoreValue? = nil
+    /// False for a game that is not played: only played games carry a tier, so the
+    /// chips are shown for reference (with their tooltips) but are NOT buttons — no
+    /// press animation that suggests something happened.
+    var isRankable: Bool = true
     let onPick: (String?) -> Void
 
     var body: some View {
@@ -420,30 +425,37 @@ private struct TierPickerRow: View {
             Text("Tier").font(.headline)
             HStack(spacing: 6) {
                 ForEach(tiers) { tier in
-                    Button {
-                        onPick(tier.letter)
-                    } label: {
-                        // The chip's own hover help is suppressed here so the single
-                        // tooltip lives on the outermost hit-testable view (the Button);
-                        // two nested `.help`s never fire reliably on macOS.
+                    let tip = TierChip.hoverText(letter: tier.letter, label: tier.label, labels: [:],
+                                                 score: tier.letter == current ? score : nil)
+                    if isRankable {
+                        Button {
+                            onPick(tier.letter)
+                        } label: {
+                            // One tooltip only, on the outermost view (the chip's own is off).
+                            TierChip(letter: tier.letter, colorHex: tier.colorHex, size: 26,
+                                     showsLabelOnHover: false)
+                                .opacity(current == nil || current == tier.letter ? 1 : 0.4)
+                        }
+                        .buttonStyle(.plain)
+                        .appKitTooltip(tip)
+                    } else {
                         TierChip(letter: tier.letter, colorHex: tier.colorHex, size: 26,
                                  showsLabelOnHover: false)
-                            .opacity(current == nil || current == tier.letter ? 1 : 0.4)
+                            .opacity(0.35)
+                            .appKitTooltip(tip + " — mark the game as played to rank it")
+                    }
+                }
+                if isRankable {
+                    Button {
+                        onPick(nil)
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    // Only the game's current tier carries its derived score.
-                    .help(TierChip.hoverText(letter: tier.letter, label: tier.label, labels: [:],
-                                             score: tier.letter == current ? score : nil))
+                    .appKitTooltip("Clear tier")
                 }
-                Button {
-                    onPick(nil)
-                } label: {
-                    Image(systemName: "xmark.circle")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Clear tier")
             }
         }
     }
