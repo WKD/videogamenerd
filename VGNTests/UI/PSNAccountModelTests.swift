@@ -115,9 +115,10 @@ struct PSNAccountModelTests {
         let gameList = model.dataSets.first { $0.id == PSNEndpoint.gameList }!
         model.requestForceRefresh(gameList)
         model.confirmForceRefresh()
-        await poll(until: { backend.forceRefreshCalls.count == 1 })
+        // `onSyncRequested` fires strictly after the awaited forceRefresh, so polling on
+        // `synced` guarantees the call was recorded too (no ordering race).
+        await poll(until: { synced })
         #expect(backend.forceRefreshCalls == [PSNEndpoint.gameList])
-        #expect(synced)
     }
 
     @Test(.timeLimit(.minutes(1)))

@@ -331,6 +331,11 @@ private struct SingleGameInspector: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(copyPrimaryLine(copy)).font(.callout)
+                    if let sub = copy.subscription {
+                        // PLAN §13.3: a subscription copy (PS Plus) leaves with the membership.
+                        Label("\(sub.label) — expires with the subscription", systemImage: "plus.circle.fill")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     if copy.isCompilation {
                         // PLAN §8: "Part of *Metal Gear Solid: The Legacy Collection* (PS3) · n games".
                         (Text("Part of ")

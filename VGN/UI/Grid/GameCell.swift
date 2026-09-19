@@ -133,6 +133,7 @@ struct GameCell: View {
         if game.owned { parts.append("Owned") }
         if game.played { parts.append("Played") }
         if game.hasROM { parts.append("ROM") }
+        if game.ownedOnlyViaSubscription { parts.append("PS Plus") }
         return parts.isEmpty ? "Unranked" : parts.joined(separator: ", ")
     }
 
@@ -202,6 +203,9 @@ struct GameCell: View {
                 if game.hasROM {
                     statusBadge(system: "memorychip.fill", tint: .purple, help: "Owned as a ROM")
                 }
+                if game.ownedOnlyViaSubscription {
+                    psPlusBadge
+                }
                 Spacer(minLength: 0)
             }
         }
@@ -215,6 +219,18 @@ struct GameCell: View {
             .padding(4)
             .background(tint.opacity(0.9), in: Circle())
             .help(help)
+    }
+
+    /// PS Plus badge (PLAN §13.3): a PlayStation-blue heavy-rounded "+" in a yellow circle,
+    /// the owned/played badge family's size, shown only for a game owned solely through PS
+    /// Plus (at risk when the subscription lapses). `appKitTooltip` so the note is visible.
+    private var psPlusBadge: some View {
+        Text("+")
+            .font(.system(size: 11, weight: .heavy, design: .rounded))
+            .foregroundStyle(Color(hex: "#0070D1") ?? .blue)
+            .frame(width: 17, height: 17)
+            .background(Color(hex: "#FFC300") ?? .yellow, in: Circle())
+            .appKitTooltip("PS Plus — expires with the subscription")
     }
 }
 
