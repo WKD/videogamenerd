@@ -413,12 +413,17 @@ Every PSN response is validated before anything else happens to it. **Valid ⇒ 
 | Data set | Endpoint (host `m.np.playstation.com` unless noted) | Gives | Becomes |
 |---|---|---|---|
 | Profile | `/api/userProfile/v1/internal/users/me/profiles` (1 request) | account id, online id | sanity check that the token is mine; shown in Settings |
-| Trophy titles PS4/PS5 | `/api/trophy/v1/users/me/trophyTitles?npServiceName=trophy2` (paged, limit 800) | title, platform, earned counts, last update | `import_titles` rows, signal **played** iff ≥ 1 earned trophy; only title, platform, last-activity kept |
+| Trophy titles PS4/PS5 | `/api/trophy/v1/users/me/trophyTitles?npServiceName=trophy2` (paged, limit 800) | title, platform, earned counts, last update | `import_titles` rows; **every** title is kept, including 0 % ones (a game I merely launched is on this list) — signal **played** when progress > 0 %, **launched** at 0 %; only title, platform, progress % and last-activity kept |
 | Trophy titles PS3/Vita | same with `npServiceName=trophy` | same | same — the only PS3/Vita history there is |
 | Game list | `/api/gamelist/v2/users/me/titles` (paged, limit 200) | play duration (ISO-8601), play count, first/last played, concept + title ids — PS4/PS5 only | `play_duration`, first/last played; signal **played** |
 | Purchases | web GraphQL `getPurchasedGameList` on `web.np.playstation.com` (persisted-query hash — **the fragile one**) | entitlements, product name, platform, PS Plus-claimed vs bought | signal **owned** (digital); Plus claims excluded by default |
 
 **About the "800"** — it is the *page size* of the trophy-**titles** list: one entry per **game** I have trophies in (title, platform, earned counts), not per trophy. A library of more than 800 games simply costs a second page (`offset=800`); individual trophies are never fetched, stored or shown — VGN only needs "≥ 1 earned trophy ⇒ played". So there is no coverage gap to fill, and **PSNProfiles scraping is not needed and not planned** *(decided 2026-09-19)*: it would add a Cloudflare-protected third party whose terms forbid scraping, only works for public profiles, and returns the same title list.
+
+**Played but not owned is a first-class result** *(2026-09-19)*. The trophy list is my complete launch history, so it is also the record of games that were **lent to me or that I no longer have**: they import as *played, not owned* (the data model has always allowed that) and never need a copy. In the review sheet:
+- progress > 0 % → **Played**, pre-ticked;
+- progress = 0 % → **Launched, 0 %** — its own group, *not* ticked by default (I decide per game: played, or ignore); on PS4/PS5 a game-list play time of ≥ 30 min promotes a 0 % title to *Played*;
+- progress = 100 % → status pre-filled **100 %**; nothing else is inferred about finishing (trophies cannot tell "finished" from "abandoned") — that is what Mark Played As / `⇧M` is for afterwards.
 
 **Physical or digital?** *(decided 2026-09-19)* Division of labour: **trophies / game list = what I launched (played)** — a mix of discs and downloads, with no format in it; **the shelf = the photo scan** (physical copies); **purchases = digital copies**. PSN therefore never creates a physical copy on its own. The two imports meet on the same game in either order: a PSN sync after a photo scan adds *played* to the disc already there; a photo scan after a PSN sync adds the physical copy to the played-only game (the scan's "already in library" match — covered by a test in M7). The copy format is derived in this order:
 1. **Already in my library** (e.g. a disc added by photo scan) → no new copy at all: the import only adds *played*, playtime and last-played to the existing game. This covers most discs.
