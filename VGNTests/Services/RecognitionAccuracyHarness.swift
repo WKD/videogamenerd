@@ -64,7 +64,15 @@ struct RecognitionAccuracyHarness {
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     }
     static func samplesDir() -> URL {
-        worktreeRoot().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("samples")
+        // `<container>/samples`: the repo is either `<container>/main` or
+        // `<container>/worktrees/<name>` — walk up until a `samples` folder is found.
+        var dir = worktreeRoot()
+        for _ in 0..<3 {
+            dir = dir.deletingLastPathComponent()
+            let candidate = dir.appendingPathComponent("samples")
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        }
+        return worktreeRoot().deletingLastPathComponent().appendingPathComponent("samples")
     }
     static func docsDir() -> URL { worktreeRoot().appendingPathComponent("docs") }
 
@@ -89,7 +97,17 @@ struct RecognitionAccuracyHarness {
         let pipeline = ScanPipeline(recognizer: recognizer, searcher: igdb, catalog: catalog)
         let truth = try loadTruth()
 
-        let out = docsDir().appendingPathComponent("recognition-accuracy.md")
+        // Only a full run may replace the committed report; subset runs (diagnostics)
+        // go to the git-ignored build folder so they never clobber it.
+        let isFullRun = Set(config.photos) == Set(Self.allPhotos)
+        let out: URL
+        if isFullRun {
+            out = docsDir().appendingPathComponent("recognition-accuracy.md")
+        } else {
+            let dir = worktreeRoot().appendingPathComponent(".build/scan-accuracy", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            out = dir.appendingPathComponent("recognition-accuracy-\(config.photos.joined(separator: "+")).md")
+        }
         var reports: [PhotoReport] = []
         let overallStart = Date()
         for photo in config.photos {
