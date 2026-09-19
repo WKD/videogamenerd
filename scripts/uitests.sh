@@ -55,7 +55,7 @@ xcodebuild \
   -destination 'platform=macOS' \
   -derivedDataPath "$DERIVED" \
   -resultBundlePath "$RESULT" \
-  "${ONLY_ARGS[@]}" \
+  "${ONLY_ARGS[@]+"${ONLY_ARGS[@]}"}" \
   test-without-building
 STATUS=$?
 set -e

@@ -37,6 +37,14 @@ class VGNUITestCase: XCTestCase {
     /// assertions don't race transitions.
     @discardableResult
     func launchSample(_ extraArguments: [String] = []) -> XCUIApplication {
+        // NOTE (macOS foreground limitation): `launch()` reliably brings the app to
+        // the foreground — and thus into XCUITest's query snapshot — only for the
+        // FIRST test in the run's process. Later tests' apps render but stay behind
+        // the test runner, so their windows are unqueryable (see docs/uitests.md →
+        // Run status). Forcing the issue (XCUIApplication.activate, terminating the
+        // prior instance, or the app self-activating via NSApp.activate) was tried
+        // and did NOT help — and the app-side activation actually broke the first
+        // test too — so we keep the plain, known-good launch here.
         let app = XCUIApplication()
         app.launchArguments = [
             "-VGNSampleData", "YES",
@@ -53,11 +61,19 @@ class VGNUITestCase: XCTestCase {
         app.windows.firstMatch
     }
 
-    /// Attach a window-only screenshot (never the full screen) to the report.
+    /// Attach a **window-only** screenshot (the VGN window and nothing else).
+    ///
+    /// ONLY ever `app.windows.firstMatch.screenshot()` — never `app.screenshot()`
+    /// or `XCUIScreen.main.screenshot()`: on macOS both of those capture the whole
+    /// desktop, i.e. the owner's OTHER windows (Notes, Terminal, …), which must
+    /// never be captured. If the VGN window can't be resolved at this instant
+    /// (e.g. a later test whose window isn't frontmost — see docs/uitests.md), we
+    /// attach NOTHING rather than leak the desktop.
     func attachWindowScreenshot(_ name: String) {
         guard let app else { return }
-        let shot = app.windows.firstMatch.screenshot()
-        let attachment = XCTAttachment(screenshot: shot)
+        let target = app.windows.firstMatch
+        guard target.exists else { return }
+        let attachment = XCTAttachment(screenshot: target.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
