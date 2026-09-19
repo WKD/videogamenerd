@@ -128,7 +128,12 @@ enum RecommendationEngine {
         // near-ties and never overturns a clearly better fit.
         let subBonus = (options.preferExpiringSubscription && candidate.ownedOnlyViaSubscription)
             ? weights.subscriptionBonus : 0
-        let finalScore = clamp(blended + timeTerm + jitter - pickedPenalty + subBonus)
+        // A modest boost for an unplayed library game the owner ★ favourited on his Batocera
+        // box (PLAN §15). Same shape as the PS Plus nudge — below the taste terms, only
+        // reorders near-ties — and, being applied only here, is backtest-neutral.
+        let favBonus = (candidate.isBatoceraFavourite && candidate.status == .backlog)
+            ? weights.batoceraFavouriteBonus : 0
+        let finalScore = clamp(blended + timeTerm + jitter - pickedPenalty + subBonus + favBonus)
 
         let evidenceMass = affinity.evidence + linkResult.links.map { abs($0.contribution) }.reduce(0, +)
         let strength = matchStrength(evidenceMass: evidenceMass, rankedCount: rankedCount,
@@ -228,6 +233,10 @@ enum RecommendationEngine {
         // A game that leaves with PS Plus is worth flagging (PLAN §13.3) — an informative
         // tail reason, independent of the scoring option.
         if candidate.ownedOnlyViaSubscription { reasons.append(.leavesWithSubscription) }
+        // A ★ favourite you have not played is in the backlog because you flagged it (PLAN §15).
+        if candidate.isBatoceraFavourite && candidate.status == .backlog {
+            reasons.append(.batoceraFavourite)
+        }
 
         if !candidate.hasMetadata { reasons.append(.noMetadata) }
         if strength == .weak { reasons.append(.weakEvidence) }

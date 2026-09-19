@@ -28,7 +28,8 @@ enum Rec {
         hasMetadata: Bool = true,
         title: String = "Candidate",
         playStatus: PlayStatus? = nil,
-        ownedOnlyViaSubscription: Bool = false
+        ownedOnlyViaSubscription: Bool = false,
+        isBatoceraFavourite: Bool = false
     ) -> Candidate {
         Candidate(
             id: id,
@@ -43,7 +44,8 @@ enum Rec {
             hasMetadata: hasMetadata,
             title: title,
             playStatus: playStatus,
-            ownedOnlyViaSubscription: ownedOnlyViaSubscription)
+            ownedOnlyViaSubscription: ownedOnlyViaSubscription,
+            isBatoceraFavourite: isBatoceraFavourite)
     }
 
     // "By Length" brackets at the default pace (8 h/week ⇒ edges 4 / 10 / 40 / 80).

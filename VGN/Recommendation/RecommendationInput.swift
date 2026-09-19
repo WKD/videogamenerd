@@ -53,6 +53,10 @@ struct Candidate: Hashable, Sendable {
     /// claim) — it "leaves with PS Plus" (PLAN §13.3). Feeds the optional, gated
     /// "Prefer expiring PS Plus games" score term. Default false.
     var ownedOnlyViaSubscription: Bool
+    /// A library game promoted from — and still ★ favourited on — the owner's Batocera box
+    /// (PLAN §15). When unplayed it earns a modest backlog boost and the reason "★ a
+    /// favourite on your Batocera". Default false.
+    var isBatoceraFavourite: Bool
 
     init(
         id: GameID,
@@ -71,7 +75,8 @@ struct Candidate: Hashable, Sendable {
         platformIDs: [String] = [],
         formats: [ProductFormat] = [],
         playStatus: PlayStatus? = nil,
-        ownedOnlyViaSubscription: Bool = false
+        ownedOnlyViaSubscription: Bool = false,
+        isBatoceraFavourite: Bool = false
     ) {
         self.id = id
         self.igdbID = igdbID
@@ -90,6 +95,7 @@ struct Candidate: Hashable, Sendable {
         self.formats = formats
         self.playStatus = playStatus
         self.ownedOnlyViaSubscription = ownedOnlyViaSubscription
+        self.isBatoceraFavourite = isBatoceraFavourite
     }
 
     var similarIGDBIDs: [Int64] { traits.compactMap(\.similarGameID) }

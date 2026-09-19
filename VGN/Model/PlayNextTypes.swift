@@ -130,6 +130,11 @@ enum PlayNextReason: Hashable, Sendable {
     case weakEvidence
     /// Owned only through PS Plus — the licence leaves with the subscription (PLAN §13.3).
     case leavesWithSubscription
+    /// A library game that is a ★ favourite on the owner's Batocera box, still unplayed —
+    /// a modest backlog boost (PLAN §15).
+    case batoceraFavourite
+    /// A never-played Batocera favourite pinned at the head of the Discover row (PLAN §15).
+    case batoceraFavouritePinned
 }
 
 // MARK: - Suggestion + result
