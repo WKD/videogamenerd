@@ -8,6 +8,7 @@ enum BatoceraPreferences {
     static let shareFolderKey = "batocera.shareFolder"
     static let autoSyncKey = "batocera.autoSyncAtLaunch"
     static let skipListKey = "batocera.skipList"
+    static let addFavouritesKey = "batocera.addFavouritesAutomatically"
 
     /// The chosen share root (the folder that contains `roms/`), or nil when never picked.
     static var shareFolderPath: String? {
@@ -29,6 +30,16 @@ enum BatoceraPreferences {
             AppPreferences.defaults.object(forKey: autoSyncKey) as? Bool ?? true
         }
         set { AppPreferences.defaults.set(newValue, forKey: autoSyncKey) }
+    }
+
+    /// Auto-add favourites to the library on a confident IGDB match after a sync (PLAN §15).
+    /// Default **ON** — a ★ on the box is an explicit pick.
+    static var addFavouritesAutomatically: Bool {
+        get {
+            // Absent ⇒ true (default on); an explicit false disables it.
+            AppPreferences.defaults.object(forKey: addFavouritesKey) as? Bool ?? true
+        }
+        set { AppPreferences.defaults.set(newValue, forKey: addFavouritesKey) }
     }
 
     /// The editable skip list, or nil when the owner has never changed it (⇒ use the

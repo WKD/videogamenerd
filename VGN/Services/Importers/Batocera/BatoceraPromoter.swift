@@ -65,6 +65,34 @@ struct BatoceraPromoter: Sendable {
         return Result(commit: commit, promotedCatalogIDs: promoted)
     }
 
+    /// Reverse an auto-add batch in **one transaction** (PLAN §15 — the banner's Undo): for
+    /// each promoted favourite, delete the Batocera ROM copy the batch created (keyed by
+    /// `(source, external_id)`), delete any game left neither owned nor played (the newly
+    /// created ones — a pre-existing owned game survives), and clear `promoted_game_id`.
+    /// Idempotent: running it twice (the banner button *and* the undo manager) is a no-op the
+    /// second time. Play-time-only additions to a pre-existing game are left as-is.
+    func undoAutoAdd(entries: [RomCatalogEntry]) async throws {
+        guard !entries.isEmpty else { return }
+        try await database.dbWriter.write { db in
+            var affectedGames: [Int64] = []
+            for entry in entries {
+                if let productID = try LibraryStore.existingImportProductID(
+                    sourceRaw: ImportSourceID.batocera, externalID: entry.externalID, db: db) {
+                    let members = try Int64.fetchAll(
+                        db, sql: "SELECT game_id FROM product_games WHERE product_id = ?",
+                        arguments: [productID])
+                    try db.execute(sql: "DELETE FROM products WHERE id = ?", arguments: [productID])
+                    affectedGames.append(contentsOf: members)
+                }
+                try db.execute(sql: "UPDATE rom_catalog SET promoted_game_id = NULL WHERE id = ?",
+                               arguments: [entry.id])
+            }
+            // Delete the games the batch created (now orphaned); pre-existing owned/played
+            // games are kept.
+            _ = try LibraryStore.resolveOrphans(affectedGames, confirmOrphanDelete: true, db: db)
+        }
+    }
+
     /// Whether a library game already owns a ROM copy on a platform (the duplicate rule input,
     /// PLAN §15). Phase 2 calls this on the IGDB-matched game before building a ``Plan``.
     func gameHasROMCopy(gameID: Int64, platformID: String) async throws -> Bool {

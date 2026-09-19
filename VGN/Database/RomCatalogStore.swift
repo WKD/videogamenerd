@@ -153,6 +153,42 @@ struct RomCatalogStore: Sendable {
         }
     }
 
+    /// The favourites eligible for **automatic** IGDB matching (PLAN §15): present, not
+    /// promoted, not dismissed, and **not already staged** for this source — a favourite that
+    /// has been through matching once (confident or not) has an `import_titles` row, so it is
+    /// never queried again. Ordered by most play time then name (a played favourite first).
+    func favouritesNeedingMatch(limit: Int) async throws -> [RomCatalogEntry] {
+        try await dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT \(Self.columns) FROM rom_catalog c
+                WHERE c.removed_at IS NULL AND c.promoted_game_id IS NULL AND c.not_interested = 0
+                  AND c.favorite = 1
+                  AND NOT EXISTS (
+                      SELECT 1 FROM import_titles it
+                      WHERE it.source = ? AND it.external_id = c.system || '/' || c.relative_path
+                  )
+                ORDER BY c.game_time_s DESC, c.sort_title ASC
+                LIMIT ?
+                """, arguments: [Self.source, limit]).map(Self.entry(from:))
+        }
+    }
+
+    /// How many favourites still need automatic matching (the "still to match" figure for the
+    /// first-run banner, PLAN §15).
+    func favouritesNeedingMatchCount() async throws -> Int {
+        try await dbWriter.read { db in
+            try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM rom_catalog c
+                WHERE c.removed_at IS NULL AND c.promoted_game_id IS NULL AND c.not_interested = 0
+                  AND c.favorite = 1
+                  AND NOT EXISTS (
+                      SELECT 1 FROM import_titles it
+                      WHERE it.source = ? AND it.external_id = c.system || '/' || c.relative_path
+                  )
+                """, arguments: [Self.source]) ?? 0
+        }
+    }
+
     /// Link a catalogue row to the library game it was promoted into (PLAN §15). Idempotent.
     func setPromoted(catalogID: Int64, gameID: Int64) async throws {
         try await dbWriter.write { db in
