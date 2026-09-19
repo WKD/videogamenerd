@@ -10,8 +10,12 @@ struct FilterChipsBar: View {
     var body: some View {
         let chips = vm.filterChips
         if !chips.isEmpty {
-            ScrollView(.horizontal) {
-                HStack(spacing: 6) {
+            // NOT a ScrollView: a scroll view whose top edge touches the window toolbar
+            // never delivers clicks to its buttons on macOS (they land on its clip view) —
+            // the ✕ and "Clear all" were dead in the real window. A wrapping row also
+            // keeps every chip visible. Guarded by `FilterChipsClickTests`.
+            RankingFlowLayout(spacing: 6) {
+                Group {
                     ForEach(chips) { chip in
                         ChipView(chip: chip) { vm.removeFilterChip(chip) }
                             // e.g. "filter.chip.tier:1", "filter.chip.status:finished".
@@ -21,6 +25,7 @@ struct FilterChipsBar: View {
                         .buttonStyle(.borderless)
                         .font(.caption)
                         .padding(.leading, 4)
+                        .padding(.vertical, 3)
                         .accessibilityIdentifier(A11yID.filterClearAll)
                         .help("Remove every active filter")
                     // One-click escape from a scoped search to the whole library.
@@ -32,10 +37,10 @@ struct FilterChipsBar: View {
                             .help("Search the whole library, not just this list")
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
             }
-            .scrollIndicators(.hidden)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.bar)
             .overlay(alignment: .bottom) { Divider() }
             .accessibilityIdentifier(A11yID.filterChips)
