@@ -102,8 +102,8 @@ final class SettingsModel {
     }
 }
 
-/// The Settings scene: Accounts (IGDB, Keychain-backed), Photo Scan and General
-/// (both placeholders for later milestones).
+/// The Settings scene: Accounts (IGDB, Keychain-backed), Photo Scan (`PhotoScanSettingsTab`)
+/// and General (a placeholder for a later milestone).
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
@@ -180,24 +180,6 @@ private struct AccountsTab: View {
         )
         .font(.caption)
         .foregroundStyle(saved ? .green : .secondary)
-    }
-}
-
-private struct PhotoScanTab: View {
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent("claude binary", value: "Auto-detected")
-                LabeledContent("Model", value: "—")
-            } header: {
-                Text("Shelf photo recognition")
-            } footer: {
-                Text("Configured in milestone 6 (photo scan). The scanner spawns the local claude CLI for spine recognition.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .padding(20)
     }
 }
 

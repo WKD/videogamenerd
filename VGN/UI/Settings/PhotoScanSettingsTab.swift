@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Settings → Photo Scan (PLAN §6.2). Detected `claude` binary + version with a manual
 /// override and a "Check" button, model picker, max parallel tile calls, and the engine
-/// preference — all persisted in `UserDefaults`. The orchestrator swaps the placeholder
-/// `PhotoScanTab` in `SettingsView` for this:
+/// preference — all persisted in `UserDefaults`. Shown as the Photo Scan tab in
+/// `SettingsView`:
 /// ```swift
 /// PhotoScanSettingsTab().tabItem { Label("Photo Scan", systemImage: "camera") }
 /// ```
