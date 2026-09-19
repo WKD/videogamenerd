@@ -134,18 +134,26 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   then waits under *New* for manual review. A configured but flaky IGDB lookup can't sink a sync
   (`ResilientImportMatcher` turns a lookup error into "no match").
 
-### HowLongToBeat fallback (wave 9, lane A — PLAN §5.3)
+### HowLongToBeat fallback (wave 9 lane A; **verified live wave 10 lane B** — PLAN §5.3)
 Fills only the *gaps* IGDB leaves, on demand (inspector ▸ Fetch from HowLongToBeat; Game ▸
-Fetch Missing Time Estimates…). Built and tested **entirely on synthetic fixtures** from the
-reference client's documented shapes — **no `howlongtobeat.com` request was made by this lane**.
-- **The request shape is an assumption.** Ported from `ScrappyCocco/HowLongToBeat-PythonAPI`
-  (master, 2026-09-19) and **isolated in one file** (`VGN/Services/TimeToBeat/HLTB/HLTBEndpoint.swift`),
-  cross-checked with `ckatzorke/howlongtobeat`. The **endpoint discovery** (finding the rotating
-  `/api/<word>/<token>` path by scraping the Next.js app chunk and re-assembling the token from
-  string literals) is the **first thing that will break** and the first to re-verify on the real
-  site. Symptom of a break: a clean `schemaMismatch` / discovery-failure stop, nothing corrupted;
-  the feature degrades to the "Open on HowLongToBeat" link. Fix in that one file, then re-record
-  fixtures with `scripts/record-hltb-fixtures.swift` (≤ 12 requests). See `docs/hltb.md`.
+Fetch Missing Time Estimates…). **Verified against the live site 2026-09-19** (wave 10): the
+request shape is no longer an assumption — the fixtures in `VGNTests/Fixtures/hltb-search-*.json`
+are recorded from real searches, and the whole discovery → init → search → parse flow was proven
+end to end (see `docs/hltb.md` for the request log and the real mechanics).
+- **What the first port got wrong (now fixed).** The old port assumed a rotating
+  `/api/<word>/<token>` path assembled from JS string literals, and **no auth step**. The live
+  site actually (a) uses a plain slashed path found by matching the one `fetch("/api/…",{method:"POST"})`
+  in a turbopack chunk (currently `api/search/site`), and (b) requires a **per-session token**:
+  `GET <path>/init?t=<ms>` → `{token, hpKey, hpVal}`, sent as `x-auth-token` / `x-hp-key` /
+  `x-hp-val` headers **and** injected as a `body[hpKey]=hpVal` field. All of this now lives in
+  `HLTBEndpoint.swift`; the client fetches the token once per run.
+- **What stays frail.** The endpoint path, the token scheme and the `hpKey`/`hpVal` field names can
+  all rotate — a break shows as a clean `schemaMismatch` / discovery-failure / 403 stop, nothing
+  corrupted, and the feature degrades to the "Open on HowLongToBeat" link. The token embeds the
+  caller IP + UA and **expires**: a long bulk run whose token lapses mid-way stops on a 403 (no
+  in-run refresh, by design) and the owner just re-runs — only still-missing games are re-queried.
+  Fix lives in that one file; re-record fixtures with `scripts/record-hltb-fixtures.swift`
+  (≤ 25 requests, ≥ 2 s apart). See `docs/hltb.md`.
 - **`ttb_source = 'igdb'` on empty games:** the enrichment write no longer tags a game
   `ttb_source = 'igdb'` when IGDB returned no time (it stays `NULL`, so the value is not
   mislabelled). **Existing rows were not backfilled** — a library enriched before wave 9 may still

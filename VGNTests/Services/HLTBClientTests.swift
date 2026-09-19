@@ -4,16 +4,19 @@ import GRDB
 @testable import VGN
 
 /// The live HLTB client (PLAN §5.3) driven entirely offline through the stub
-/// transport + a `ManualClock`: discovery (success + failure), search success /
-/// empty, every reject path (HTML/captcha, 403, 429, schema drift), the 180/30-day
-/// cache TTLs (hit, negative, expiry, zero requests on re-run), and the budget/pacer.
+/// transport + a `ManualClock`: discovery (homepage → app chunk → the POST-fetch path),
+/// the per-session `/init` auth token, search success / empty, every reject path
+/// (HTML/captcha, 403, 429, schema drift), the 180/30-day cache TTLs (hit, negative,
+/// expiry, zero requests on re-run), and the budget/pacer.
 @Suite struct HLTBClientTests {
 
     private func cacheStore() throws -> ImportResponseCacheStore {
         ImportResponseCacheStore(try AppDatabase.inMemory())
     }
 
-    /// A transport pre-wired for discovery (homepage + app chunk) plus a search body.
+    /// A transport pre-wired for discovery (homepage + app chunk), the `/init` auth
+    /// token, plus a search body. `/init` is registered before `/api/` so the token call
+    /// (whose URL also contains `/api/`) resolves to the auth fixture, not the search.
     private func transport(searchFixture: String) throws -> StubHTTPTransport {
         let t = StubHTTPTransport(defaultStub: .init(
             status: 200,
@@ -22,35 +25,42 @@ import GRDB
         t.on(urlContains: "/_next/", .init(status: 200,
             body: try Fixtures.data("hltb-discovery-app.js"),
             headers: ["Content-Type": "application/javascript"]))
+        t.on(urlContains: "/init", .init(status: 200,
+            body: try Fixtures.data("hltb-init.json"),
+            headers: ["Content-Type": "application/json"]))
         t.on(urlContains: "/api/", .init(status: 200,
             body: try Fixtures.data(searchFixture),
             headers: ["Content-Type": "application/json"]))
         return t
     }
 
-    // MARK: - Discovery + search
+    // MARK: - Discovery + auth + search
 
-    @Test func discoversEndpointThenSearches() async throws {
+    @Test func discoversEndpointFetchesTokenThenSearches() async throws {
         let t = try transport(searchFixture: "hltb-search-bloodborne.json")
         let client = HLTBClient(transport: t, cache: try cacheStore(), clock: RecordingImmediateClock())
         let results = try await client.search(title: "Bloodborne")
-        #expect(results.first?.id == 2600)
-        // Homepage + app chunk + search = 3 requests; the search hit /api/.
-        #expect(t.requestCount == 3)
-        #expect(t.requests.last?.url?.absoluteString == "https://howlongtobeat.com/api/seek/abcd12ef")
+        #expect(results.first?.id == 21262)
+        // Homepage + app chunk + /init + search = 4 requests; the search hit /api/search/site.
+        #expect(t.requestCount == 4)
+        #expect(t.requests.last?.url?.absoluteString == "https://howlongtobeat.com/api/search/site")
         #expect(t.requests.last?.httpMethod == "POST")
+        // The search carried the per-session auth headers from /init.
+        #expect(t.requests.last?.value(forHTTPHeaderField: "x-auth-token") != nil)
+        #expect(t.requests.last?.value(forHTTPHeaderField: "x-hp-key") == "ign_test1234")
     }
 
-    @Test func injectedDiscoverySkipsHomepageFetch() async throws {
+    @Test func injectedDiscoveryAndAuthSkipNetworkSetup() async throws {
         let t = StubHTTPTransport(defaultStub: .init(status: 200,
             body: try Fixtures.data("hltb-search-celeste.json"),
             headers: ["Content-Type": "application/json"]))
         let client = HLTBClient(transport: t, cache: try cacheStore(),
                                 clock: RecordingImmediateClock(),
-                                discovery: .init(searchPath: "api/s/", payloadKey: nil, payloadValue: nil))
+                                discovery: .init(searchPath: "api/s"),
+                                auth: .init(token: "t", key: "ign_x", value: "v"))
         let results = try await client.search(title: "Celeste")
         #expect(results.first?.name == "Celeste")
-        #expect(t.requestCount == 1)   // no discovery round-trips
+        #expect(t.requestCount == 1)   // no discovery / init round-trips
     }
 
     @Test func emptyResultReturnsNoCandidates() async throws {
@@ -68,6 +78,8 @@ import GRDB
             body: try Fixtures.data("hltb-discovery-home.html"), headers: ["Content-Type": "text/html"]))
         t.on(urlContains: "/_next/", .init(status: 200,
             body: try Fixtures.data("hltb-discovery-app.js"), headers: ["Content-Type": "application/javascript"]))
+        t.on(urlContains: "/init", .init(status: 200,
+            body: try Fixtures.data("hltb-init.json"), headers: ["Content-Type": "application/json"]))
         t.on(urlContains: "/api/", searchStub)
         let cache = try cacheStore()
         let client = HLTBClient(transport: t, cache: cache, clock: RecordingImmediateClock())
@@ -107,6 +119,20 @@ import GRDB
         #expect(try await cache.rejectCount(source: HLTBSource.id) == 1)
     }
 
+    @Test func authTokenFailureIsRejected() async throws {
+        // Homepage + chunk resolve, but /init returns garbage → reject before any search.
+        let t = StubHTTPTransport(defaultStub: .init(status: 200,
+            body: try Fixtures.data("hltb-discovery-home.html"), headers: ["Content-Type": "text/html"]))
+        t.on(urlContains: "/_next/", .init(status: 200,
+            body: try Fixtures.data("hltb-discovery-app.js"), headers: ["Content-Type": "application/javascript"]))
+        t.on(urlContains: "/init", .init(status: 200, body: Data(#"{"nope":true}"#.utf8),
+            headers: ["Content-Type": "application/json"]))
+        let cache = try cacheStore()
+        let client = HLTBClient(transport: t, cache: cache, clock: RecordingImmediateClock())
+        await #expect(throws: ImportError.self) { try await client.search(title: "Bloodborne") }
+        #expect(try await cache.rejectCount(source: HLTBSource.id) == 1)
+    }
+
     // MARK: - Cache TTLs
 
     @Test func cachedHitCostsZeroRequestsOnRerun() async throws {
@@ -117,12 +143,12 @@ import GRDB
         let c1 = HLTBClient(transport: t, cache: cache, clock: RecordingImmediateClock(), wallClock: { wall })
         _ = try await c1.search(title: "Bloodborne")
         let firstCount = t.requestCount
-        #expect(firstCount == 3)
+        #expect(firstCount == 4)   // homepage + chunk + /init + search
 
         // A fresh client (new run) served entirely from cache: zero requests.
         let c2 = HLTBClient(transport: t, cache: cache, clock: RecordingImmediateClock(), wallClock: { wall })
         let results = try await c2.search(title: "Bloodborne")
-        #expect(results.first?.id == 2600)
+        #expect(results.first?.id == 21262)
         #expect(t.requestCount == firstCount)          // no new requests
         #expect(await c2.fromCache == 1)
         #expect(await c2.fromNetwork == 0)
@@ -159,7 +185,7 @@ import GRDB
 
     @Test func budgetIsEnforced() async throws {
         let t = try transport(searchFixture: "hltb-search-bloodborne.json")
-        // Budget 2 → homepage + app chunk consume it; the search throws budgetExceeded.
+        // Budget 2 → homepage + app chunk consume it; the /init token fetch throws budgetExceeded.
         let pacing = ImportPolicy.Pacing(minDelay: 0, jitter: 0, budget: 2)
         let client = HLTBClient(transport: t, cache: try cacheStore(),
                                 pacing: pacing, clock: RecordingImmediateClock())

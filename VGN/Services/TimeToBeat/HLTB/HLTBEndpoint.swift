@@ -3,36 +3,43 @@ import Foundation
 // =============================================================================
 //  EVERYTHING HowLongToBeat-specific lives in THIS ONE FILE (PLAN §5.3).
 //
-//  When HLTB rotates its private search endpoint / key again, this is the only
-//  place to fix — the client, matcher, fill path and UI are all endpoint-agnostic.
+//  When HLTB rotates its private search endpoint / token scheme again, this is the
+//  only place to fix — the client, matcher, fill path and UI are all
+//  endpoint-agnostic.
 //
 //  Ported from the maintained open-source client
-//      ScrappyCocco/HowLongToBeat-PythonAPI  (branch `master`, read 2026-09-19)
+//      ScrappyCocco/HowLongToBeat-PythonAPI  (branch `master`, read 2026-09-19,
+//      commit read via raw githubusercontent — HTMLRequests.py + JSONResultParser.py)
 //      github.com/ScrappyCocco/HowLongToBeat-PythonAPI
-//      → howlongtobeatpy/HTMLRequests.py  (endpoint discovery, headers, POST body)
-//      → howlongtobeatpy/JSONResultParser.py  (response field names)
-//  cross-checked against the JS wrapper
-//      ckatzorke/howlongtobeat  (github.com/ckatzorke/howlongtobeat, read 2026-09-19).
+//  cross-checked against the JS wrapper ckatzorke/howlongtobeat, and — decisively —
+//  against howlongtobeat.com's own app chunk, read live 2026-09-19 (see docs/hltb.md
+//  for the recorded request log). The mechanics below are what the live site does.
 //
-//  Today's mechanics (2026-09-19):
-//   - Base site: https://howlongtobeat.com/
-//   - The search endpoint path is NOT constant: the site's Next.js app bundles a
-//     `fetch("/api/<word>/<token>…", { method: "POST" })` call whose `<token>` is
-//     assembled from string literals in the JS. We discover it by fetching the
-//     homepage, then a `/_next/static/chunks/*.js` app chunk, then extracting the
-//     path (with a `api/s/` fallback for older builds).
-//   - Headers: content-type application/json, Referer + Origin the site itself, a
-//     desktop User-Agent (some builds 403 an empty UA).
+//  Today's mechanics (verified live 2026-09-19):
+//   - Base site: https://howlongtobeat.com/  (the CDN 403s bare clients, so browser
+//     Accept / User-Agent headers are mandatory on every GET).
+//   - Endpoint discovery: GET the homepage → its `/_next/static/chunks/*.js` app
+//     chunks (turbopack, opaque hashed names — there is no `_app`/`main` chunk any
+//     more) → find the one chunk that contains a `fetch("/api/<path>", {method:"POST"…})`
+//     and take that whole `<path>` (currently `search/site`). No token is concatenated
+//     into the URL; the path is a plain literal.
+//   - Per-session auth: GET `<searchPath>/init?t=<ms>` → JSON `{ token, hpKey, hpVal }`.
+//     The search then carries headers `x-auth-token: token`, `x-hp-key: hpKey`,
+//     `x-hp-val: hpVal`, AND injects `body[hpKey] = hpVal` into the POST payload. The
+//     field names are read defensively (any field whose name contains "key"/"val"), so
+//     a rename survives. The token embeds the caller IP + UA and expires — fetch it
+//     once per run; a 403 later means it lapsed (we stop; the owner re-runs).
 //   - POST body: { searchType:"games", searchTerms:[…], searchPage, size,
-//     searchOptions:{ games:{…}, … }, useCache:true }.
+//     searchOptions:{ games:{…}, … }, useCache:true, <hpKey>:<hpVal> }.
 //   - Response: { data: [ { game_id, game_name, game_alias, release_world,
-//     comp_main, comp_plus, comp_100, profile_platform, … } ], count }.
-//     comp_* are SECONDS; release_world is the world release year.
+//     comp_main, comp_plus, comp_100, profile_platform, … } ], count, … }.
+//     comp_* are SECONDS (Bloodborne comp_main == 115887 ≈ 32 h); release_world is the
+//     world release year.
 // =============================================================================
 
 /// The one place HLTB request/response mechanics live. Pure and Foundation-only —
-/// no I/O — so every part (discovery parsing, payload, DTO) is unit-testable with
-/// synthetic strings.
+/// no I/O — so every part (discovery parsing, auth parsing, payload, DTO) is
+/// unit-testable with synthetic strings.
 enum HLTBEndpoint {
     static let baseString = "https://howlongtobeat.com/"
     static let base = URL(string: baseString)!
@@ -43,95 +50,98 @@ enum HLTBEndpoint {
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     static let searchPageSize = 20
-    /// The historical constant path, used when discovery finds nothing (older builds).
+    /// The historical constant path, used when discovery finds nothing (the upstream's
+    /// static `SEARCH_URL`). A stale endpoint then surfaces as a reject on the search.
     static let fallbackSearchPath = "api/s/"
 
     // MARK: - Discovery
 
-    /// A resolved search endpoint: the path (no leading slash) plus an optional extra
-    /// body key/value some builds require. Cached for one run.
+    /// A resolved search endpoint: the path (no leading slash), e.g. `api/search/site`.
+    /// Cached for one run. The token/`hpKey`/`hpVal` are a separate per-session `Auth`.
     struct Discovery: Sendable, Hashable, Codable {
         var searchPath: String
-        var payloadKey: String?
-        var payloadValue: String?
 
         var searchURL: URL { URL(string: baseString + searchPath) ?? base }
+        /// The security-init endpoint for this search path (`<searchPath>/init`).
+        var initPath: String { searchPath + "/init" }
 
-        static let fallback = Discovery(searchPath: fallbackSearchPath, payloadKey: nil, payloadValue: nil)
+        init(searchPath: String) { self.searchPath = searchPath }
+
+        static let fallback = Discovery(searchPath: fallbackSearchPath)
+    }
+
+    /// The per-session credentials the `/init` endpoint hands out. `key`/`value` are
+    /// both an `x-hp-*` header pair and a dynamic field injected into the POST body.
+    struct Auth: Sendable, Hashable, Codable {
+        var token: String
+        var key: String
+        var value: String
     }
 
     /// Extract the `/_next/static/chunks/*.js` app-chunk paths referenced by the
-    /// homepage HTML, most-specific (`_app`/`main`) first so the search fetch is
-    /// found quickly.
+    /// homepage HTML, in document order, deduped. The build is turbopack now, so the
+    /// names are opaque hashes with no `_app`/`main` to prioritise — we try them in
+    /// order until one carries the search `fetch`.
     static func scriptPaths(inHTML html: String) -> [String] {
         let pattern = #"src="(/_next/static/chunks/[^"]+?\.js)""#
         guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(html.startIndex..., in: html)
         var paths: [String] = []
-        for m in re.matches(in: html, range: range) {
-            if let r = Range(m.range(at: 1), in: html) { paths.append(String(html[r])) }
-        }
-        // Prefer app/main chunks (they carry the fetch), keep order otherwise, dedupe.
         var seen = Set<String>()
-        let ordered = paths.filter { seen.insert($0).inserted }
-        return ordered.sorted { a, b in
-            func rank(_ s: String) -> Int {
-                if s.contains("_app") { return 0 }
-                if s.contains("main") { return 1 }
-                if s.contains("pages") { return 2 }
-                return 3
+        for m in re.matches(in: html, range: range) {
+            if let r = Range(m.range(at: 1), in: html) {
+                let p = String(html[r])
+                if seen.insert(p).inserted { paths.append(p) }
             }
-            return rank(a) < rank(b)
         }
+        return paths
     }
 
-    /// Resolve the search endpoint from one app-chunk's JavaScript. Handles the
-    /// current shape — a quoted `"/api/<word>/"` base path optionally followed by a
-    /// concatenated token (`.concat("a","b")` or `+ "a" + "b"`) before the request
-    /// options object — and the older bare-literal form (`"/api/s/"`). Returns nil
-    /// when nothing plausible is found (the caller then stops with a `schemaMismatch`
-    /// reject: "discovery failed").
+    /// Resolve the search endpoint from one app-chunk's JavaScript. Mirrors the
+    /// reference client: find the `fetch("/api/<path>", { … method:"POST" … })` call —
+    /// the POST method is what marks the real search endpoint — and take the whole
+    /// `<path>` (which may contain slashes, e.g. `search/site`). Returns nil when the
+    /// chunk carries no such call (the caller tries the next chunk, then the fallback).
     static func resolveDiscovery(fromScript js: String) -> Discovery? {
-        // The base path is a *quoted* literal that starts with `/api/`.
-        let pattern = #"["'`](/api/[A-Za-z0-9_/]*)["'`]"#
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let pattern =
+            #"fetch\s*\(\s*["'`]/api/([A-Za-z0-9_/]+)[^"'`]*["'`]\s*,\s*\{[^}]*method\s*:\s*["'`]POST["'`][^}]*\}"#
+        guard let re = try? NSRegularExpression(pattern: pattern,
+                                                options: [.dotMatchesLineSeparators, .caseInsensitive]) else { return nil }
         let full = NSRange(js.startIndex..., in: js)
         guard let m = re.firstMatch(in: js, range: full),
-              let pathRange = Range(m.range(at: 1), in: js),
-              let litRange = Range(m.range, in: js) else { return nil }
-
-        var basePath = String(js[pathRange])                // "/api/seek/"
-        basePath.removeFirst("/api/".count)                 // "seek/"
-
-        // Everything after the closing quote up to the options object `{…}` may carry
-        // a concatenated token; join every url-safe quoted literal in that window.
-        let afterLiteral = js[litRange.upperBound...]
-        let windowEnd = afterLiteral.firstIndex(of: "{") ?? afterLiteral.endIndex
-        let window = String(afterLiteral[..<windowEnd].prefix(400))
-        let token = urlSafeLiterals(in: window)
-
-        return Discovery(searchPath: "api/" + basePath + token, payloadKey: nil, payloadValue: nil)
+              let pathRange = Range(m.range(at: 1), in: js) else { return nil }
+        var path = String(js[pathRange])
+        while path.hasSuffix("/") { path.removeLast() }   // "search/site/" → "search/site"
+        guard !path.isEmpty else { return nil }
+        return Discovery(searchPath: "api/" + path)
     }
 
-    /// Concatenate, in order, every url-safe quoted string literal in `s` (the token
-    /// pieces of `.concat("a","b")` / `"a"+"b"`). A literal with any non-token
-    /// character is skipped, so a stray argument never corrupts the endpoint.
-    static func urlSafeLiterals(in s: String) -> String {
-        let pattern = #"["'`]([A-Za-z0-9_-]*)["'`]"#
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return "" }
-        let range = NSRange(s.startIndex..., in: s)
-        var out = ""
-        for m in re.matches(in: s, range: range) {
-            if let r = Range(m.range(at: 1), in: s) { out += String(s[r]) }
+    /// Parse the `/init` response into per-session `Auth`. `token` is read directly; the
+    /// key/value pair is taken from whichever fields' names contain "key" / "val" (today
+    /// `hpKey` / `hpVal`), so a field rename doesn't break the port. Returns nil when the
+    /// shape is not the expected token envelope (→ the client stops with a reject).
+    static func parseAuth(_ data: Data) -> Auth? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = obj["token"] as? String else { return nil }
+        var key: String?
+        var value: String?
+        for (name, raw) in obj {
+            guard let v = raw as? String else { continue }
+            let lower = name.lowercased()
+            if lower == "token" { continue }
+            if lower.contains("key") { key = v }
+            if lower.contains("val") { value = v }
         }
-        return out
+        guard let k = key, let val = value else { return nil }
+        return Auth(token: token, key: k, value: val)
     }
 
     // MARK: - Request
 
-    /// Headers every HLTB request carries (the site 403s without a UA / Origin).
-    static func headers() -> [String: String] {
-        [
+    /// Headers a search request carries. Without the browser UA / Origin the CDN 403s;
+    /// without the `x-auth-token` / `x-hp-*` trio the search endpoint 403s.
+    static func headers(auth: Auth?) -> [String: String] {
+        var h: [String: String] = [
             "Content-Type": "application/json",
             "Accept": "*/*",
             "Accept-Language": "en-GB,en;q=0.9",
@@ -139,10 +149,18 @@ enum HLTBEndpoint {
             "Referer": referer,
             "Origin": origin,
         ]
+        if let auth {
+            h["x-auth-token"] = auth.token
+            h["x-hp-key"] = auth.key
+            h["x-hp-val"] = auth.value
+        }
+        return h
     }
 
     /// The POST body for a search, ported from `HTMLRequests.get_search_request_data`.
-    static func searchPayload(title: String, page: Int = 1, discovery: Discovery) -> Data {
+    /// When `auth` is present it injects the dynamic `body[key] = value` field the site
+    /// requires alongside the header trio.
+    static func searchPayload(title: String, page: Int = 1, auth: Auth?) -> Data {
         let terms = title
             .split(whereSeparator: { $0 == " " || $0 == "\t" })
             .map(String.init)
@@ -158,7 +176,7 @@ enum HLTBEndpoint {
                     "sortCategory": "popular",
                     "rangeCategory": "main",
                     "rangeTime": ["min": 0, "max": 0],
-                    "gameplay": ["perspective": "", "flow": "", "genre": ""],
+                    "gameplay": ["perspective": "", "flow": "", "genre": "", "difficulty": ""],
                     "rangeYear": ["min": "", "max": ""],
                     "modifier": "",
                 ],
@@ -170,40 +188,41 @@ enum HLTBEndpoint {
             ],
             "useCache": true,
         ]
-        if let key = discovery.payloadKey, let value = discovery.payloadValue {
-            body[key] = value
-        }
+        if let auth { body[auth.key] = auth.value }
         return (try? JSONSerialization.data(withJSONObject: body)) ?? Data("{}".utf8)
     }
 
     /// Build the search `URLRequest` for `title`.
-    static func searchRequest(title: String, page: Int = 1, discovery: Discovery) -> URLRequest {
+    static func searchRequest(title: String, page: Int = 1, discovery: Discovery, auth: Auth?) -> URLRequest {
         var request = URLRequest(url: discovery.searchURL)
         request.httpMethod = "POST"
-        for (k, v) in headers() { request.setValue(v, forHTTPHeaderField: k) }
-        request.httpBody = searchPayload(title: title, page: page, discovery: discovery)
+        for (k, v) in headers(auth: auth) { request.setValue(v, forHTTPHeaderField: k) }
+        request.httpBody = searchPayload(title: title, page: page, auth: auth)
         return request
     }
 
     /// The homepage GET, used to discover the endpoint.
-    static func homepageRequest() -> URLRequest {
-        var request = URLRequest(url: base)
-        request.httpMethod = "GET"
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue(referer, forHTTPHeaderField: "Referer")
-        // Browser-like Accept headers: the CDN answers 403 to bare clients.
-        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
-        request.setValue("en-GB,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-        return request
-    }
+    static func homepageRequest() -> URLRequest { browserGET(base) }
 
     /// A GET for one discovered app-chunk script.
     static func scriptRequest(path: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: baseString + path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) ?? base)
+        let url = URL(string: baseString + path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) ?? base
+        return browserGET(url)
+    }
+
+    /// The per-session auth-token GET: `<searchPath>/init?t=<ms>`.
+    static func authInitRequest(discovery: Discovery) -> URLRequest {
+        let ms = Int(Date().timeIntervalSince1970 * 1000)
+        let url = URL(string: baseString + discovery.initPath + "?t=\(ms)") ?? base
+        return browserGET(url)
+    }
+
+    /// A browser-like GET (the CDN answers 403 to bare clients).
+    private static func browserGET(_ url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(referer, forHTTPHeaderField: "Referer")
-        // Browser-like Accept headers: the CDN answers 403 to bare clients.
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
         request.setValue("en-GB,en;q=0.9", forHTTPHeaderField: "Accept-Language")
         return request
