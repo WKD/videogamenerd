@@ -182,6 +182,26 @@ Read `docs/psn-import.md` first. The build-steps panel is **not yet built** (see
 - [ ] **Last played.** A played PSN game shows "Last played <date>" in the inspector; sorting by **Last Played** orders by it (never-played-by-an-importer games last). CSV/JSON export carry the dates.
 - [ ] **Force Refresh / Sign Out.** Force Refresh on one data set states the request cost + cached age before spending anything; Sign Out (optionally deleting cached responses) returns to the signed-out pane.
 
+## Batocera ROM catalogue (§15, phase 1 — lane B, wave 12)
+Phase 1 has no UI, so these are checks the phase-2 lane and the owner make once the browser /
+review / Settings exist. What phase 1 can be eyeballed today is the **dry-run** in the hand-off.
+- [ ] **Sync reads the real share.** With `/Volumes/share` mounted, a sync reports ~35 systems
+  read, the arcade/port systems (mame, fbneo, daphne, prboom, steam…) skipped, **0 unknown**, and
+  ~10 900 catalogue entries — and re-running with no file change reads **0** systems (unchanged).
+- [ ] **The catalogue never leaks into the library.** After a sync, All / Owned / Backlog / stats /
+  ranking / grid counts and CSV/JSON export are **unchanged** — the ~10 900 ROMs are invisible until
+  promoted.
+- [ ] **Promotion is the played/favourite set.** The promotion review offers ~290 candidates (the
+  games with > 5 min or a favourite star), not the whole shelf; a 5-minute launch that never crossed
+  300 s does not appear.
+- [ ] **Duplicate rule.** A candidate whose IGDB match already owns a hand-entered ROM copy on the
+  same platform commits **no second copy** — it just gains the Batocera play time / last-played date
+  and links to the catalogue row ("Already in your library").
+- [ ] **Play time coexistence.** Confirm the eventual `imported_playtime_s` decision (see LIMITATIONS
+  5d): a game with both a PSN time and a Batocera time should show both once the neutral column lands.
+- [ ] **Play Next ▸ Discover** surfaces never-played catalogue games scored by taste, rotates weekly,
+  and "Not interested" retires a title for good.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

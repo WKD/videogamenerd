@@ -93,6 +93,10 @@ enum ProductSource: String, Hashable, Sendable, Codable, CaseIterable {
     /// A copy imported from an old Delicious Library 2 catalogue (owned, physical),
     /// recognised on re-import by `(source, external_id)` (PLAN §5.5).
     case delicious
+    /// A ROM copy promoted from the Batocera catalogue (owned; played when the box
+    /// records > 5 min), recognised on re-sync by `(source, external_id)` = the
+    /// `<system>/<relativePath>` pair (PLAN §15).
+    case batocera
 
     /// A short, human-readable label for the inspector / exports.
     var label: String {
@@ -102,6 +106,7 @@ enum ProductSource: String, Hashable, Sendable, Codable, CaseIterable {
         case .psn: return "PSN"
         case .gog: return "GOG"
         case .delicious: return "Delicious Library"
+        case .batocera: return "Batocera"
         }
     }
 }

@@ -387,6 +387,121 @@ enum Migrations {
         }
     }
 
+    // MARK: - v10 — Batocera ROM catalogue (PLAN §15, phase 1)
+
+    /// v10 adds the **ROM catalogue** — "the shelf in the cellar" (PLAN §15). It is a
+    /// completely separate table from `games`: nothing in Library, the grid, counts, stats,
+    /// ranking or exports ever reads it. Only a *promotion* copies a catalogue entry into
+    /// `games` through the normal importer path, at which point `rom_catalog.promoted_game_id`
+    /// links the two.
+    ///
+    ///  - `rom_catalog` — one row per folded ROM (system + relative path is the stable
+    ///    identity; `md5` / `screenscraper_id` are secondary keys). Carries the scraped
+    ///    metadata (genre / family / developer / year / rating) and Batocera's own play data
+    ///    (`play_count` / `game_time_s` / `last_played_at` / `favorite`), so it is browsable,
+    ///    searchable and taste-scorable with **no** IGDB call. `promoted_game_id REFERENCES
+    ///    games ON DELETE SET NULL` (a promoted game deleted from the library just unlinks —
+    ///    the catalogue row survives). `not_interested` / `dismissed_at` retire a title from
+    ///    the future Discover row.
+    ///  - `rom_catalog_sync` — per-system change detection: the last-read `gamelist.xml`
+    ///    mtime + size, so an unchanged system is skipped on the next sync.
+    ///  - `rom_catalog_fts` — external-content FTS5 over (name, normalised_title) with the
+    ///    same diacritics-insensitive tokenizer as `games_fts`, kept in step by three
+    ///    triggers, for fast search at ~15 000 rows.
+    ///
+    /// Pure `CREATE TABLE` / `CREATE INDEX` / `CREATE VIRTUAL TABLE`, so no table rebuild and
+    /// no deferred foreign-key checks. Fresh installs and v9 upgrades get an empty catalogue.
+    static func registerV10(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v10") { db in
+            try db.execute(sql: """
+                CREATE TABLE rom_catalog (
+                    id                INTEGER PRIMARY KEY,
+                    source            TEXT     NOT NULL DEFAULT 'batocera',
+                    system            TEXT     NOT NULL,
+                    platform_id       TEXT     REFERENCES platforms(id) ON DELETE SET NULL,
+                    relative_path     TEXT     NOT NULL,
+                    name              TEXT     NOT NULL,
+                    sort_title        TEXT     NOT NULL DEFAULT '',
+                    normalised_title  TEXT     NOT NULL DEFAULT '',
+                    libretro_key      TEXT     NOT NULL DEFAULT '',
+                    screenscraper_id  TEXT,
+                    md5               TEXT,
+                    region            TEXT,
+                    lang              TEXT,
+                    genre             TEXT,
+                    family            TEXT,
+                    developer         TEXT,
+                    publisher         TEXT,
+                    release_year      INTEGER,
+                    rating            REAL,
+                    players           TEXT,
+                    play_count        INTEGER NOT NULL DEFAULT 0,
+                    game_time_s       INTEGER NOT NULL DEFAULT 0,
+                    last_played_at    DATETIME,
+                    favorite          INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+                    image_path        TEXT,
+                    thumbnail_path    TEXT,
+                    first_seen_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    removed_at        DATETIME,
+                    promoted_game_id  INTEGER REFERENCES games(id) ON DELETE SET NULL,
+                    dismissed_at      DATETIME,
+                    not_interested    INTEGER NOT NULL DEFAULT 0 CHECK (not_interested IN (0, 1)),
+                    UNIQUE (source, system, relative_path)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX rom_catalog_system_idx    ON rom_catalog(system);")
+            try db.execute(sql: "CREATE INDEX rom_catalog_platform_idx  ON rom_catalog(platform_id);")
+            try db.execute(sql: "CREATE INDEX rom_catalog_promoted_idx  ON rom_catalog(promoted_game_id);")
+            try db.execute(sql: "CREATE INDEX rom_catalog_sort_idx      ON rom_catalog(system, sort_title);")
+            try db.execute(sql: "CREATE INDEX rom_catalog_libretro_idx  ON rom_catalog(system, libretro_key);")
+
+            try db.execute(sql: """
+                CREATE TABLE rom_catalog_sync (
+                    source         TEXT     NOT NULL DEFAULT 'batocera',
+                    system         TEXT     NOT NULL,
+                    gamelist_mtime DATETIME,
+                    gamelist_size  INTEGER  NOT NULL DEFAULT 0,
+                    last_read_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    entry_count    INTEGER  NOT NULL DEFAULT 0,
+                    PRIMARY KEY (source, system)
+                );
+                """)
+
+            // External-content FTS5 over rom_catalog(name, normalised_title). Same
+            // diacritics-insensitive tokenizer as games_fts (v2).
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE rom_catalog_fts USING fts5(
+                    name,
+                    normalised_title,
+                    content='rom_catalog',
+                    content_rowid='id',
+                    tokenize='unicode61 remove_diacritics 2'
+                );
+                """)
+            try db.execute(sql: """
+                CREATE TRIGGER rom_catalog_ai AFTER INSERT ON rom_catalog BEGIN
+                    INSERT INTO rom_catalog_fts(rowid, name, normalised_title)
+                    VALUES (new.id, new.name, new.normalised_title);
+                END;
+                """)
+            try db.execute(sql: """
+                CREATE TRIGGER rom_catalog_ad AFTER DELETE ON rom_catalog BEGIN
+                    INSERT INTO rom_catalog_fts(rom_catalog_fts, rowid, name, normalised_title)
+                    VALUES ('delete', old.id, old.name, old.normalised_title);
+                END;
+                """)
+            try db.execute(sql: """
+                CREATE TRIGGER rom_catalog_au AFTER UPDATE ON rom_catalog BEGIN
+                    INSERT INTO rom_catalog_fts(rom_catalog_fts, rowid, name, normalised_title)
+                    VALUES ('delete', old.id, old.name, old.normalised_title);
+                    INSERT INTO rom_catalog_fts(rowid, name, normalised_title)
+                    VALUES (new.id, new.name, new.normalised_title);
+                END;
+                """)
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

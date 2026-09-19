@@ -59,6 +59,21 @@ extension LibraryStore {
                        arguments: [seconds, Date(), gameID])
     }
 
+    /// Store an **imported** play time (Batocera `gametime`, PLAN §15) **without ever
+    /// clobbering a real value**: it writes `psn_playtime_s` only when BOTH `my_playtime_s`
+    /// (manual) and `psn_playtime_s` are NULL. VGN has no neutral `imported_playtime_s`
+    /// column today (the Batocera lane proposes one — see the hand-off); until then this is
+    /// the safe interim home. A nil `seconds` is a no-op. Idempotent (re-running with the
+    /// same value changes nothing; a later PSN sync still wins because it writes
+    /// unconditionally through ``setPSNPlaytime(gameID:seconds:db:)``).
+    static func setImportedPlaytimeIfEmpty(gameID: Int64, seconds: Int?, db: Database) throws {
+        guard let seconds else { return }
+        try db.execute(sql: """
+            UPDATE games SET psn_playtime_s = ?, updated_at = ?
+            WHERE id = ? AND my_playtime_s IS NULL AND psn_playtime_s IS NULL
+            """, arguments: [seconds, Date(), gameID])
+    }
+
     /// Record the earliest / latest known play date on a game (v9, PLAN §13.3). Filled
     /// only by importers (PSN), never typed. Monotonic and NULL-safe:
     ///  - `first_played_at` only ever moves **earlier** (the earliest known date wins);

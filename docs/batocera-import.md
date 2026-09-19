@@ -1,0 +1,134 @@
+# Batocera ROM catalogue & promotion (PLAN §15, phase 1)
+
+Phase 1 = **services + database + model + tests**, no UI. It reads the owner's Batocera
+share read-only, keeps every ROM in a **separate catalogue** (`rom_catalog`), and promotes
+only the ROMs actually played (> 5 min) or favourited into the real library through the
+existing importer path. Phase 2 (another wave) builds the sidebar browser, the promotion
+review, Settings ▸ Batocera and Play Next ▸ Discover.
+
+## The two tiers (PLAN §15)
+
+- **Library** — a ROM becomes an ordinary game (owned, format **ROM**, `source = batocera`)
+  only when the box says it was **played > 5 min** (`gametime > 300 s`), marked **favourite**,
+  or promoted by hand. Never counts, never floods the grid until promoted.
+- **Catalogue (`rom_catalog`)** — "the shelf in the cellar". Every non-skipped ROM, browsable
+  and searchable, **never** seen by Library / grid / counts / stats / ranking / exports. The
+  only bridge to `games` is `promoted_game_id` (set on promotion; `ON DELETE SET NULL` — a
+  promoted game deleted from the library just unlinks, the catalogue row survives).
+
+## Read-only, offline
+
+Access is a read-only SMB mount at `/Volumes/share/roms/<system>/gamelist.xml`. Nothing under
+the share is ever written. The scraped `gamelist.xml` (ScreenScraper) already carries genre,
+family, developer, year, rating and the play data, so the catalogue is **browsable, searchable
+and taste-scorable with no IGDB call**; IGDB is only needed when a ROM is *promoted* (phase 2,
+for the id + dedupe). Everything works from tests with the share absent.
+
+## gamelist.xml format notes
+
+Per `<game id="…">` (the id is the ScreenScraper id): `path` (No-Intro file name with region,
+`./Parodius (Europe).zip`), `name` (clean title), `desc`, `rating` (0–1), `releasedate`
+(`YYYYMMDDT000000`), `developer`, `publisher`, `genre` (`Shoot'em Up / Horizontal`), `family`
+(series, ~30 %), `players`, `region`/`lang` (lowercased codes `us`/`eu`/`jp`/`wr`…), `md5`,
+`playcount`, `gametime` (seconds), `lastplayed` (`YYYYMMDDTHHMMSS`), `favorite`/`hidden`
+(`true` when set), local `image`/`thumbnail`/`boxback`/`video` paths, plus tags VGN ignores
+(`bezel`, `map`, `marquee`, `multidisk`, `cheevosId`, `cheevosHash`, `arcadesystemname`,
+`scrap`). XML entities (`&amp;`) are decoded; `<folder>` nodes and unknown tags are tolerated.
+The reader (`BatoceraGamelistReader`) is a **streaming `XMLParser`** — a 4 MB gamelist is never
+a DOM string soup. `hidden` entries are dropped.
+
+## System → platform table (`BatoceraSystems`)
+
+Batocera system folder → VGN platform slug (all slugs exist in `platforms.json`). Aliases fold
+(`megadrive`/`genesis` → `genesis`, `msx1`/`msx2` → `msx`, `supergrafx` → `pcengine`). Mapped
+on the owner's box: `snes nes gb gbc gba n64 megadrive→genesis mastersystem→sms gamegear
+pcengine pcenginecd megacd→segacd sega32x→32x saturn dreamcast psx→ps1 ps2 psp gamecube wii
+wiiu nds→ds 3ds msx1/2→msx colecovision jaguar wswan→wonderswan wswanc→wonderswancolor
+virtualboy scummvm→pc dos→pc c64 amstradcpc→cpc xbox360`. An **unknown** system is reported in
+the sync summary, never guessed onto a slug (slugs are permanent DB keys).
+
+**Skip list** (constant, phase-2-overridable): arcade romsets (`mame*`, `fbneo`, `daphne`,
+`neogeo`, `naomi`/`naomi2`, `atomiswave`, `model2`/`model3`, `chihiro`, `cps*` …) and
+non-collection ports/engines/launchers (`prboom`, `mrboom`, `pygame`, `sdlpop`, `steam`,
+`flatpak`, `ports`, `kodi`, `moonlight`, `flash`, `odcommander` …). Skip wins over any slug
+(`neogeo` has an AES slug but is skipped as an arcade romset). `scummvm`/`dos` are **not**
+skipped — they map to `pc` (the owner really plays those).
+
+## Folding (`BatoceraFolding`)
+
+The owner's set is 1G1R, so folding is a safety net, not the main mechanism. Entries are
+grouped by the **libretro key** of the file-name stem (the same `LibretroFilenameParser` /
+`LibretroIndex.libretroKey` the cover matcher uses — region/disc/revision tags stripped,
+punctuation folded, articles + "and" dropped). Multi-disc, revisions, hacks/translations and
+leftover regional twins collapse to one row. Representative = the entry **with play data**
+(most `gametime`, then favourite), else the preferred region **EU > US > JP**, then Disc 1,
+then the first path. The dropped twins are simply not inserted (never a second catalogue row).
+
+## Change detection & sync (`BatoceraSync`, an actor)
+
+For each non-skipped system whose `gamelist.xml` mtime **and** size are unchanged since the
+last read (`rom_catalog_sync`), the system is skipped; changed/new systems (or a `force`d run)
+are read → folded → upserted. New paths get `first_seen_at`; present paths refresh metadata /
+play data + `last_seen_at`; vanished paths get `removed_at` (**never deleted**, even when
+promoted). A malformed/unreadable system is reported and the sync **continues** (one bad file
+never loses the run). An unmounted share yields a quiet `.shareUnavailable` summary, not an
+error storm. The summary carries systems read/skipped/unchanged/failed, unknown systems,
+entries added/updated/removed, folded count, promotion candidates and duration.
+
+## Promotion (`BatoceraImporter` / `BatoceraPromotionBuilder` / `BatoceraPromoter`)
+
+`BatoceraImporter: LibraryImporter` (source id `batocera`, no network/auth like Delicious):
+`fetch` yields staging rows for the promotion candidates (or an explicit catalogue-id list for
+a hand "Add to Library"). Promotion commits through the **existing** `ImportStagingStore.commit`
+path:
+- owned copy, **format ROM**, `external_id = <system>/<relativePath>`, platform from the table;
+- **played** data reuses the PSN commit fields (`PSNCommit`): `markPlayed` when `gametime > 300`,
+  play time, last-played date; a favourite with no play time is owned-not-played;
+- **duplicate rule**: if the matched IGDB game already owns a ROM copy on the same platform,
+  no second copy is created — the play data still lands and the catalogue row is linked
+  ("Already in your library");
+- after commit, `promoted_game_id` is set on each catalogue row (`BatoceraPromoter`).
+
+`playcount` alone never promotes; the 5-minute threshold is one constant
+(`BatoceraPromotion.playedThresholdSeconds = 300`, `> 300` exclusive).
+
+### How Batocera play time is stored (interim — see LIMITATIONS)
+
+VGN has `my_playtime_s` (manual, never overwritten) and `psn_playtime_s`. There is **no**
+neutral `imported_playtime_s` column yet. Batocera play time is stored into `psn_playtime_s`
+**only when both columns are NULL** (`LibraryStore.setImportedPlaytimeIfEmpty`, driven by
+`PSNCommit.playtimeOnlyIfEmpty`), so a real PSN value is never clobbered. **Proposed for
+phase 2/lane A:** add a neutral `imported_playtime_s` (or a `playtime_source` tag) so Batocera
+and PSN times can coexist. Until then the interim rule above is what ships.
+
+## Taste-ready queries (`RomCatalogStore` + `RomCatalogTraits`)
+
+Read-only API for phase 2 (no UI): `entries(system:…)`, `search(_:system:…)` (diacritics-
+insensitive FTS5), `countsPerSystem()`, `neverPlayedPool(…)`, `promotionCandidates(…)`.
+`RomCatalogTraits` maps a ScreenScraper genre onto the IGDB-style `GameTrait` vocabulary the
+recommendation engine consumes (`RomCatalogEntry.traits`): the top-level genre → a `.genre`/
+`.theme` trait via a table (`Platform`, `Role Playing Game` → `Role-playing (RPG)`, `Shoot'em
+Up` → `Shooter`, `Action` → theme `Action`…), every segment also a `.keyword`; `family` →
+`.franchise`, `developer` → `.developer`, year → `.decade`. On the owner's box **91.6 %** of
+entries' top-level genres map to a known trait. `Recommendation/**` was **not** touched.
+
+## What phase 2 needs (wiring — this lane wrote no UI)
+
+- **Settings ▸ Batocera**: pick the share root (remembered), Sync Now (`BatoceraSync.sync`),
+  skip-list override, an automatic sync at launch when the share is reachable.
+- **Sidebar "Batocera"** browser: per-system list/search via `RomCatalogStore.entries/search/
+  countsPerSystem`, with "Add to Library" → `BatoceraImporter(store:, catalogIDs:)` +
+  `BatoceraPromoter.promote`.
+- **Promotion review** after a sync: `BatoceraSyncSummary.candidateCatalogIDs` → build
+  `BatoceraPromoter.Plan`s (IGDB-match each candidate; `gameHasROMCopy` gives the duplicate
+  flag) → `promote` → banner + Undo.
+- **Play Next ▸ Discover**: intersect the platform best-ofs with `neverPlayedPool`, score with
+  `RomCatalogEntry.traits` + the crowd `rating`; "Not interested" → `setNotInterested`.
+- **Lane-A schema ask**: the neutral `imported_playtime_s` column (above).
+
+## Privacy / read-only rules
+
+Nothing derived from the share is committed except aggregate facts and a handful of game
+titles in tests/docs (titles are product names). No ROMs, images or videos are copied. The
+share is opened read-only; the mount may vanish and everything still works from tests (no test
+reads `/Volumes/…`; all gamelists in the suite are built in code).

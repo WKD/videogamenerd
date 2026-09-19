@@ -117,6 +117,7 @@ struct AppDatabase: Sendable {
         Migrations.registerV7(in: &migrator)
         Migrations.registerV8(in: &migrator)
         Migrations.registerV9(in: &migrator)
+        Migrations.registerV10(in: &migrator)
         return migrator
     }
 }

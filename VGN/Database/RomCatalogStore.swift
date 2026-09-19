@@ -1,0 +1,304 @@
+import Foundation
+import GRDB
+
+/// The data side of the Batocera ROM catalogue (PLAN §15). Owns every read and write of
+/// `rom_catalog` / `rom_catalog_sync`. The catalogue is a completely separate shelf: this
+/// store never touches `games`, and no library query ever reads `rom_catalog` — the only
+/// bridge is `promoted_game_id`, set once a ROM is promoted through the importer path.
+///
+/// Mirrors ``ImportStagingStore``'s shape: a `Sendable` struct over an ``AppDatabase``, all
+/// I/O through GRDB's writer, every write one transaction.
+struct RomCatalogStore: Sendable {
+    let database: AppDatabase
+    var dbWriter: any DatabaseWriter { database.dbWriter }
+
+    init(_ database: AppDatabase) { self.database = database }
+
+    static let source = "batocera"
+
+    /// The full column list a read selects, in the order ``entry(from:)`` decodes.
+    private static let columns = """
+        id, source, system, platform_id, relative_path, name, sort_title, normalised_title,
+        libretro_key, screenscraper_id, md5, region, lang, genre, family, developer, publisher,
+        release_year, rating, players, play_count, game_time_s, last_played_at, favorite,
+        image_path, thumbnail_path, first_seen_at, last_seen_at, removed_at, promoted_game_id,
+        dismissed_at, not_interested
+        """
+
+    // MARK: - Sync (upsert + removal, one transaction per system)
+
+    /// Reconcile one system's catalogue against a freshly-read, already-folded set of entries
+    /// (PLAN §15): new paths are inserted (`first_seen_at`), present paths refresh their
+    /// metadata / play data and `last_seen_at` (clearing any `removed_at`), and paths that
+    /// vanished from the share get `removed_at` — **never deleted**, even when promoted. The
+    /// persisted decisions (`promoted_game_id`, `dismissed_at`, `not_interested`) are kept.
+    @discardableResult
+    func syncSystem(system: String, entries: [RomCatalogEntry]) async throws -> RomCatalogSyncCounts {
+        let src = Self.source
+        return try await dbWriter.write { db in
+            var counts = RomCatalogSyncCounts()
+            let now = Date()
+
+            // Existing rows for this system: relative_path → id.
+            var existing: [String: Int64] = [:]
+            for row in try Row.fetchAll(db, sql: """
+                SELECT id, relative_path FROM rom_catalog WHERE source = ? AND system = ?
+                """, arguments: [src, system]) {
+                existing[row["relative_path"]] = row["id"]
+            }
+
+            var currentPaths = Set<String>()
+            for entry in entries {
+                currentPaths.insert(entry.relativePath)
+                if let id = existing[entry.relativePath] {
+                    try Self.update(entry, id: id, now: now, db: db)
+                    counts.updated += 1
+                } else {
+                    try Self.insert(entry, now: now, db: db)
+                    counts.added += 1
+                }
+            }
+
+            // Vanished rows → removed_at (only those not already removed).
+            for (path, id) in existing where !currentPaths.contains(path) {
+                try db.execute(sql: """
+                    UPDATE rom_catalog SET removed_at = ? WHERE id = ? AND removed_at IS NULL
+                    """, arguments: [now, id])
+                if db.changesCount > 0 { counts.removed += 1 }
+            }
+            return counts
+        }
+    }
+
+    private static func insert(_ e: RomCatalogEntry, now: Date, db: Database) throws {
+        try db.execute(sql: """
+            INSERT INTO rom_catalog
+                (source, system, platform_id, relative_path, name, sort_title, normalised_title,
+                 libretro_key, screenscraper_id, md5, region, lang, genre, family, developer,
+                 publisher, release_year, rating, players, play_count, game_time_s, last_played_at,
+                 favorite, image_path, thumbnail_path, first_seen_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, arguments: [
+                e.source, e.system, e.platformID, e.relativePath, e.name, e.sortTitle,
+                e.normalisedTitle, e.libretroKey, e.screenScraperID, e.md5, e.region, e.lang,
+                e.genre, e.family, e.developer, e.publisher, e.releaseYear, e.rating, e.players,
+                e.playCount, e.gameTimeSeconds, e.lastPlayedAt, e.isFavorite, e.imagePath,
+                e.thumbnailPath, now, now,
+            ])
+    }
+
+    /// Update refreshes metadata + play data + `last_seen_at`, clears `removed_at`, and keeps
+    /// `first_seen_at` and the persisted decisions untouched.
+    private static func update(_ e: RomCatalogEntry, id: Int64, now: Date, db: Database) throws {
+        try db.execute(sql: """
+            UPDATE rom_catalog SET
+                platform_id = ?, name = ?, sort_title = ?, normalised_title = ?, libretro_key = ?,
+                screenscraper_id = ?, md5 = ?, region = ?, lang = ?, genre = ?, family = ?,
+                developer = ?, publisher = ?, release_year = ?, rating = ?, players = ?,
+                play_count = ?, game_time_s = ?, last_played_at = ?, favorite = ?,
+                image_path = ?, thumbnail_path = ?, last_seen_at = ?, removed_at = NULL
+            WHERE id = ?
+            """, arguments: [
+                e.platformID, e.name, e.sortTitle, e.normalisedTitle, e.libretroKey,
+                e.screenScraperID, e.md5, e.region, e.lang, e.genre, e.family, e.developer,
+                e.publisher, e.releaseYear, e.rating, e.players, e.playCount, e.gameTimeSeconds,
+                e.lastPlayedAt, e.isFavorite, e.imagePath, e.thumbnailPath, now, id,
+            ])
+    }
+
+    // MARK: - Change-detection state
+
+    func syncState(system: String) async throws -> RomCatalogSyncState? {
+        try await dbWriter.read { db in
+            guard let row = try Row.fetchOne(db, sql: """
+                SELECT system, gamelist_mtime, gamelist_size, last_read_at, entry_count
+                FROM rom_catalog_sync WHERE source = ? AND system = ?
+                """, arguments: [Self.source, system]) else { return nil }
+            return RomCatalogSyncState(
+                system: row["system"], gamelistMtime: row["gamelist_mtime"],
+                gamelistSize: row["gamelist_size"], lastReadAt: row["last_read_at"],
+                entryCount: row["entry_count"])
+        }
+    }
+
+    func setSyncState(system: String, mtime: Date?, size: Int64, entryCount: Int) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                INSERT INTO rom_catalog_sync (source, system, gamelist_mtime, gamelist_size,
+                                              last_read_at, entry_count)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source, system) DO UPDATE SET
+                    gamelist_mtime = excluded.gamelist_mtime,
+                    gamelist_size  = excluded.gamelist_size,
+                    last_read_at   = excluded.last_read_at,
+                    entry_count    = excluded.entry_count
+                """, arguments: [Self.source, system, mtime, size, Date(), entryCount])
+        }
+    }
+
+    // MARK: - Promotion
+
+    /// Promotion candidates not yet promoted, still present, not dismissed (PLAN §15 —
+    /// `game_time_s > 300` OR favourite). Ordered by most play time then name.
+    func promotionCandidates(limit: Int = 5000) async throws -> [RomCatalogEntry] {
+        try await dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT \(Self.columns) FROM rom_catalog
+                WHERE removed_at IS NULL AND promoted_game_id IS NULL AND not_interested = 0
+                  AND (game_time_s > ? OR favorite = 1)
+                ORDER BY game_time_s DESC, sort_title ASC
+                LIMIT ?
+                """, arguments: [BatoceraPromotion.playedThresholdSeconds, limit])
+                .map(Self.entry(from:))
+        }
+    }
+
+    /// Link a catalogue row to the library game it was promoted into (PLAN §15). Idempotent.
+    func setPromoted(catalogID: Int64, gameID: Int64) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: "UPDATE rom_catalog SET promoted_game_id = ? WHERE id = ?",
+                           arguments: [gameID, catalogID])
+        }
+    }
+
+    /// Retire a title from the future Discover row for good ("Not interested", PLAN §15).
+    func setNotInterested(catalogID: Int64, _ value: Bool = true) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE rom_catalog SET not_interested = ?, dismissed_at = ? WHERE id = ?
+                """, arguments: [value, value ? Date() : nil, catalogID])
+        }
+    }
+
+    // MARK: - Reads (browser + Discover pool, phase 2)
+
+    func entry(id: Int64) async throws -> RomCatalogEntry? {
+        try await dbWriter.read { db in
+            try Row.fetchOne(db, sql: "SELECT \(Self.columns) FROM rom_catalog WHERE id = ?",
+                             arguments: [id]).map(Self.entry(from:))
+        }
+    }
+
+    func entries(ids: [Int64]) async throws -> [RomCatalogEntry] {
+        guard !ids.isEmpty else { return [] }
+        return try await dbWriter.read { db in
+            let placeholders = databaseQuestionMarks(count: ids.count)
+            return try Row.fetchAll(db, sql: """
+                SELECT \(Self.columns) FROM rom_catalog WHERE id IN (\(placeholders))
+                """, arguments: StatementArguments(ids)).map(Self.entry(from:))
+        }
+    }
+
+    /// One system's entries (present only, sorted), paged (PLAN §15 browser).
+    func entries(system: String, includeRemoved: Bool = false,
+                 limit: Int = 500, offset: Int = 0) async throws -> [RomCatalogEntry] {
+        try await dbWriter.read { db in
+            let removedClause = includeRemoved ? "" : "AND removed_at IS NULL"
+            return try Row.fetchAll(db, sql: """
+                SELECT \(Self.columns) FROM rom_catalog
+                WHERE source = ? AND system = ? \(removedClause)
+                ORDER BY sort_title ASC LIMIT ? OFFSET ?
+                """, arguments: [Self.source, system, limit, offset]).map(Self.entry(from:))
+        }
+    }
+
+    /// Present-entry counts per system (PLAN §15 — the browser's per-system totals).
+    func countsPerSystem() async throws -> [String: Int] {
+        try await dbWriter.read { db in
+            var out: [String: Int] = [:]
+            for row in try Row.fetchAll(db, sql: """
+                SELECT system, COUNT(*) AS n FROM rom_catalog WHERE removed_at IS NULL
+                GROUP BY system
+                """) {
+                out[row["system"]] = row["n"]
+            }
+            return out
+        }
+    }
+
+    /// FTS search over name + normalised title, diacritics-insensitive (PLAN §15). Optionally
+    /// scoped to a system. Fast at ~15 000 rows via `rom_catalog_fts`.
+    func search(_ query: String, system: String? = nil, limit: Int = 200) async throws -> [RomCatalogEntry] {
+        let pattern = FTSPattern.prefixMatch(query)
+        guard !pattern.isEmpty else { return [] }
+        return try await dbWriter.read { db in
+            var sql = """
+                SELECT c.* FROM rom_catalog c
+                JOIN rom_catalog_fts f ON f.rowid = c.id
+                WHERE rom_catalog_fts MATCH ? AND c.removed_at IS NULL
+                """
+            var args: [DatabaseValueConvertible] = [pattern]
+            if let system {
+                sql += " AND c.system = ?"
+                args.append(system)
+            }
+            sql += " ORDER BY c.sort_title ASC LIMIT ?"
+            args.append(limit)
+            return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map(Self.entry(from:))
+        }
+    }
+
+    /// The "never played" pool for Discover (PLAN §15): present, not promoted, not dismissed,
+    /// no recorded play time. Optionally scoped to a system.
+    func neverPlayedPool(system: String? = nil, limit: Int = 500) async throws -> [RomCatalogEntry] {
+        try await dbWriter.read { db in
+            var sql = """
+                SELECT \(Self.columns) FROM rom_catalog
+                WHERE removed_at IS NULL AND promoted_game_id IS NULL AND not_interested = 0
+                  AND game_time_s = 0 AND play_count = 0
+                """
+            var args: [DatabaseValueConvertible] = []
+            if let system {
+                sql += " AND system = ?"
+                args.append(system)
+            }
+            sql += " ORDER BY sort_title ASC LIMIT ?"
+            args.append(limit)
+            return try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args)).map(Self.entry(from:))
+        }
+    }
+
+    /// Total present-entry count (diagnostics / tests).
+    func totalCount(includeRemoved: Bool = false) async throws -> Int {
+        try await dbWriter.read { db in
+            let clause = includeRemoved ? "" : "WHERE removed_at IS NULL"
+            return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM rom_catalog \(clause)") ?? 0
+        }
+    }
+
+    // MARK: - Row decode
+
+    static func entry(from r: Row) -> RomCatalogEntry {
+        RomCatalogEntry(
+            id: r["id"], source: r["source"], system: r["system"], platformID: r["platform_id"],
+            relativePath: r["relative_path"], name: r["name"], sortTitle: r["sort_title"],
+            normalisedTitle: r["normalised_title"], libretroKey: r["libretro_key"],
+            screenScraperID: r["screenscraper_id"], md5: r["md5"], region: r["region"],
+            lang: r["lang"], genre: r["genre"], family: r["family"], developer: r["developer"],
+            publisher: r["publisher"], releaseYear: r["release_year"], rating: r["rating"],
+            players: r["players"], playCount: r["play_count"], gameTimeSeconds: r["game_time_s"],
+            lastPlayedAt: r["last_played_at"], isFavorite: (r["favorite"] as Int64) != 0,
+            imagePath: r["image_path"], thumbnailPath: r["thumbnail_path"],
+            firstSeenAt: r["first_seen_at"], lastSeenAt: r["last_seen_at"],
+            removedAt: r["removed_at"], promotedGameID: r["promoted_game_id"],
+            dismissedAt: r["dismissed_at"], notInterested: (r["not_interested"] as Int64) != 0)
+    }
+}
+
+/// Minimal FTS5 query builder for catalogue search: split into terms, escape each as a
+/// quoted token, and prefix-match the last term (so "zel" finds "Zelda" as the user types).
+enum FTSPattern {
+    static func prefixMatch(_ query: String) -> String {
+        let terms = query
+            .folding(options: .diacriticInsensitive, locale: nil)
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+        guard !terms.isEmpty else { return "" }
+        var parts: [String] = []
+        for (i, term) in terms.enumerated() {
+            let quoted = "\"" + term.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+            parts.append(i == terms.count - 1 ? quoted + "*" : quoted)
+        }
+        return parts.joined(separator: " ")
+    }
+}

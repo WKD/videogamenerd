@@ -8,6 +8,8 @@ enum ImportSourceID {
     static let psn = "psn"
     /// The first **file-based** importer: an old Delicious Library 2 database (PLAN §5.5).
     static let delicious = "delicious"
+    /// The Batocera ROM catalogue → library promotion importer (PLAN §15).
+    static let batocera = "batocera"
 }
 
 /// What an imported title signals about the library (PLAN §14.3 / §13.3). GOG only
