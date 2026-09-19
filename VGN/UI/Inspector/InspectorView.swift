@@ -229,7 +229,7 @@ private struct SingleGameInspector: View {
             Text("Only played games can be ranked.")
                 .font(.caption).foregroundStyle(.secondary)
         } else if detail.tierID == nil {
-            Text("Unranked — press S…F to place it in a tier.")
+            Text("Unranked — press ⇧S…⇧F to place it in a tier.")
                 .font(.caption).foregroundStyle(.secondary)
         } else if let line = vm.selectedScoreLine, line.isPlaced {
             Text(line.summary())
