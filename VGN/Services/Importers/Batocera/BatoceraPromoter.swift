@@ -77,6 +77,16 @@ struct BatoceraPromoter: Sendable {
         }
     }
 
+    /// The library game already carrying an IGDB id (phase 2 promotion review): a new-game
+    /// row whose IGDB match is a game already in the library resolves to it, so the duplicate
+    /// rule can add play time only instead of a second ROM copy (PLAN §15).
+    func existingGameID(igdbID: Int64) async throws -> Int64? {
+        try await database.dbWriter.read { db in
+            try Int64.fetchOne(db, sql: "SELECT id FROM games WHERE igdb_id = ? LIMIT 1",
+                               arguments: [igdbID])
+        }
+    }
+
     private func gameID(forExternalID externalID: String) async throws -> Int64? {
         try await database.dbWriter.read { db in
             try Int64.fetchOne(db, sql: """

@@ -64,8 +64,11 @@ actor BatoceraSync {
         self.reader = reader
     }
 
-    /// Sync from a chosen share root (`/Volumes/share` or `/Volumes/share/roms`).
-    func sync(root: URL, force: Bool = false,
+    /// Sync from a chosen share root (`/Volumes/share` or `/Volumes/share/roms`). `skip`,
+    /// when non-nil, is the owner's editable skip list (PLAN §15 phase 2) used instead of the
+    /// built-in constant skip sets; the arcade romset families (`mame*`/`cps*`) are always
+    /// skipped on top of it.
+    func sync(root: URL, force: Bool = false, skip: Set<String>? = nil,
               progress: (@Sendable (BatoceraSyncProgress) -> Void)? = nil) async -> BatoceraSyncSummary {
         let share: BatoceraShare
         do {
@@ -75,11 +78,11 @@ actor BatoceraSync {
             summary.shareUnavailable = true
             return summary
         }
-        return await sync(share: share, force: force, progress: progress)
+        return await sync(share: share, force: force, skip: skip, progress: progress)
     }
 
     /// Sync a resolved share (used by tests with a temp folder).
-    func sync(share: BatoceraShare, force: Bool = false,
+    func sync(share: BatoceraShare, force: Bool = false, skip: Set<String>? = nil,
               progress: (@Sendable (BatoceraSyncProgress) -> Void)? = nil) async -> BatoceraSyncSummary {
         let start = Date()
         var summary = BatoceraSyncSummary()
@@ -105,7 +108,9 @@ actor BatoceraSync {
         for (i, file) in files.enumerated() {
             if Task.isCancelled { summary.cancelled = true; break }
 
-            switch BatoceraSystems.classify(file.system) {
+            let classification = skip.map { BatoceraSystems.classify(file.system, skip: $0) }
+                ?? BatoceraSystems.classify(file.system)
+            switch classification {
             case .skipped:
                 summary.systemsSkipped += 1
                 summary.skippedSystems.append(file.system)

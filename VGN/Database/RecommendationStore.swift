@@ -31,6 +31,12 @@ struct RecommendationStore: Sendable {
         return RecommendationEngine.recommend(input)
     }
 
+    /// The user's ranked games as the pure taste profile (`id`, igdb id, 0…1 derived score,
+    /// traits) — reused by the Batocera "Discover" scorer (PLAN §15) without re-querying.
+    func rankedGames() async throws -> [RankedGame] {
+        try await dbReader.read { db in try Self.loadRankedGames(db: db) }
+    }
+
     /// The leave-one-out taste backtest over the ranked games (PLAN §7b).
     func backtest(weights: RecommendationWeights = RecommendationWeights()) async throws -> TasteBacktestResult {
         let ranked = try await dbReader.read { db in try Self.loadRankedGames(db: db) }
