@@ -20,6 +20,7 @@ The agents cannot drive the GUI, so the keyboard palette has only been exercised
 - [ ] Covers appear in the grid within seconds; the sidebar footer shows "Fetching metadata · n left"; quit mid-fetch and relaunch → the queue resumes; relaunch is instant and covers persist.
 - [ ] "metal gear solid legacy" offers **Add as compilation** and creates the member games; "bloodb" and "chevaliers de baphomet" both find their game (search fallback).
 - [ ] Drop an image on a cell / the inspector cover → custom cover; **Refresh metadata** must not replace it.
+- [ ] **Library grid one-key actions need ⇧.** Select game(s), then `⇧S ⇧A ⇧B ⇧C ⇧D ⇧F` set the tier, `0` (plain) clears it, `⇧O` toggles owned, `⇧P` toggles played. Plain letters *always* type-to-select (typing "s" jumps to a title, never tiers; "ze" finds Zelda even with a selection). Caps Lock on must not tier — a Caps-Locked "S" still type-selects. ⇧M (a non-action letter) type-selects like a plain letter. Arrows / space / ⌘I / ⌫ / ↩ unchanged. Tier Board, Triage, Duel and Quick Add keep their own (unshifted) keys.
 - [ ] Bulk **Mark Owned** adds a physical copy on each game's primary platform — acceptable default, or do you want a picker?
 
 ### M4 — Ranking (tagged `m4` 2026-09-18)

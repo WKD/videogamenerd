@@ -116,14 +116,57 @@ struct LibraryViewModelKeyTests {
         #expect(vm.handleKey(.markOwned) == false)
     }
 
-    @Test func characterMapping() {
-        #expect(LibraryKey(character: "s") == .tier("S"))
-        #expect(LibraryKey(character: "A") == .tier("A"))
-        #expect(LibraryKey(character: "f") == .tier("F"))
-        #expect(LibraryKey(character: "0") == .clearTier)
-        #expect(LibraryKey(character: "o") == .markOwned)
-        #expect(LibraryKey(character: "p") == .markPlayed)
-        #expect(LibraryKey(character: "x") == nil)
+}
+
+/// The pure library-grid key rule (owner decision 2026-09-19): plain letters
+/// type-to-select; `⇧S…⇧F`/`⇧O`/`⇧P` act; plain `0` clears the tier; Caps Lock is
+/// never treated as ⇧. No window / view model needed.
+struct GridKeyRouterTests {
+
+    @Test func plainLettersAlwaysTypeSelect() {
+        #expect(GridKeyRouter.route(characters: "s", modifiers: []) == .typeSelect("s"))
+        #expect(GridKeyRouter.route(characters: "a", modifiers: []) == .typeSelect("a"))
+        #expect(GridKeyRouter.route(characters: "m", modifiers: []) == .typeSelect("m"))
+        #expect(GridKeyRouter.route(characters: "o", modifiers: []) == .typeSelect("o"))
+        #expect(GridKeyRouter.route(characters: "p", modifiers: []) == .typeSelect("p"))
+    }
+
+    @Test func plainZeroClearsTierOtherDigitsTypeSelect() {
+        #expect(GridKeyRouter.route(characters: "0", modifiers: []) == .clearTier)
+        #expect(GridKeyRouter.route(characters: "7", modifiers: []) == .typeSelect("7"))
+    }
+
+    @Test func shiftTierLetters() {
+        for (typed, letter) in [("s", "S"), ("a", "A"), ("b", "B"),
+                                ("c", "C"), ("d", "D"), ("f", "F")] {
+            #expect(GridKeyRouter.route(characters: typed, modifiers: .shift) == .tier(letter))
+            // With ⇧ the character often arrives already uppercased — still one tier.
+            #expect(GridKeyRouter.route(characters: letter, modifiers: .shift) == .tier(letter))
+        }
+    }
+
+    @Test func shiftOwnedAndPlayed() {
+        #expect(GridKeyRouter.route(characters: "o", modifiers: .shift) == .toggleOwned)
+        #expect(GridKeyRouter.route(characters: "p", modifiers: .shift) == .togglePlayed)
+    }
+
+    @Test func shiftNonActionLetterTypeSelects() {
+        #expect(GridKeyRouter.route(characters: "m", modifiers: .shift) == .typeSelect("m"))
+        #expect(GridKeyRouter.route(characters: "z", modifiers: .shift) == .typeSelect("z"))
+    }
+
+    @Test func capsLockIsNotShift() {
+        // Caps Lock uppercases the character but does NOT set .shift → type-select,
+        // never a tier action.
+        #expect(GridKeyRouter.route(characters: "S", modifiers: []) == .typeSelect("S"))
+        #expect(GridKeyRouter.route(characters: "O", modifiers: []) == .typeSelect("O"))
+        #expect(GridKeyRouter.route(characters: "s", modifiers: .capsLock) == .typeSelect("s"))
+    }
+
+    @Test func nonAlphanumericIgnored() {
+        #expect(GridKeyRouter.route(characters: "-", modifiers: []) == nil)
+        #expect(GridKeyRouter.route(characters: "/", modifiers: .shift) == nil)
+        #expect(GridKeyRouter.route(characters: "", modifiers: []) == nil)
     }
 }
 
@@ -187,6 +230,15 @@ struct MultiSelectAndTypeSelectTests {
         return vm
     }
 
+    /// Route a keystroke through the pure ``GridKeyRouter`` and apply it — the
+    /// exact path the grid view takes.
+    @discardableResult
+    private func press(_ vm: LibraryViewModel, _ characters: String, shift: Bool = false) -> Int64? {
+        guard let action = GridKeyRouter.route(characters: characters,
+                                               modifiers: shift ? .shift : []) else { return nil }
+        return vm.applyGridAction(action)
+    }
+
     @Test func shiftArrowExtendsAndContractsRange() async {
         let vm = await loadedVM(orderedGames(5))
         vm.selectOnly(2)
@@ -198,68 +250,102 @@ struct MultiSelectAndTypeSelectTests {
         #expect(vm.selectedGameIDs == [1, 2])
     }
 
-    @Test func typeToSelectJumpsOnNonTierLetter() async {
-        let clock = ClockBox()
-        let vm = await makeVM(typeSelectGames(), clock)
+    @Test func plainLetterTypeSelectsEvenWithSelection() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())
         var tierCalls = 0
         vm.onSetTier = { _, _ in tierCalls += 1 }
-        vm.selectOnly(4)                        // Zelda selected
+        vm.selectOnly(2)                        // Metroid selected
 
-        // "m" is not a tier key → type-to-select jumps to the first "m" title.
-        #expect(vm.handleGridCharacter("m") == 1)   // Mega Man
-        #expect(vm.selectedGameIDs == [1])
-        // Continue the buffer: "e" → "me" still Mega Man; "t" → "met" → Metroid.
-        _ = vm.handleGridCharacter("e")
-        #expect(vm.handleGridCharacter("t") == 2)   // Metroid
-        #expect(tierCalls == 0)                     // never tiered
+        // Plain "s" is a tier LETTER but with no ⇧ it always type-to-selects.
+        #expect(press(vm, "s") == 3)            // Sonic
+        #expect(vm.selectedGameIDs == [3])
+        #expect(tierCalls == 0)                 // never tiered
     }
 
-    @Test func tierKeyFiresOnFirstKeystrokeWithSelection() async {
-        let clock = ClockBox()
-        let vm = await makeVM(typeSelectGames(), clock)
+    @Test func typeSelectAccumulatesAcrossKeystrokes() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())
+        // "m" → Mega Man; "me" still Mega Man; "met" → Metroid.
+        #expect(press(vm, "m") == 1)
+        _ = press(vm, "e")
+        #expect(press(vm, "t") == 2)
+    }
+
+    @Test func shiftLetterTiersSelection() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())
         var lastTier: (Set<Int64>, String?)?
         vm.onSetTier = { ids, letter in lastTier = (ids, letter) }
-        vm.selectOnly(2)                        // Metroid selected, buffer inactive
+        vm.selectOnly(2)                        // Metroid selected
 
-        // "s" is a tier key + a selection exists + buffer inactive → tiers, no jump.
-        #expect(vm.handleGridCharacter("s") == nil)
+        // ⇧S with a selection → tiers, no jump.
+        #expect(press(vm, "s", shift: true) == nil)
         #expect(lastTier?.0 == [2])
         #expect(lastTier?.1 == "S")
         #expect(vm.selectedGameIDs == [2])      // selection unchanged (no jump)
     }
 
-    @Test func tierLetterTypesToSelectWhenNothingSelected() async {
-        let clock = ClockBox()
-        let vm = await makeVM(typeSelectGames(), clock)
+    @Test func shiftNonActionLetterTypeSelects() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())
         var tierCalls = 0
         vm.onSetTier = { _, _ in tierCalls += 1 }
-        vm.clearSelection()                     // nothing selected
-
-        // With no selection, even a tier letter starts type-to-select → Sonic.
-        #expect(vm.handleGridCharacter("s") == 3)
-        #expect(vm.selectedGameIDs == [3])
+        vm.selectOnly(3)
+        // ⇧M is not an action key → behaves like a plain letter (Mega Man).
+        #expect(press(vm, "m", shift: true) == 1)
         #expect(tierCalls == 0)
     }
 
-    @Test func activeBufferSuppressesTierKeysUntilWindowExpires() async {
-        let clock = ClockBox()
-        let vm = await makeVM(typeSelectGames(), clock)
+    @Test func plainZeroClearsTier() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())
+        var lastTier: (Set<Int64>, String?)? = ([99], "X")
+        vm.onSetTier = { ids, letter in lastTier = (ids, letter) }
+        vm.selectOnly(2)
+
+        #expect(press(vm, "0") == nil)          // action, no jump
+        #expect(lastTier?.0 == [2])
+        #expect(lastTier?.1 == nil)             // tier cleared
+    }
+
+    @Test func shiftOwnedTogglesOffWhenAllOwned() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())   // all games owned
+        var lastOwned: (Set<Int64>, Bool)?
+        vm.onSetOwned = { ids, value in lastOwned = (ids, value) }
+        vm.selectOnly(1)
+
+        press(vm, "o", shift: true)             // owned → toggle off
+        #expect(lastOwned?.0 == [1])
+        #expect(lastOwned?.1 == false)
+    }
+
+    @Test func shiftPlayedTogglesOnWhenNotAllPlayed() async {
+        let games = [GameSummary(id: 1, title: "Abc", played: false, owned: true, platformIDs: ["nes"]),
+                     GameSummary(id: 2, title: "Bcd", played: true, owned: true, platformIDs: ["nes"])]
+        let vm = await makeVM(games, ClockBox())
+        var lastPlayed: (Set<Int64>, Bool)?
+        vm.onSetPlayed = { ids, value in lastPlayed = (ids, value) }
+        vm.selectedGameIDs = [1, 2]             // one unplayed → toggle turns all on
+
+        press(vm, "p", shift: true)
+        #expect(lastPlayed?.1 == true)
+    }
+
+    @Test func shiftActionSuppressedWhileSearchFocused() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())
         var tierCalls = 0
         vm.onSetTier = { _, _ in tierCalls += 1 }
         vm.selectOnly(1)
 
-        // Start a buffer with a non-tier letter → active.
-        _ = vm.handleGridCharacter("m")
-        #expect(vm.isTypeBufferActive())
-        // A tier letter within the window extends the buffer (no tiering).
-        #expect(vm.handleGridCharacter("s") == nil)   // "ms" matches nothing
+        vm.searchFieldFocused = true
+        press(vm, "s", shift: true)
         #expect(tierCalls == 0)
+    }
 
-        // Past the ~1 s window the buffer expires → a tier letter tiers again.
-        clock.now = clock.now.addingTimeInterval(2)
-        #expect(!vm.isTypeBufferActive())
-        _ = vm.handleGridCharacter("s")
-        #expect(tierCalls == 1)
+    @Test func shiftTierWithNoSelectionDoesNothing() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())
+        var tierCalls = 0
+        vm.onSetTier = { _, _ in tierCalls += 1 }
+        vm.clearSelection()
+
+        #expect(press(vm, "s", shift: true) == nil)
+        #expect(tierCalls == 0)
     }
 }
 

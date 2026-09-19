@@ -8,17 +8,6 @@ enum LibraryKey: Hashable, Sendable {
     case clearTier      // "0"
     case markOwned      // "O"
     case markPlayed     // "P"
-
-    /// Map a typed character to an intent, or nil if it isn't one we handle.
-    init?(character: Character) {
-        switch Character(character.uppercased()) {
-        case "S", "A", "B", "C", "D", "F": self = .tier(String(character.uppercased()))
-        case "0": self = .clearTier
-        case "O": self = .markOwned
-        case "P": self = .markPlayed
-        default: return nil
-        }
-    }
 }
 
 /// The single `@MainActor @Observable` store behind the whole main window
@@ -47,11 +36,11 @@ final class LibraryViewModel {
     /// The moving end of a shift-arrow / shift-click range (pivots on the anchor).
     private var selectionCursor: Int64?
 
-    // Type-to-select state (PLAN §8). See `handleGridCharacter`.
+    // Type-to-select state (PLAN §8). See `applyGridAction`.
     private var typeBuffer: String = ""
     private var lastTypeAt: Date?
     /// How long after a type-to-select keystroke further letters keep extending the
-    /// buffer (and tier keys stay suppressed). ~1 s.
+    /// same buffer ("m" then "e" → "me"). ~1 s.
     let typeSelectWindow: TimeInterval = 1.0
 
     /// Minimum grid cell width in points, driven by the toolbar size slider.
@@ -506,38 +495,50 @@ final class LibraryViewModel {
         selectionCursor = nil
     }
 
-    // MARK: Type-to-select vs tier keys (PLAN §8)
+    // MARK: Grid one-key actions vs type-to-select (PLAN §7/§8)
 
-    /// Handle a printable character pressed over the grid. Returns an id to
+    /// Apply a routed grid keystroke (see ``GridKeyRouter``). Returns an id to
     /// scroll to (a type-to-select jump) or nil (a tier/ownership action, or
-    /// nothing). Documented rule for the S/A/B/C/D/F/O/P/0 collision:
+    /// nothing to do). Suppressed while the search field owns focus.
     ///
-    /// - While a **type-to-select buffer is active** (a letter was typed within
-    ///   `typeSelectWindow`), every further character — *including* the tier
-    ///   letters — extends the buffer and jumps. So "ze" always finds *Zelda*.
-    /// - When the buffer is **inactive** and the character is a **tier/ownership
-    ///   key** *and a selection exists*, it performs that action (PLAN §7/§8:
-    ///   "select game(s) → press S…F"). It does **not** start a buffer.
-    /// - Otherwise (buffer inactive, and either not a tier key or nothing is
-    ///   selected) it **starts** a type-to-select buffer and jumps — so with no
-    ///   selection you can still jump to "Sonic" by typing.
-    ///
-    /// Trade-off (documented): to type-to-select a title that starts with a tier
-    /// letter while a selection is active, deselect first (Esc / click empty).
+    /// The routing is deterministic and lives in the pure ``GridKeyRouter``:
+    /// plain letters always type-to-select; the tier/owned/played actions need ⇧
+    /// (`⇧S…⇧F`, `⇧O`, `⇧P`); plain `0` clears the tier. So a type-to-select of a
+    /// title starting with a tier letter is never eaten by an action.
     @discardableResult
-    func handleGridCharacter(_ character: Character) -> Int64? {
+    func applyGridAction(_ action: GridKeyAction) -> Int64? {
         guard !searchFieldFocused else { return nil }
-        guard character.isLetter || character.isNumber else { return nil }
+        switch action {
+        case .tier(let letter):
+            handleKey(.tier(letter)); return nil
+        case .clearTier:
+            handleKey(.clearTier); return nil
+        case .toggleOwned:
+            toggleOwnedForSelection(); return nil
+        case .togglePlayed:
+            togglePlayedForSelection(); return nil
+        case .typeSelect(let character):
+            return isTypeBufferActive() ? appendTypeSelect(character)
+                                        : startTypeSelect(character)
+        }
+    }
 
-        if isTypeBufferActive() {
-            return appendTypeSelect(character)
-        }
-        // Buffer inactive: a tier/ownership key with a selection wins.
-        if !selectedGameIDs.isEmpty, let key = LibraryKey(character: character) {
-            _ = handleKey(key)
-            return nil
-        }
-        return startTypeSelect(character)
+    /// ⇧O — toggle owned across the whole selection: if every selected game is
+    /// already owned, un-own; otherwise mark owned. (Un-owning may orphan a game;
+    /// ``LibraryActions`` surfaces the confirmation.)
+    private func toggleOwnedForSelection() {
+        guard !selectedGameIDs.isEmpty else { return }
+        let sel = selectedGames
+        guard !sel.isEmpty else { return }
+        onSetOwned(selectedGameIDs, !sel.allSatisfy(\.owned))
+    }
+
+    /// ⇧P — toggle played across the whole selection (mirrors ``toggleOwnedForSelection``).
+    private func togglePlayedForSelection() {
+        guard !selectedGameIDs.isEmpty else { return }
+        let sel = selectedGames
+        guard !sel.isEmpty else { return }
+        onSetPlayed(selectedGameIDs, !sel.allSatisfy(\.played))
     }
 
     /// Test/inspection: whether a type-to-select buffer is currently active.
