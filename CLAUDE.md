@@ -164,6 +164,7 @@ DBs, never the real one.
 - **`@MainActor` tests that touch GRDB must sit in a `@Suite(.serialized)`** — parallel
   ones deadlock under Swift Testing. Give every async test a hard timeout. `UndoManager.undo()`
   hangs headless (assert `canUndo` + apply the inverse directly).
+- **Clicks can be tested headless:** `ClickProbeWindow` (`VGNTests/UI/FilterChipsClickTests.swift`) hosts a view in an off-screen window shaped like the app's (unified toolbar, full-size content, never key) and sends real mouse events. Use it for any "is this control actually clickable?" question — model tests cannot see hit-testing bugs. Known trap it guards: a **horizontal `ScrollView` whose top edge touches the window toolbar never delivers clicks to its buttons** (vertical ones are fine) — use a wrapping row (`RankingFlowLayout`) there. Likewise never stack `onTapGesture` + `TapGesture().modifiers(…)`: the plain tap wins; read the modifiers inside one tap handler (`GameCell.clickKind`).
 - **No wall-clock assertions.** Perf tests (`ScalePerfTests`, `GridQueryPerfTests`,
   the `PerformanceTests`/`RecommendationStore` perf cases) assert correctness and
   **print** timings — never `#expect(ms < …)`, which flakes under parallel load.
