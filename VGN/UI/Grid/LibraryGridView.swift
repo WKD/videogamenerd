@@ -165,6 +165,12 @@ struct LibraryGridView: View {
             Button("Group as Compilation…") { act(on: game) { vm.onGroupAsCompilation($0) } }
         }
         Divider()
+        // Reconcile with IGDB — single target only (PLAN §5.1). PURE: the label reads
+        // the single-selection detail when available, else defaults to "Link…"; the
+        // sheet adapts its own title. Selection/state changes happen in the action.
+        if ids.count == 1 {
+            Button(linkMenuLabel(for: game)) { act(on: game) { _ in vm.requestLinkToIGDB(gameID: game.id) } }
+        }
         // Cover is per-game: only offered for a single target (not a multi-selection),
         // and only when the loader can browse candidates. PURE — reads only.
         if ids.count == 1, vm.canChooseCover {
@@ -176,6 +182,17 @@ struct LibraryGridView: View {
         }
         Divider()
         Button("Delete…", role: .destructive) { act(on: game) { vm.actions?.requestDelete(ids: $0) } }
+    }
+
+    /// The reconcile menu label. PURE: uses the single-selection live detail when the
+    /// right-clicked game is that game (so a linked game reads "Change IGDB Match…"),
+    /// otherwise defaults to "Link to IGDB…" (the sheet adapts either way).
+    private func linkMenuLabel(for game: GameSummary) -> String {
+        if vm.selectedGameIDs.count == 1, vm.selectedGameIDs.first == game.id,
+           let detail = vm.selectedDetail, detail.id == game.id {
+            return detail.igdbID == nil ? "Link to IGDB…" : "Change IGDB Match…"
+        }
+        return "Link to IGDB…"
     }
 
     /// The games a context-menu action applies to: the whole selection when the

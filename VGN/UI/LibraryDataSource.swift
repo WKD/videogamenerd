@@ -88,6 +88,11 @@ enum LibraryFilterEvaluator {
         case .unranked: if !game.isUnranked { return false }
         case .platform(let slug): if !game.platformIDs.contains(slug) { return false }
         case .playNext: break   // renders its own recommendation view
+        case .unlinked:
+            // GameSummary carries no igdb_id, so the preview/in-memory evaluator cannot
+            // tell linked from unlinked — treat as "no constraint" (the live SQL scopes
+            // it for real). See PreviewLibraryDataSource / SidebarCounts.derive.
+            break
         case .length, .unmeasured:
             // GameSummary carries no time-to-beat estimate, so the preview/in-memory
             // evaluator cannot band by length — treat these scopes as "no constraint"

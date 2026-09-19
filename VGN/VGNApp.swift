@@ -30,6 +30,8 @@ struct VGNApp: App {
                 .gogImportPresentation(env.gogImport)
                 .deliciousImportPresentation(env.deliciousImport)
                 .hltbFetchPresentation(env.hltb)
+                .igdbLinkPresentation(env.igdbLink)
+                .environment(\.igdbCatalogSearcher, env.catalogSearcher)
                 .environment(\.playNextEnvironment, env.playNext)
             } else if let failure = env.failure {
                 DatabaseErrorView(failure: failure)
@@ -42,6 +44,7 @@ struct VGNApp: App {
         .commands {
             LibraryCommands()
             PlayedMarkCommands()
+            ReconcileCommands()
             StatsCommands()
             PhotoScanCommands()
             GOGImportCommands()

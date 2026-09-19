@@ -107,6 +107,10 @@ enum LibraryQuery {
             wheres.append("EXISTS(SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)")
         case .unranked:
             wheres.append("g.played = 1 AND g.tier_id IS NULL")
+        case .unlinked:
+            // Games with no IGDB link (PLAN §5.1): no metadata / cover / time / traits,
+            // and invisible to the `igdb_id` dedupe.
+            wheres.append("g.igdb_id IS NULL")
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
@@ -321,6 +325,13 @@ enum LibraryQuery {
         var shelves: [LengthShelf: Int] = [:]
         for shelf in LengthShelf.allCases { shelves[shelf] = row[shelf.rawValue] }
         return (shelves, row["unmeasured"])
+    }
+
+    /// Count of games with no IGDB link (`igdb_id IS NULL`) — the sidebar "Unlinked"
+    /// row (PLAN §5.1). Composed into the single sidebar-counts observation alongside
+    /// the scalar/per-platform/length counts, never as a second observation.
+    static func fetchUnlinkedCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games WHERE igdb_id IS NULL") ?? 0
     }
 
     /// Locale-independent decimal literal for a `Double` app constant (Swift's own

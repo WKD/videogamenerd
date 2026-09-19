@@ -41,6 +41,11 @@ final class AppEnvironment {
     /// Presents the HLTB time-estimate fallback (bulk sheet + single-game picker,
     /// PLAN §5.3); nil in tests.
     let hltb: HLTBFetchPresenter?
+    /// Presents the IGDB link / change-match + merge sheets (PLAN §5.1); nil in tests.
+    let igdbLink: IGDBLinkPresenter?
+    /// The shared IGDB catalogue searcher, injected into the environment so the import
+    /// review sheet's inline "Find…" can search (PLAN §5.1 item 6); nil offline / tests.
+    let catalogSearcher: (any CatalogSearching)?
 
     struct DatabaseOpenFailure: Sendable {
         var message: String
@@ -66,7 +71,9 @@ final class AppEnvironment {
         playNext: PlayNextEnvironment? = nil,
         gogImport: GOGImportPresenter? = nil,
         deliciousImport: DeliciousImportPresenter? = nil,
-        hltb: HLTBFetchPresenter? = nil
+        hltb: HLTBFetchPresenter? = nil,
+        igdbLink: IGDBLinkPresenter? = nil,
+        catalogSearcher: (any CatalogSearching)? = nil
     ) {
         self.settings = settings
         self.library = library
@@ -82,6 +89,8 @@ final class AppEnvironment {
         self.gogImport = gogImport
         self.deliciousImport = deliciousImport
         self.hltb = hltb
+        self.igdbLink = igdbLink
+        self.catalogSearcher = catalogSearcher
     }
 
     /// Build the environment. Never throws — a DB failure becomes `failure`.
@@ -181,7 +190,9 @@ final class AppEnvironment {
                                 coverLoader: coverLoader, viewModel: vm),
                 gogImport: gogWiring.presenter,
                 deliciousImport: deliciousImport,
-                hltb: hltb
+                hltb: hltb,
+                igdbLink: wiring.igdbLink,
+                catalogSearcher: wiring.catalogSearcher
             )
         } catch {
             let path = (try? AppPaths.databaseURL().path) ?? "~/Library/Application Support/VGN/vgn.sqlite"
@@ -279,6 +290,8 @@ final class AppEnvironment {
         var quickAdd: QuickAddModel
         var controller: QuickAddPanelController
         var enrichment: EnrichmentStatusModel?
+        var igdbLink: IGDBLinkPresenter
+        var catalogSearcher: any CatalogSearching
     }
 
     private static func wireServices(
@@ -367,7 +380,28 @@ final class AppEnvironment {
             }
         }
 
-        return Wiring(quickAdd: quickAdd, controller: controller, enrichment: enrichment)
+        // Reconcile (PLAN §5.1): the link / change-match sheet + merge. Uses the same
+        // catalogue searcher Quick Add uses. After a link/re-link it clears the cover
+        // negative cache and (live) forces a refresh (change-match) or a fill-only pass
+        // (link, like a fresh IGDB game); a no-op offline.
+        let platformCatalog = built?.platformCatalog
+        let enrichCoordinator = built?.graph.coordinator
+        let enrichCoverStore = built?.graph.coverStore
+        let igdbLink = IGDBLinkPresenter(
+            store: store, vm: vm, searcher: searcher,
+            platformIGDBIDs: { slug in platformCatalog?.entry(forSlug: slug)?.igdbIDs ?? [] },
+            onEnrich: { gameID, force in
+                guard mode == .live else { return }
+                Task {
+                    await enrichCoverStore?.clearNegativeCache(gameID: gameID)
+                    if force { await enrichCoordinator?.refresh(gameID: gameID) }
+                    else { await enrichCoordinator?.notifyLibraryChanged() }
+                }
+            })
+        vm.onLinkToIGDB = { [weak igdbLink] id in igdbLink?.present(for: id) }
+
+        return Wiring(quickAdd: quickAdd, controller: controller, enrichment: enrichment,
+                      igdbLink: igdbLink, catalogSearcher: searcher)
     }
 
     /// Wire the compilation editor + "Group as compilation…" hooks (PLAN §5.1/§8).

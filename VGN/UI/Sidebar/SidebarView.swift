@@ -31,6 +31,16 @@ struct SidebarView: View {
                             .badge(badge(for: sel))
                     }
                 }
+                // "Unlinked" — games with no IGDB link (PLAN §5.1). Shown ONLY when it
+                // has games (like "Unmeasured"), so a fully-linked library never sees it.
+                if (vm.counts.count(for: .unlinked) ?? 0) > 0 {
+                    taggedRow(.unlinked) {
+                        Label(Self.title(for: .unlinked), systemImage: Self.icon(for: .unlinked))
+                            .badge(badge(for: .unlinked))
+                    }
+                    .appKitTooltip("Games not matched to an IGDB entry — no metadata, "
+                                   + "time estimates or recommendations. Link them here.")
+                }
             }
 
             Section("Rankings") {
@@ -170,6 +180,7 @@ struct SidebarView: View {
         case .backlog: return "Backlog"
         case .unranked: return "Unranked"
         case .playNext: return "Play Next"
+        case .unlinked: return "Unlinked"
         case .tierBoard: return "Tier Board"
         case .theTop: return "The Top"
         case .duel: return "Duel"
@@ -187,6 +198,7 @@ struct SidebarView: View {
         case .backlog: return "tray.full"
         case .unranked: return "questionmark.circle"
         case .playNext: return "sparkles"
+        case .unlinked: return "link.badge.plus"
         case .tierBoard: return "square.stack.3d.up"
         case .theTop: return "trophy"
         case .duel: return "flag.2.crossed"

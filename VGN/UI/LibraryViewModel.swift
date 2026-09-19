@@ -118,6 +118,9 @@ final class LibraryViewModel {
     var onGroupAsCompilation: (Set<Int64>) -> Void = { _ in }
     /// "Mark Played As" for a set of games (wired by the app to ``LibraryActions``).
     var onMarkPlayed: (Set<Int64>, PlayedMark) -> Void = { _, _ in }
+    /// "Link to IGDB…" / "Change IGDB Match…" for one game (wired by the app to the
+    /// reconcile presenter — PLAN §5.1).
+    var onLinkToIGDB: (Int64) -> Void = { _ in }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
@@ -848,6 +851,17 @@ final class LibraryViewModel {
         guard selection != .all else { return }
         select(.all)
     }
+
+    /// Open the "Link to IGDB…" / "Change IGDB Match…" sheet for one game (PLAN §5.1).
+    /// Called from the inspector, grid context menu and Game menu — never a body/menu
+    /// *builder* (a Button action).
+    func requestLinkToIGDB(gameID: Int64) { onLinkToIGDB(gameID) }
+
+    /// After a mutation that may drop `ids` from the current scope (e.g. a link that
+    /// leaves the "Unlinked" list, or a merge that deletes a game), plan a sensible
+    /// reselection to the vacated position — the same mechanism "Mark Played As" uses
+    /// for Backlog. A no-op when the games stay in scope.
+    func planReselectionAfterMutation(_ ids: Set<Int64>) { planReselection(removing: ids) }
 
     /// Inspector "Refresh metadata" — re-fetch everything for one game (PLAN §6.1).
     func refreshMetadata(gameID: Int64) { onRefreshMetadata(gameID) }
