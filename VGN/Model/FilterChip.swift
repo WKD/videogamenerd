@@ -14,7 +14,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         case search, genre, decade
         case tier, unrated
         case status, notPlayed, noStatus
-        case format, notOwned
+        case format, notOwned, multipleCopies
         case playtime, noEstimate, platform
 
         var label: String {
@@ -29,6 +29,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .noStatus: return "Played, No Status"
             case .format: return "Format"
             case .notOwned: return "Not Owned"
+            case .multipleCopies: return "Multiple Copies"
             case .playtime: return "Playtime"
             case .noEstimate: return "No Estimate"
             case .platform: return "Platform"
@@ -39,7 +40,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         /// "Kind: value" split.
         var isStandalone: Bool {
             switch self {
-            case .unrated, .notPlayed, .noStatus, .notOwned, .noEstimate: return true
+            case .unrated, .notPlayed, .noStatus, .notOwned, .multipleCopies, .noEstimate: return true
             default: return false
             }
         }
@@ -112,6 +113,7 @@ enum LibraryFilterChips {
             .map { ($0.rawValue, $0.label) }
         add(.format, formatPairs)
         if filter.includeNotOwned { add(.notOwned, [("true", "Not Owned")]) }
+        if filter.multipleCopies { add(.multipleCopies, [("true", "Multiple Copies")]) }
 
         let playtimePairs = PlaytimeBucket.allCases
             .filter { filter.playtimes.contains($0) }
@@ -139,6 +141,7 @@ enum LibraryFilterChips {
         case .noStatus: f.includeNoStatus = false
         case .format: if let fmt = ProductFormat(rawValue: chip.value) { f.formats.remove(fmt) }
         case .notOwned: f.includeNotOwned = false
+        case .multipleCopies: f.multipleCopies = false
         case .playtime: if let b = PlaytimeBucket(rawValue: chip.value) { f.playtimes.remove(b) }
         case .noEstimate: f.includeNoTimeEstimate = false
         case .platform: f.platforms.remove(chip.value)
@@ -147,8 +150,10 @@ enum LibraryFilterChips {
     }
 
     /// A copy of `filter` with **every** facet cleared (search included), keeping the
-    /// sidebar scope, sort and direction ("Clear all").
+    /// sidebar scope, sort, direction and weekly play pace ("Clear all"). The pace is
+    /// not a facet, so clearing filters must not reset the "By Length" shelf bounds.
     static func cleared(_ filter: LibraryFilter) -> LibraryFilter {
-        LibraryFilter(scope: filter.scope, sort: filter.sort, ascending: filter.ascending)
+        LibraryFilter(scope: filter.scope, playPace: filter.playPace,
+                      sort: filter.sort, ascending: filter.ascending)
     }
 }

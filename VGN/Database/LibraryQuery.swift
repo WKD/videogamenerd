@@ -207,6 +207,11 @@ enum LibraryQuery {
             formatOrs.append("NOT EXISTS(SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)")
         }
         appendOR(formatOrs, into: &wheres)
+        // "Owns multiple copies" — ≥ 2 owned products for the game (its own facet,
+        // ANDed across kinds; owner request 2026-09-19).
+        if filter.multipleCopies {
+            wheres.append("(SELECT COUNT(*) FROM product_games pg5 WHERE pg5.game_id = g.id) >= 2")
+        }
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
             wheres.append("""

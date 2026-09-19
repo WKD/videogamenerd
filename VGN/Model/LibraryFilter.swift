@@ -70,6 +70,11 @@ struct LibraryFilter: Hashable, Sendable {
     /// with `formats` within the format facet.
     var includeNotOwned: Bool
 
+    /// Its own facet (owner request 2026-09-19): match only games I own in **more
+    /// than one copy or format** — ≥ 2 owned products (e.g. physical + digital, or
+    /// two physical copies). ANDs across kinds like any other facet.
+    var multipleCopies: Bool
+
     /// Playtime-band facet (< 10 h … > 200 h). Empty = no constraint. The value
     /// bucketed is the effective playtime (manual over PSN), falling back to the best
     /// available IGDB estimate (main → rushed → completionist) for a game I have not
@@ -116,6 +121,7 @@ struct LibraryFilter: Hashable, Sendable {
         includeNoStatus: Bool = false,
         formats: Set<ProductFormat> = [],
         includeNotOwned: Bool = false,
+        multipleCopies: Bool = false,
         playtimes: Set<PlaytimeBucket> = [],
         includeNoTimeEstimate: Bool = false,
         platform: String? = nil,
@@ -135,6 +141,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.includeNoStatus = includeNoStatus
         self.formats = formats
         self.includeNotOwned = includeNotOwned
+        self.multipleCopies = multipleCopies
         self.playtimes = playtimes
         self.includeNoTimeEstimate = includeNoTimeEstimate
         self.platform = platform
@@ -151,7 +158,7 @@ struct LibraryFilter: Hashable, Sendable {
         !searchText.isEmpty || !genres.isEmpty || !decades.isEmpty
             || !tierIDs.isEmpty || includeUnrated
             || !statuses.isEmpty || includeNotPlayed || includeNoStatus
-            || !formats.isEmpty || includeNotOwned
+            || !formats.isEmpty || includeNotOwned || multipleCopies
             || !playtimes.isEmpty || includeNoTimeEstimate
             || platform != nil || !platforms.isEmpty
     }

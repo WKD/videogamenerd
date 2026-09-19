@@ -158,6 +158,29 @@ struct FilterChipTests {
         #expect(!cleared.hasActiveFacets)
     }
 
+    @Test func multipleCopiesChipIsStandaloneAndRemovable() {
+        var f = LibraryFilter(scope: .all)
+        f.multipleCopies = true
+        #expect(f.hasActiveFacets)
+        let chips = LibraryFilterChips.chips(for: f, tiers: tiers)
+        let chip = try! #require(chips.first { $0.kind == .multipleCopies })
+        #expect(chip.text == "Multiple Copies")       // standalone facet
+        #expect(chip.fullLabel == "Multiple Copies")
+        let removed = LibraryFilterChips.removing(chip, from: f)
+        #expect(removed.multipleCopies == false)
+        #expect(!removed.hasActiveFacets)
+    }
+
+    @Test func clearAllDropsMultipleCopiesButKeepsPace() {
+        var f = LibraryFilter(scope: .all, playPace: PlayPace(hoursPerWeek: 3))
+        f.multipleCopies = true
+        f.formats = [.physical]
+        let cleared = LibraryFilterChips.cleared(f)
+        #expect(cleared.multipleCopies == false)
+        #expect(!cleared.hasActiveFacets)
+        #expect(cleared.playPace == PlayPace(hoursPerWeek: 3))   // pace is not a facet
+    }
+
     @Test func playedNoStatusChipLabel() {
         var f = LibraryFilter(scope: .all)
         f.includeNoStatus = true
