@@ -16,6 +16,11 @@ import Foundation
 ///  - **Weekly rotation.** A deterministic per-(week, entry) jitter mixes exploration into
 ///    the top so the row changes week to week without being random on every refresh; a
 ///    "Shuffle" re-roll perturbs the seed within the week.
+///  - **Pinned favourites.** A never-played ★ favourite still in the catalogue (no confident
+///    match, auto-add off, or over the batch cap) is pinned at the head of the row, ordered
+///    among the favourites by taste score, exempt from the weekly rotation jitter, and given
+///    the reason "★ your favourite" first — but at most half the visible cards may be pinned,
+///    so the row still discovers (PLAN §15).
 enum DiscoverScorer {
 
     /// One scored catalogue entry: the entry, its 0…1 blended score, the structured reasons
@@ -39,15 +44,21 @@ enum DiscoverScorer {
         var crowdWeightCap = 0.25
         /// The constant score nudge for a system the owner actually plays.
         var systemAffinityBonus = 0.03
+        /// How many never-played favourites may be pinned at the head of the row (PLAN §15 —
+        /// "at most half of the visible cards"). The model passes `cardCount / 2`; the pure
+        /// default is unbounded so non-UI callers see every favourite pinned.
+        var maxPinnedFavourites = Int.max
 
         init(seed: UInt64 = 0, playedSystems: Set<String> = [],
              weights: RecommendationWeights = RecommendationWeights(),
-             crowdWeightCap: Double = 0.25, systemAffinityBonus: Double = 0.03) {
+             crowdWeightCap: Double = 0.25, systemAffinityBonus: Double = 0.03,
+             maxPinnedFavourites: Int = Int.max) {
             self.seed = seed
             self.playedSystems = playedSystems
             self.weights = weights
             self.crowdWeightCap = crowdWeightCap
             self.systemAffinityBonus = systemAffinityBonus
+            self.maxPinnedFavourites = maxPinnedFavourites
         }
     }
 
@@ -68,9 +79,23 @@ enum DiscoverScorer {
             return scoreOne(entry, profile: profile, index: index,
                             rankedCount: rankedCount, options: options)
         }
-        return scored.sorted { a, b in
+        let ordered = scored.sorted { a, b in
             a.score != b.score ? a.score > b.score : a.entry.id < b.entry.id
         }
+        // Pin never-played favourites at the head, capped so the row still discovers. They are
+        // already jitter-free (scoreOne exempts favourites from the weekly rotation), so their
+        // order among themselves is the taste order (PLAN §15).
+        guard options.maxPinnedFavourites > 0 else { return ordered }
+        var pinned: [Scored] = []
+        var rest: [Scored] = []
+        for s in ordered {
+            if s.entry.isFavorite && pinned.count < options.maxPinnedFavourites {
+                pinned.append(s)
+            } else {
+                rest.append(s)
+            }
+        }
+        return pinned + rest
     }
 
     private static func scoreOne(_ entry: RomCatalogEntry, profile: TraitProfile,
@@ -100,16 +125,19 @@ enum DiscoverScorer {
             blended = (1 - crowdWeight) * tasteScore + crowdWeight * crowdScore
         }
 
-        // System affinity + weekly rotation jitter.
+        // System affinity + weekly rotation jitter. A ★ favourite is a deliberate pick, so it
+        // is exempt from the rotation jitter (PLAN §15) — its order is pure taste.
         let systemBonus = options.playedSystems.contains(entry.system) ? options.systemAffinityBonus : 0
-        let jitter = RecommendationEngine.rotationJitter(
+        let jitter = entry.isFavorite ? 0 : RecommendationEngine.rotationJitter(
             seed: options.seed, id: entry.id, magnitude: weights.rotationMagnitude)
         let finalScore = clamp(blended + systemBonus + jitter)
 
         let evidenceMass = affinity.evidence + linkResult.links.map { abs($0.contribution) }.reduce(0, +)
         let strength = matchStrength(evidenceMass: evidenceMass, rankedCount: rankedCount, weights: weights)
-        let reasons = buildReasons(entry: entry, affinity: affinity, links: linkResult.links,
+        var reasons = buildReasons(entry: entry, affinity: affinity, links: linkResult.links,
                                    crowdRating: entry.rating, strength: strength, weights: weights)
+        // A favourite leads with "★ your favourite", then its taste reasons (PLAN §15).
+        if entry.isFavorite { reasons.insert(.batoceraFavouritePinned, at: 0) }
         return Scored(entry: entry, score: finalScore, reasons: reasons, strength: strength)
     }
 

@@ -22,12 +22,20 @@ final class BatoceraImportPresenter {
     private let onLibraryChanged: () -> Void
     /// Surfaces an error to the window (wired to the library banner).
     @ObservationIgnored var onError: @MainActor (String) -> Void = { _ in }
+    /// The window model that shows banners + owns the undo manager (nil in unit tests).
+    @ObservationIgnored weak var library: LibraryViewModel?
+    /// Whether favourites are auto-added after a sync — live + IGDB-configured + the setting on
+    /// (PLAN §15). The container wires it; the default keeps auto-add off (tests / other modes).
+    @ObservationIgnored var autoAddEnabled: () -> Bool = { false }
 
     var reviewModel: ImportReviewModel?
     private(set) var progress: ImportProgress?
     private(set) var isSyncing = false
 
     @ObservationIgnored private var syncTask: Task<Void, Never>?
+    /// The entries the last auto-add batch promoted (for the banner's Undo + the undo manager).
+    @ObservationIgnored private var pendingUndoEntries: [RomCatalogEntry] = []
+    @ObservationIgnored private var autoAddTask: Task<Void, Never>?
 
     init(catalog: RomCatalogStore,
          promoter: BatoceraPromoter,
@@ -46,6 +54,79 @@ final class BatoceraImportPresenter {
     /// Open the review over the pending promotion candidates (played > 5 min or favourite),
     /// e.g. from the launch banner's "Review…".
     func reviewCandidates() { startSync(catalogIDs: nil) }
+
+    // MARK: - Auto-add favourites (PLAN §15)
+
+    /// Called after every sync (from the settings model's `onSyncFinished`). When auto-add is
+    /// on, it runs the background matcher/promoter pass and shows the "N favourites added ·
+    /// Undo" banner; otherwise it falls back to the quiet "N ready to review" banner.
+    func handleSyncFinished(_ summary: BatoceraSyncSummary) {
+        guard autoAddEnabled() else { showReviewBanner(candidateCount: summary.candidateCount); return }
+        autoAddTask?.cancel()
+        let engine = BatoceraFavouriteAutoAdd(catalog: catalog, staging: staging,
+                                              matcher: matcher, promoter: promoter)
+        let candidateCount = summary.candidateCount
+        autoAddTask = Task { [weak self] in
+            let result = await engine.run()
+            guard let self, !Task.isCancelled else { return }
+            if result.addedCount > 0 {
+                self.onLibraryChanged()
+                self.pendingUndoEntries = result.promotedEntries
+                let reviewCount = (try? await self.catalog.promotionCandidateCount()) ?? 0
+                guard !Task.isCancelled else { return }
+                self.showAddedBanner(result: result, reviewCount: reviewCount)
+                self.registerAutoAddUndo(entries: result.promotedEntries)
+            } else {
+                self.showReviewBanner(candidateCount: candidateCount)
+            }
+        }
+    }
+
+    private func showAddedBanner(result: BatoceraAutoAddResult, reviewCount: Int) {
+        guard let library else { return }
+        let n = result.addedCount
+        var message = "\(n) favourite\(n == 1 ? "" : "s") added from Batocera"
+        if result.stillToMatchCount > 0 {
+            message += " · \(result.stillToMatchCount) still to match"
+        } else if reviewCount > 0 {
+            message += " · \(reviewCount) to review"
+        }
+        library.showBanner(message, actionTitle: "Undo") { [weak self] in
+            self?.undoAutoAdd()
+        }
+    }
+
+    private func showReviewBanner(candidateCount: Int) {
+        guard let library, candidateCount > 0 else { return }
+        let n = candidateCount
+        library.showBanner("\(n) Batocera game\(n == 1 ? "" : "s") ready to review",
+                           actionTitle: "Review…") { [weak self] in self?.reviewCandidates() }
+    }
+
+    private func registerAutoAddUndo(entries: [RomCatalogEntry]) {
+        guard let undo = library?.undoManager, !entries.isEmpty else { return }
+        undo.registerUndo(withTarget: self) { presenter in
+            Task { @MainActor in await presenter.performAutoAddUndo(entries) }
+        }
+        undo.setActionName("Add Batocera Favourites")
+    }
+
+    /// The banner's Undo button.
+    func undoAutoAdd() {
+        let entries = pendingUndoEntries
+        Task { await self.performAutoAddUndo(entries) }
+    }
+
+    /// Reverse the last auto-add batch (idempotent — safe to call from the banner *and* the
+    /// undo manager). `internal` so a test can drive it directly (`UndoManager.undo()` hangs
+    /// headless — assert registration, call the inverse here).
+    func performAutoAddUndo(_ entries: [RomCatalogEntry]) async {
+        guard !entries.isEmpty else { return }
+        try? await promoter.undoAutoAdd(entries: entries)
+        pendingUndoEntries = []
+        onLibraryChanged()
+        library?.dismissBanner()
+    }
 
     /// Open the review over a hand-picked set of catalogue rows ("Add to Library…" in the
     /// browser / Discover). No-op if that set is empty.
@@ -179,13 +260,16 @@ enum BatoceraImportBuilder {
         let staging = ImportStagingStore(database)
 
         let matcher: any ImportMatcher
+        let canMatch: Bool
         if mode == .live, let graph, let platformCatalog,
            secrets.hasValue(for: .igdbClientID), secrets.hasValue(for: .igdbClientSecret) {
             matcher = ResilientImportMatcher(base: IGDBImportMatcher(
                 client: graph.igdbClient,
                 platformIGDBIDs: { slug in platformCatalog.entry(forSlug: slug)?.igdbIDs ?? [] }))
+            canMatch = true
         } else {
             matcher = NoMatchImportMatcher()
+            canMatch = false
         }
 
         let platformChoices = platformCatalog?.entries.map(\.id) ?? PlatformLabels.all.map(\.id)
@@ -195,6 +279,9 @@ enum BatoceraImportBuilder {
             matcher: matcher, platformChoices: platformChoices,
             onLibraryChanged: onLibraryChanged)
         presenter.onError = onError
+        // Auto-add runs only when a real IGDB match is possible and the owner left the setting
+        // on (PLAN §15) — never in sample / seeded / test, never with the no-match matcher.
+        presenter.autoAddEnabled = { canMatch && BatoceraPreferences.addFavouritesAutomatically }
         return presenter
     }
 }

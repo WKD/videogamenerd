@@ -52,7 +52,11 @@ extension RecommendationStore {
                    NOT EXISTS (
                        SELECT 1 FROM product_games pgx JOIN products px ON px.id = pgx.product_id
                        WHERE pgx.game_id = g.id AND px.subscription IS NULL
-                   ) AS sub_only
+                   ) AS sub_only,
+                   EXISTS (
+                       SELECT 1 FROM rom_catalog rc
+                       WHERE rc.promoted_game_id = g.id AND rc.favorite = 1 AND rc.removed_at IS NULL
+                   ) AS bato_fav
             FROM games g
             WHERE EXISTS (SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)
               AND (g.status IS NULL OR g.status NOT IN ('finished','completed'))
@@ -87,7 +91,8 @@ extension RecommendationStore {
                 platformIDs: feature?.platformSlugs ?? [],
                 formats: formats[id] ?? [],
                 playStatus: statusRaw.flatMap(PlayStatus.init(rawValue:)),
-                ownedOnlyViaSubscription: row["sub_only"]
+                ownedOnlyViaSubscription: row["sub_only"],
+                isBatoceraFavourite: row["bato_fav"]
             )
         }
     }

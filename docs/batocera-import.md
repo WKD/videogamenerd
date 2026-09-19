@@ -224,15 +224,79 @@ week. 5–8 cards: thumbnail, title, system, year, genre, taste reason(s), ★ r
 **"Ask Claude" is not wired to Discover in this lane** — noted as a follow-up in
 `docs/LIMITATIONS.md`.
 
+## Favourites — the ★ you set on the box (`BatoceraFavouriteAutoAdd` + wave 13)
+
+A ★ on Batocera is curation, not noise (PLAN §15), so a favourite gets special treatment at
+three levels — all built in wave 13.
+
+### 1. Auto-added to the library on a confident match
+
+After **every** sync (manual or automatic), and only when *"Add my favourites automatically"*
+is on (Settings ▸ Batocera, default **on**) **and** IGDB is configured, VGN runs a background
+pass (`BatoceraFavouriteAutoAdd`, off the main actor, cancellable):
+
+- it takes the favourites that are **not promoted, not dismissed and not already staged**
+  (`RomCatalogStore.favouritesNeedingMatch`) — a favourite that has been through matching once
+  has an `import_titles` row, so **it is never queried twice**;
+- each is **staged first** (so a crash before the promotion commits still doesn't re-query it),
+  then matched through the shared `ImportMatcher` (the same IGDB ladder + rate limiter the review
+  sheet uses);
+- a match is **confident** — the rule in `BatoceraFavouriteMatch` — when it is in the **top
+  confidence bucket** (the same the review sheet pre-ticks), is **platform-consistent** (the
+  match lists the ROM's platform when both are known), and is **release-year-consistent** (a gap
+  of **more than one year downgrades it to "needs review"**);
+- confident favourites are promoted through `BatoceraPromoter` in **one batch** (`source =
+  batocera`; owned-not-played unless `gametime > 300`; a game that already owns a ROM copy on
+  that platform gets the link + play data only, never a second copy);
+- everything else (ambiguous, unmatched, year-mismatched, bundles, played-but-not-favourite)
+  **stays for the review sheet exactly as before** — auto-add never commits anything but a
+  confident favourite.
+
+**The banner:** a quiet **"N favourites added from Batocera"** with an **Undo** (one step that
+removes exactly the games/ROM copies the batch created and clears `promoted_game_id`; it is
+idempotent, so the banner button and ⌘Z can't double-undo). When some remain it appends
+**"· M to review"** (the *Review…* action is still reachable from the launch banner, the File ▸
+Import from Batocera… menu and Settings). When auto-add is **off**, the old **"N ready to
+review · Review…"** banner shows instead.
+
+**First run over ~247 favourites:** one background pass is **capped at 60 matches**
+(`BatoceraFavouriteAutoAdd.batchCap`) so a first sync does not hammer IGDB for minutes
+unattended. The banner then reads **"60 added · 187 still to match"**; the rest continue on the
+next sync (or when you open Review…). Because each processed favourite is staged, successive
+runs pick up where the last left off.
+
+### 2. A boost in Play Next's regular picks
+
+An **unplayed** library game that is still a favourite on the box carries
+`Candidate.isBatoceraFavourite` (loaded by one additive `EXISTS` join on `rom_catalog` in the
+candidate query — no N+1). The engine adds a **small constant bonus** (below the taste/crowd
+terms, so it only reorders near-ties) and the reason **"★ a favourite on your Batocera"**. Like
+the PS Plus term it is applied in the engine only, never in the taste backtest's `predict`, so
+it is backtest-neutral. It is gone the moment the game is played/finished or un-favourited on
+the next sync.
+
+### 3. Pinned in Discover
+
+A never-played favourite still in the catalogue (no confident match, auto-add off, or over the
+batch cap) is **pinned at the head** of the Discover row, ordered among the favourites by taste
+score, **exempt from the weekly rotation jitter**, and led by the reason **"★ your favourite"**.
+At most **half the visible cards** may be pinned favourites (`DiscoverModel` passes
+`cardCount / 2`), so the row still discovers. **Not Interested** retires them like any other row.
+
 ## Owner first-run walkthrough
 
 1. **Settings ▸ Batocera ▸ Choose…** the share folder (the one with `roms/`; `/Volumes/share`
    is suggested). Leave *"Sync automatically at launch"* on.
-2. **Sync Now** (or just relaunch). The catalogue fills; a **"N Batocera games ready to
-   review"** banner appears.
-3. **Review…** → the *Import from Batocera* sheet matches the ~290 played/favourite ROMs to
-   IGDB (a couple of minutes the first time). Untick anything wrong, use **Find…** on a no-match
-   row, then **Import**. Duplicates you already own get play time only.
+2. **Sync Now** (or just relaunch). The catalogue fills; with *"Add my favourites
+   automatically"* on, your ★ favourites with a confident IGDB match are added straight away —
+   **"60 added · 187 still to match"** on the very first sync (the 60-per-run cap), with an
+   **Undo**. Relaunch or Sync Now again to keep adding the rest; nothing is ever matched twice.
+   Without auto-add (or with IGDB not configured) you get the **"N Batocera games ready to
+   review"** banner instead.
+3. **Review…** → the *Import from Batocera* sheet matches the remaining played/favourite ROMs
+   (ambiguous or unmatched favourites, and everything played > 5 min) to IGDB. Untick anything
+   wrong, use **Find…** on a no-match row, then **Import**. Duplicates you already own get play
+   time only.
 4. Browse the rest under **Sidebar ▸ Batocera ▸ ROM Catalogue**; **Add to Library…** anything
    you want, **Not Interested** on anything you don't.
 5. Open **Play Next** for the **Discover on your Batocera** row — retro games you own but never

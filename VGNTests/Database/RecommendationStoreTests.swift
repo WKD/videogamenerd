@@ -79,6 +79,32 @@ import GRDB
         #expect(byID[203]?.ownedOnlyViaSubscription == false)   // really owned
     }
 
+    @Test func candidateLoaderMarksBatoceraFavourites() async throws {
+        let (db, lib, _) = try await makeStores()
+        let fav = try await lib.addGame(GameDraft(title: "FavROM", igdbID: 11,
+                                                  platformIDs: ["snes"], owned: true, format: .rom)).gameID
+        let plain = try await lib.addGame(GameDraft(title: "PlainROM", igdbID: 12,
+                                                    platformIDs: ["snes"], owned: true, format: .rom)).gameID
+        let unfav = try await lib.addGame(GameDraft(title: "OnceFav", igdbID: 13,
+                                                    platformIDs: ["snes"], owned: true, format: .rom)).gameID
+        // A promoted-and-still-favourite catalogue row → flag on; a promoted-not-favourite and
+        // a removed favourite → flag off.
+        try await db.dbWriter.write { db in
+            try db.execute(sql: """
+                INSERT INTO rom_catalog (source, system, relative_path, name, favorite, promoted_game_id, removed_at)
+                VALUES
+                    ('batocera','snes','./f.zip','FavROM',1,?,NULL),
+                    ('batocera','snes','./p.zip','PlainROM',0,?,NULL),
+                    ('batocera','snes','./u.zip','OnceFav',1,?,?)
+                """, arguments: [fav, plain, unfav, Date()])
+        }
+        let candidates = try await db.dbWriter.read { db in try RecommendationStore.loadCandidates(db: db) }
+        let byID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
+        #expect(byID[fav]?.isBatoceraFavourite == true)      // promoted + favourite + present
+        #expect(byID[plain]?.isBatoceraFavourite == false)   // promoted but not a favourite
+        #expect(byID[unfav]?.isBatoceraFavourite == false)   // favourite but the ROM is gone
+    }
+
     // MARK: - Features loaded (persisted traits + genre + platform + decade)
 
     @Test func featuresIncludeTraitsGenrePlatformDecade() async throws {

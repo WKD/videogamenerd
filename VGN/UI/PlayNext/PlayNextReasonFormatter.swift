@@ -78,6 +78,10 @@ enum PlayNextReasonFormatter {
             return "Little to go on yet"
         case .leavesWithSubscription:
             return "Leaves with PS Plus"
+        case .batoceraFavourite:
+            return "★ a favourite on your Batocera"
+        case .batoceraFavouritePinned:
+            return "★ your favourite"
         }
     }
 

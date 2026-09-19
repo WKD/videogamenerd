@@ -13,6 +13,7 @@ final class BatoceraSettingsModel {
     // Preferences, mirrored as observable state.
     private(set) var shareFolderPath: String?
     private(set) var autoSyncEnabled: Bool
+    private(set) var addFavouritesEnabled: Bool
     private(set) var skipList: [String]
 
     // Status.
@@ -42,6 +43,7 @@ final class BatoceraSettingsModel {
         self.backend = backend
         self.shareFolderPath = BatoceraPreferences.shareFolderPath
         self.autoSyncEnabled = BatoceraPreferences.autoSyncAtLaunch
+        self.addFavouritesEnabled = BatoceraPreferences.addFavouritesAutomatically
         self.skipList = BatoceraPreferences.effectiveSkipList
     }
 
@@ -83,6 +85,13 @@ final class BatoceraSettingsModel {
     func setAutoSync(_ on: Bool) {
         autoSyncEnabled = on
         BatoceraPreferences.autoSyncAtLaunch = on
+    }
+
+    // MARK: Auto-add favourites
+
+    func setAddFavourites(_ on: Bool) {
+        addFavouritesEnabled = on
+        BatoceraPreferences.addFavouritesAutomatically = on
     }
 
     // MARK: Skip list
@@ -198,6 +207,7 @@ struct BatoceraSettingsPane: View {
             statusBlock
             syncRow
             autoSyncRow
+            addFavouritesRow
             Divider()
             skipListSection
             thresholdRow
@@ -267,6 +277,20 @@ struct BatoceraSettingsPane: View {
             set: { model.setAutoSync($0) }))
             .toggleStyle(.checkbox)
             .font(.subheadline)
+    }
+
+    private var addFavouritesRow: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Toggle("Add my favourites automatically", isOn: Binding(
+                get: { model.addFavouritesEnabled },
+                set: { model.setAddFavourites($0) }))
+                .toggleStyle(.checkbox)
+                .font(.subheadline)
+                .accessibilityIdentifier("batocera.addFavourites")
+            Text("After a sync, favourites with a confident match are added to your library "
+                 + "(with an Undo). Ambiguous or unmatched ones wait for your review.")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
     }
 
     private var skipListSection: some View {

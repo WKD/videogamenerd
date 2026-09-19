@@ -43,11 +43,12 @@ enum BatoceraBuilder {
         let thumbnails = BatoceraThumbnailLoader(romsRoot: romsRoot)
 
         // The promotion-review presenter (the catalogue is a local table — built in every mode,
-        // matcher real only in live).
+        // matcher real only in live). It also owns the after-sync auto-add of favourites.
         let presenter = BatoceraImportBuilder.build(
             mode: mode, database: database, secrets: secrets,
             graph: graph, platformCatalog: platformCatalog,
             onError: onError, onLibraryChanged: onLibraryChanged)
+        presenter.library = vm
 
         // The Discover backend.
         let discover: any DiscoverBackend = isLive
@@ -65,13 +66,11 @@ enum BatoceraBuilder {
             showCatalogue: { [weak vm] in vm?.select(.romCatalogue) })
 
         let settings = BatoceraSettingsModel(backend: backend)
-        // A finished sync that turns up candidates shows the quiet "Review…" banner — never an
-        // auto-commit (PLAN §15: every promotion goes through the review sheet).
-        settings.onSyncFinished = { [weak vm, weak presenter] summary in
-            guard let vm, summary.candidateCount > 0 else { return }
-            let n = summary.candidateCount
-            vm.showBanner("\(n) Batocera game\(n == 1 ? "" : "s") ready to review",
-                          actionTitle: "Review…") { presenter?.reviewCandidates() }
+        // After a sync the presenter auto-adds favourites with a confident match (with an Undo
+        // banner) when the setting is on, and otherwise shows the quiet "N ready to review"
+        // banner — never an auto-commit of anything but a confident favourite (PLAN §15).
+        settings.onSyncFinished = { [weak presenter] summary in
+            presenter?.handleSyncFinished(summary)
         }
 
         let shouldAutoSync = isLive && settings.autoSyncEnabled && settings.isConfigured

@@ -110,5 +110,14 @@ struct RecommendationWeights: Sendable, Hashable {
     /// near-ties and never overturns a clearly better fit. Off unless the option is on.
     var subscriptionBonus: Double = 0.05
 
+    // MARK: Batocera favourites (PLAN §15)
+
+    /// The additive boost for an **unplayed** library game the owner flagged as a ★ favourite
+    /// on his Batocera box (PLAN §15 — "it is in my backlog because I flagged it"). Small on
+    /// purpose — below the trait/crowd terms — so it only reorders near-ties and never
+    /// overturns a clearly better fit. Applied in ``RecommendationEngine`` only (never in the
+    /// backtest's `predict`), so it is backtest-neutral exactly like the PS Plus term.
+    var batoceraFavouriteBonus: Double = 0.05
+
     init() {}
 }
