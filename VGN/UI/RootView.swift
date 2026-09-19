@@ -153,19 +153,16 @@ struct RootView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .principal) {
-            TextField("Search", text: $vm.searchText)
-                .textFieldStyle(.roundedBorder)
-                .frame(minWidth: 160, idealWidth: 220)
-                .focused($searchFocused)
-                .accessibilityIdentifier(A11yID.toolbarSearch)
-                .help("Search titles (⌘F). ↓ into results · ↩ open first · esc clear")
-                .onKeyPress(.downArrow) { vm.focusGridFromSearch(); return .handled }
-                .onKeyPress(.escape) {
-                    if vm.clearSearch() { return .handled }
-                    searchFocused = false
-                    return .handled
-                }
-                .onSubmit { vm.openFirstResult() }
+            LibrarySearchField(
+                text: $vm.searchText,
+                focus: $searchFocused,
+                onClear: { _ = vm.clearSearch(); searchFocused = true },
+                onDownArrow: { vm.focusGridFromSearch() },
+                onEscape: { if !vm.clearSearch() { searchFocused = false } },
+                onSubmit: { vm.openFirstResult() }
+            )
+            .frame(minWidth: 160, idealWidth: 220)
+            .help("Search titles (⌘F). ↓ into results · ↩ open first · esc clear")
         }
 
         ToolbarItemGroup(placement: .automatic) {
