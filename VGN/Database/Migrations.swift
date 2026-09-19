@@ -502,6 +502,62 @@ enum Migrations {
         }
     }
 
+    // MARK: - v11 — The Vault: PS Plus entries share the catalogue table (PLAN §16)
+
+    /// v11 generalises the Batocera ROM catalogue (v10) into **The Vault** (PLAN §16), the one
+    /// pool for everything the owner can reach but never chose to shelve: the Batocera ROM set
+    /// **and** the barely-touched PS Plus games. Rather than a second table, a PS Plus claim is
+    /// just a `rom_catalog` row with `source = 'psn'`, `system = <platform slug>` and
+    /// `relative_path = <PSN external id>`, so the `UNIQUE(source, system, relative_path)`
+    /// identity and the FTS triggers keep working unchanged.
+    ///
+    /// PS Plus rows carry almost nothing from PSN (name, platform, cover URL, membership), so
+    /// they gain their taste features from IGDB, matched in capped background batches like the
+    /// Batocera favourites. This adds the columns those two facts need — all **nullable**, all
+    /// pure `ALTER TABLE ADD COLUMN` (no table rebuild, no deferred FK checks, FTS untouched):
+    ///  - `external_id` — the PSN external id (mirrors `relative_path` for a PS Plus row;
+    ///    NULL for Batocera, whose external id is `system/relative_path`).
+    ///  - `cover_url` — remote PS Store cover URL (loaded through the cover cache, never copied
+    ///    into the app's cover folder); NULL for Batocera (which reads `image_path`).
+    ///  - `membership` — the PSN membership marker (`'ps_plus'`); NULL for Batocera.
+    ///  - `cross_gen_note` — a human note (e.g. "PS4 & PS5 versions") for the browser.
+    ///  - `igdb_id` — the matched IGDB id (NULL until the trait pass runs).
+    ///  - `length_main_s` / `length_complete_s` — IGDB time-to-beat, for the "From the vault"
+    ///    time-fit term (NULL for a ROM or an unmatched entry).
+    ///  - `traits_json` — a JSON array of the entry's IGDB traits (genres/themes/keywords/
+    ///    franchise/developer), so a matched PS Plus row is taste-scorable offline.
+    ///  - `igdb_rating` — the IGDB crowd rating (0…100) for the crowd prior.
+    ///  - `match_state` — `'matched'` / `'no_match'`, set once so a matched **or** no-matched
+    ///    entry is never re-queried (mirrors the favourites pass's `import_titles` guard).
+    ///  - `matched_at` — when the trait pass last touched the row.
+    ///
+    /// A partial index over unmatched PSN rows keeps the trait pass's "next 60" query cheap.
+    /// Fresh installs and v10 upgrades keep every existing Batocera row untouched (all new
+    /// columns default NULL). Tested fresh and upgrading from v10 with Batocera rows present.
+    static func registerV11(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v11") { db in
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN external_id       TEXT;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN cover_url         TEXT;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN membership        TEXT;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN cross_gen_note    TEXT;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN igdb_id           INTEGER;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN length_main_s     INTEGER;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN length_complete_s INTEGER;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN traits_json       TEXT;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN igdb_rating       REAL;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN match_state       TEXT;")
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN matched_at        DATETIME;")
+
+            try db.execute(sql: "CREATE INDEX rom_catalog_igdb_idx ON rom_catalog(igdb_id);")
+            // The trait pass's hot query: unmatched PSN rows still present, not retired.
+            try db.execute(sql: """
+                CREATE INDEX rom_catalog_unmatched_idx
+                ON rom_catalog(source, match_state)
+                WHERE match_state IS NULL AND removed_at IS NULL;
+                """)
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

@@ -111,7 +111,12 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   typed — PSN §13.3; monotonic via `LibraryStore.setPSNPlayedDates`);
   v10 the **Batocera ROM catalogue** `rom_catalog` + `rom_catalog_sync` + `rom_catalog_fts`
   (PLAN §15) — a *separate shelf* no library query ever reads; `promoted_game_id` REFERENCES
-  games ON DELETE SET NULL is the only bridge (`RomCatalogStore`)). `LibraryStore`
+  games ON DELETE SET NULL is the only bridge (`RomCatalogStore`);
+  v11 generalises `rom_catalog` into **The Vault** (PLAN §16) — nullable PS Plus columns
+  (`external_id`, `cover_url`, `membership`, `cross_gen_note`, `igdb_id`, `length_main_s`,
+  `length_complete_s`, `traits_json`, `igdb_rating`, `match_state`, `matched_at`) so a PS Plus
+  claim is a row with `source='psn'`, `system=<slug>`, `relative_path=<external id>`; pure
+  `ADD COLUMN`, FTS untouched (`RomCatalogStore` Vault methods, `VaultSource`)). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`

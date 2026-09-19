@@ -22,7 +22,8 @@ struct RomCatalogStore: Sendable {
         libretro_key, screenscraper_id, md5, region, lang, genre, family, developer, publisher,
         release_year, rating, players, play_count, game_time_s, last_played_at, favorite,
         image_path, thumbnail_path, first_seen_at, last_seen_at, removed_at, promoted_game_id,
-        dismissed_at, not_interested
+        dismissed_at, not_interested, external_id, cover_url, membership, cross_gen_note,
+        igdb_id, length_main_s, length_complete_s, traits_json, igdb_rating, match_state, matched_at
         """
 
     // MARK: - Sync (upsert + removal, one transaction per system)
@@ -455,6 +456,197 @@ struct RomCatalogStore: Sendable {
             .values(in: dbWriter)
     }
 
+    // MARK: - The Vault: per-source counts (PLAN §16)
+
+    /// Present-entry counts for both Vault sources in **one** read (PLAN §16 deliverable 7 —
+    /// the sidebar shows a per-source count and hides a row at 0). A source with no rows is 0.
+    func sourceCounts() async throws -> VaultSourceCounts {
+        try await dbWriter.read(Self.readSourceCounts)
+    }
+
+    /// A single GRDB observation of both sources' present-entry counts (PLAN §16) — the sidebar
+    /// section's two rows and their visibility come from one stream, never disturbing the
+    /// library's separate sidebar-counts observation.
+    func sourceCountsObservation() -> AsyncValueObservation<VaultSourceCounts> {
+        ValueObservation.tracking(Self.readSourceCounts).values(in: dbWriter)
+    }
+
+    private static func readSourceCounts(_ db: Database) throws -> VaultSourceCounts {
+        var out = VaultSourceCounts()
+        for row in try Row.fetchAll(db, sql: """
+            SELECT source, COUNT(*) AS n FROM rom_catalog WHERE removed_at IS NULL GROUP BY source
+            """) {
+            let n: Int = row["n"]
+            switch VaultSource(storage: row["source"]) {
+            case .batocera: out.batocera = n
+            case .psn: out.psn = n
+            case nil: break
+            }
+        }
+        return out
+    }
+
+    // MARK: - The Vault: PS Plus ingestion (PLAN §16)
+
+    /// Reconcile the PS Plus (`source = psn`) slice of the Vault against a freshly-built set of
+    /// entries (PLAN §16): new claims are inserted, present ones refresh their name / cover /
+    /// membership / note **without disturbing** any IGDB match already made, and a claim that
+    /// vanished from the current set gets `removed_at` (it "leaves the Vault silently").
+    ///
+    /// `presentExternalIDs` is every external id the latest sync still lists as a vaultable PS
+    /// Plus claim; an existing row whose external id is absent is removed. An entry that later
+    /// crossed the 10-minute gate is simply not in the set (it went to the review sheet as an
+    /// owned-via-subscription copy), so it, too, leaves the Vault here (PLAN §16).
+    @discardableResult
+    func syncPSNVault(entries: [RomCatalogEntry],
+                      presentExternalIDs: Set<String>) async throws -> RomCatalogSyncCounts {
+        let src = VaultSource.psn.storage
+        return try await dbWriter.write { db in
+            var counts = RomCatalogSyncCounts()
+            let now = Date()
+
+            var existing: [String: Int64] = [:]
+            for row in try Row.fetchAll(db, sql: """
+                SELECT id, relative_path FROM rom_catalog WHERE source = ?
+                """, arguments: [src]) {
+                existing[row["relative_path"]] = row["id"]
+            }
+
+            for entry in entries {
+                if let id = existing[entry.relativePath] {
+                    try db.execute(sql: """
+                        UPDATE rom_catalog SET
+                            platform_id = ?, name = ?, sort_title = ?, normalised_title = ?,
+                            cover_url = ?, membership = ?, cross_gen_note = ?, external_id = ?,
+                            last_seen_at = ?, removed_at = NULL
+                        WHERE id = ?
+                        """, arguments: [
+                            entry.platformID, entry.name, entry.sortTitle, entry.normalisedTitle,
+                            entry.coverURL, entry.membership, entry.crossGenNote,
+                            entry.externalIDColumn ?? entry.relativePath, now, id,
+                        ])
+                    counts.updated += 1
+                } else {
+                    try db.execute(sql: """
+                        INSERT INTO rom_catalog
+                            (source, system, platform_id, relative_path, name, sort_title,
+                             normalised_title, cover_url, membership, cross_gen_note, external_id,
+                             first_seen_at, last_seen_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, arguments: [
+                            src, entry.system, entry.platformID, entry.relativePath, entry.name,
+                            entry.sortTitle, entry.normalisedTitle, entry.coverURL, entry.membership,
+                            entry.crossGenNote, entry.externalIDColumn ?? entry.relativePath, now, now,
+                        ])
+                    counts.added += 1
+                }
+            }
+
+            // Vanished claims (or ones that crossed the gate) → removed_at.
+            for (path, id) in existing where !presentExternalIDs.contains(path) {
+                try db.execute(sql: """
+                    UPDATE rom_catalog SET removed_at = ? WHERE id = ? AND removed_at IS NULL
+                    """, arguments: [now, id])
+                if db.changesCount > 0 { counts.removed += 1 }
+            }
+            return counts
+        }
+    }
+
+    // MARK: - The Vault: IGDB trait pass (PLAN §16)
+
+    /// The next batch of PS Plus entries needing an IGDB match (present, not retired, not yet
+    /// attempted — `match_state IS NULL`), so a matched **or** no-matched entry is never
+    /// re-queried. Ordered by name for a stable pass.
+    func unmatchedPSN(limit: Int) async throws -> [RomCatalogEntry] {
+        try await dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT \(Self.columns) FROM rom_catalog
+                WHERE source = ? AND removed_at IS NULL AND not_interested = 0
+                  AND match_state IS NULL
+                ORDER BY sort_title ASC, id ASC LIMIT ?
+                """, arguments: [VaultSource.psn.storage, limit]).map(Self.entry(from:))
+        }
+    }
+
+    /// Matched / total present PS Plus counts for the Settings status line ("Vault: 212 of 310
+    /// matched", PLAN §16). One read.
+    func psnMatchProgress() async throws -> (matched: Int, total: Int) {
+        try await dbWriter.read { db in
+            let total = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM rom_catalog WHERE source = ? AND removed_at IS NULL
+                """, arguments: [VaultSource.psn.storage]) ?? 0
+            let matched = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM rom_catalog
+                WHERE source = ? AND removed_at IS NULL AND match_state = ?
+                """, arguments: [VaultSource.psn.storage, VaultMatchState.matched.rawValue]) ?? 0
+            return (matched, total)
+        }
+    }
+
+    /// Persist an IGDB match on a PS Plus Vault entry (PLAN §16): id, traits, time-to-beat,
+    /// rating — and mark it matched so it is never re-queried.
+    func setVaultMatch(id: Int64, igdbID: Int64, traits: [GameTrait],
+                       lengthMainSeconds: Int?, lengthCompleteSeconds: Int?,
+                       igdbRating: Double?) async throws {
+        let json = RomCatalogEntry.encodeTraits(traits)
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE rom_catalog SET
+                    igdb_id = ?, traits_json = ?, length_main_s = ?, length_complete_s = ?,
+                    igdb_rating = ?, match_state = ?, matched_at = ?
+                WHERE id = ?
+                """, arguments: [
+                    igdbID, json, lengthMainSeconds, lengthCompleteSeconds, igdbRating,
+                    VaultMatchState.matched.rawValue, Date(), id,
+                ])
+        }
+    }
+
+    /// Mark a PS Plus Vault entry as having no IGDB match (PLAN §16) — browsable but never
+    /// re-queried and never suggested.
+    func setVaultNoMatch(id: Int64) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE rom_catalog SET match_state = ?, matched_at = ? WHERE id = ?
+                """, arguments: [VaultMatchState.noMatch.rawValue, Date(), id])
+        }
+    }
+
+    // MARK: - The Vault: promotion + "From the vault" pool (PLAN §16)
+
+    /// Link a Vault row to the library game it was promoted into, by `(source, external id)`
+    /// — used when a PS Plus entry is committed as the owned-via-subscription copy (PLAN §16).
+    /// Idempotent.
+    func setPromotedByExternalID(source: String, externalID: String, gameID: Int64) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE rom_catalog SET promoted_game_id = ?
+                WHERE source = ? AND (external_id = ? OR relative_path = ?)
+                """, arguments: [gameID, source, externalID, externalID])
+        }
+    }
+
+    /// The "From the vault" candidate pool over **both** sources (PLAN §16): present, not
+    /// promoted, not retired, and — for the never-played Batocera rows — no recorded play time;
+    /// PS Plus rows are included only when matched to IGDB (`isSuggestable`). Optionally scoped
+    /// to skip a set of systems (the Batocera skip list). Returns Batocera + matched PS Plus.
+    func vaultPool(skipSystems: Set<String> = [], limit: Int = 2000) async throws -> [RomCatalogEntry] {
+        try await dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT \(Self.columns) FROM rom_catalog
+                WHERE removed_at IS NULL AND promoted_game_id IS NULL AND not_interested = 0
+                  AND (
+                        (source = 'batocera' AND game_time_s = 0 AND play_count = 0)
+                     OR (source = 'psn' AND match_state = 'matched')
+                  )
+                ORDER BY sort_title ASC LIMIT ?
+                """, arguments: [limit])
+                .map(Self.entry(from:))
+                .filter { $0.system.isEmpty || !skipSystems.contains($0.system) }
+        }
+    }
+
     // MARK: - Row decode
 
     static func entry(from r: Row) -> RomCatalogEntry {
@@ -470,7 +662,14 @@ struct RomCatalogStore: Sendable {
             imagePath: r["image_path"], thumbnailPath: r["thumbnail_path"],
             firstSeenAt: r["first_seen_at"], lastSeenAt: r["last_seen_at"],
             removedAt: r["removed_at"], promotedGameID: r["promoted_game_id"],
-            dismissedAt: r["dismissed_at"], notInterested: (r["not_interested"] as Int64) != 0)
+            dismissedAt: r["dismissed_at"], notInterested: (r["not_interested"] as Int64) != 0,
+            externalIDColumn: r["external_id"], coverURL: r["cover_url"],
+            membership: r["membership"], crossGenNote: r["cross_gen_note"],
+            igdbID: r["igdb_id"], lengthMainSeconds: r["length_main_s"],
+            lengthCompleteSeconds: r["length_complete_s"], traitsJSON: r["traits_json"],
+            igdbRating: r["igdb_rating"],
+            matchState: (r["match_state"] as String?).flatMap(VaultMatchState.init(rawValue:)),
+            matchedAt: r["matched_at"])
     }
 }
 
