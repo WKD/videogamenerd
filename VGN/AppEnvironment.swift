@@ -34,6 +34,8 @@ final class AppEnvironment {
     let photoScan: PhotoScanPresenter?
     /// Stores for the Play Next destination (PLAN §7b).
     let playNext: PlayNextEnvironment?
+    /// Presents the GOG import flow (progress + review sheets, PLAN §14); nil in tests.
+    let gogImport: GOGImportPresenter?
 
     struct DatabaseOpenFailure: Sendable {
         var message: String
@@ -56,7 +58,8 @@ final class AppEnvironment {
         enrichment: EnrichmentStatusModel? = nil,
         ranking: RankingEnvironment? = nil,
         photoScan: PhotoScanPresenter? = nil,
-        playNext: PlayNextEnvironment? = nil
+        playNext: PlayNextEnvironment? = nil,
+        gogImport: GOGImportPresenter? = nil
     ) {
         self.settings = settings
         self.library = library
@@ -69,6 +72,7 @@ final class AppEnvironment {
         self.ranking = ranking
         self.photoScan = photoScan
         self.playNext = playNext
+        self.gogImport = gogImport
     }
 
     /// Build the environment. Never throws — a DB failure becomes `failure`.
@@ -122,6 +126,18 @@ final class AppEnvironment {
                 Task { await graph.coordinator.startup() }
             }
 
+            // GOG import (PLAN §14): live builds the real GOG objects; other modes get an
+            // inert backend that never touches the network or the Keychain. A committed
+            // import notifies the enrichment coordinator just like the photo-scan commit.
+            let coordinator = built?.graph.coordinator
+            let gogWiring = GOGImportBuilder.build(
+                mode: mode, database: database, secrets: settings.secretStore,
+                graph: built?.graph, platformCatalog: built?.platformCatalog,
+                onLibraryChanged: {
+                    if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
+                })
+            settings.gogAccount = gogWiring.account
+
             return AppEnvironment(
                 settings: settings, library: vm, actions: actions, failure: nil,
                 services: built?.graph, quickAdd: wiring.quickAdd,
@@ -134,7 +150,8 @@ final class AppEnvironment {
                                        store: store, library: vm)
                 },
                 playNext: .live(database: database, library: store,
-                                coverLoader: coverLoader, viewModel: vm)
+                                coverLoader: coverLoader, viewModel: vm),
+                gogImport: gogWiring.presenter
             )
         } catch {
             let path = (try? AppPaths.databaseURL().path) ?? "~/Library/Application Support/VGN/vgn.sqlite"

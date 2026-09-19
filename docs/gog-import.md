@@ -50,6 +50,54 @@ orchestrator *with the owner*) to confirm or correct.
 ## Platform note
 
 - Default platform: `mac` when `worksOn.Mac`, else `pc` (switchable "Always PC"). A
-  **Linux-only** title maps to `pc`; PLAN §14.3 asks for a UI note on those — there is no
-  note column in `import_titles`, so the review-sheet lane should surface it from the
-  mapping (`GOGMapping` knows the product ran only on Linux). **[review-sheet lane]**
+  **Linux-only** title maps to `pc`; the review sheet shows a "Linux-only → PC" chip.
+  Resolved (wave 8, lane B): `GOGMapping` sets transient `macAvailable`/`linuxOnly` flags on
+  the staging row (no schema change), and the review sheet re-maps platforms on the policy
+  switch from `macAvailable` and shows the note from `linuxOnly`.
+
+## Live-step runbook (G1–G7) — orchestrator + owner, PLAN §14.5
+
+Every live step is **stop-and-ask**: make exactly the listed requests; if the response is
+not the proper content (wrong status, HTML/login page/captcha, error envelope, schema
+mismatch, suspicious emptiness, rate limit, auth challenge, anything unforeseen) **stop all
+GOG traffic, do not retry or vary, report what was sent/received with tokens + user id +
+e-mail redacted, and wait for explicit owner approval** (one action per approval). Run the
+**live build (no `-VGNSampleData`)** so the real GOG objects exist; the owner is present.
+
+- **G1 — Sign in (the web login + 1 token call).** Settings ▸ Accounts ▸ **GOG** ▸
+  *Sign In to GOG…*. A private window opens on GOG's own login page (address line shows the
+  host — it should stay `auth.gog.com` / `login.gog.com` / `www.gog.com`). The owner signs in.
+  *Proper content:* the window closes itself and the pane flips to signed-in with the owner's
+  **username**. *If it shows "Blocked a page from `<host>`"* the login pulled in an
+  unlisted host (likely a captcha CDN) — **stop**, add that host to
+  `GOGAuthConfiguration.allowedNavigationHosts`, rebuild, retry. A refused client id/secret or
+  an unexpected redirect ⇒ stop and ask. **Ask before G2.**
+- **G2 — Account (1 request).** *Sync Now* begins; the first request is `userData.json`.
+  *Proper content:* `isLoggedIn: true` + the owner's username shown. Report, continue if valid.
+- **G3 — Owned ids (1 request).** `user/data/games`. *Proper content:* a non-empty id list;
+  report the count.
+- **G4 — Library page 1 (1 request).** `account/getFilteredProducts…page=1`. *Proper content:*
+  a products array + `totalPages`/`totalProducts`; report the counts. **If `totalPages > 5`,
+  stop and ask before paging.**
+- **G5 — Remaining pages (≤ 5 requests).** Only after G4 approval. *Proper content:* each page
+  echoes its number, totals stay constant, no duplicate ids, Σ products = `totalProducts`.
+- **G6 — Full sync from cache (0 GOG requests).** The review sheet opens: *New / Already
+  matched / Ignored* buckets, the platform switch, per-row alternatives. IGDB calls happen here
+  (matching only). Tick, adjust platforms, ignore/restore, then **Import N Games**. The commit
+  is one transaction; a banner reads "N games imported from GOG · M already in your library".
+- **G7 — Second sync (0 requests, inside the 30-day window).** *Sync Now* again: it makes no
+  GOG requests and proposes nothing new (all committed titles are now *Already matched*).
+
+**Where rejects show:** any bogus response stops the sync and the **error surface** appears in
+the Settings ▸ GOG pane — the reason, the sentence *"VGN stopped and made no further
+requests."*, and a **Response excerpt** disclosure (already redacted). The last good cache is
+untouched.
+
+**Force refresh / wipe:** each data set has a *Force Refresh…* button; it confirms the request
+cost and the cached age before spending anything (only that set is re-fetched on the next sync).
+*Sign Out…* removes the tokens, and its **"Also delete cached GOG responses"** tick wipes the
+`import_cache` rows for `source = 'gog'`.
+
+**Fixtures:** before committing any fixture recorded during G1–G7, scrub username, user id,
+e-mail, avatar and order data; tokens and cookies never appear in logs, fixtures, prompts or
+commits.

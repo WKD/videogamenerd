@@ -20,6 +20,9 @@ final class SettingsModel {
     /// The services lane's connection probe, injected by the app once services are
     /// built. Nil in the test host / DB-failure path (the button stays disabled).
     var connectionTester: IGDBConnectionTester?
+    /// GOG account pane state (PLAN §14.2), injected once the app has built services.
+    /// Nil in the test host / DB-failure path (the pane is omitted).
+    var gogAccount: GOGAccountModel?
     /// Called after credentials are saved or cleared so the enrichment coordinator
     /// can resume / idle (`coordinator.credentialsDidChange()`).
     var onCredentialsChanged: () -> Void = {}
@@ -143,6 +146,14 @@ private struct AccountsTab: View {
                 HStack {
                     savedIndicator("Client ID", saved: model.clientIDSaved)
                     savedIndicator("Client Secret", saved: model.secretSaved)
+                }
+            }
+
+            if let gog = model.gogAccount {
+                Section {
+                    GOGAccountPane(model: gog)
+                } header: {
+                    Text("GOG")
                 }
             }
 
