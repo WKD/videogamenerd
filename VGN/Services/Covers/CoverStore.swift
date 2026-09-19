@@ -27,8 +27,13 @@ actor CoverStore {
     private let negativeTTL: TimeInterval
 
     private let memoryCache = NSCache<NSString, CGImageBox>()
+    /// In-memory previews of "Choose Cover…" candidates. These are never filed to
+    /// disk — an unchosen candidate must not pollute `covers/`/`thumbs/` (PLAN §5.2
+    /// step 4). Its own small cache so browsing candidates can't evict grid thumbs.
+    private let candidatePreviewCache = NSCache<NSString, CGImageBox>()
     private var inflightFetch: [Int64: Task<StoredCover?, Error>] = [:]
     private var inflightThumb: [String: Task<CGImageBox?, Never>] = [:]
+    private var inflightPreview: [String: Task<CGImageBox?, Never>] = [:]
 
     /// Thumbnail longest-edge buckets (px). The size slider maps to the nearest bucket
     /// so we never generate an unbounded number of thumbnail variants (PLAN §9).
@@ -160,6 +165,48 @@ actor CoverStore {
     private func orderedCandidates(_ result: CoverProviderChain.Result) -> [CoverCandidate] {
         guard let best = result.bestConfident else { return result.allCandidates }
         return [best] + result.allCandidates.filter { $0 != best }
+    }
+
+    // MARK: - Choose Cover… (browse candidates)
+
+    /// Every browsable candidate across every provider for `query` — the data behind
+    /// the "Choose Cover…" sheet (PLAN §5.2 step 4). Runs the providers but stores
+    /// nothing; thumbnails are fetched on demand via ``candidatePreview(from:maxPixel:)``.
+    func candidates(for query: CoverQuery) async -> [CoverCandidate] {
+        await chain.allCandidates(query)
+    }
+
+    /// A decoded, downsampled **in-memory** preview of a candidate image at
+    /// `maxPixel` (longest edge). Downloaded through the same rate-limited path as a
+    /// real cover, but never written to `covers/`/`thumbs/`. De-dups concurrent
+    /// identical requests and caches decoded previews. Returns `nil` on any failure
+    /// (the tile shows a placeholder).
+    func candidatePreview(from url: URL, maxPixel: Int) async -> sending CGImage? {
+        let bucket = Self.bucket(for: CGSize(width: maxPixel, height: maxPixel))
+        let key = "\(url.absoluteString)@\(bucket)" as NSString
+        if let cached = candidatePreviewCache.object(forKey: key) { return cached.image }
+        if let inflight = inflightPreview[key as String] { return await inflight.value?.image }
+
+        let task = Task<CGImageBox?, Never> { [self] in
+            guard let data = try? await download(url) else { return nil }
+            return ImageDownsampler.thumbnail(fromData: data, maxPixelSize: bucket)
+        }
+        inflightPreview[key as String] = task
+        let box = await task.value
+        inflightPreview[key as String] = nil
+        if let box { candidatePreviewCache.setObject(box, forKey: key, cost: box.cost) }
+        return box?.image
+    }
+
+    /// Download a chosen candidate and file it permanently — the same write path an
+    /// auto-found or dragged cover takes (PLAN §5.2 step 4). Clears any negative
+    /// sentinel. The caller marks the cover user-edited (`LibraryStore.setUserCover`)
+    /// so enrichment never replaces it.
+    func chooseRemoteCover(from url: URL, gameID: Int64) async throws -> StoredCover {
+        let data = try await download(url)
+        let coverFile = try storeOriginal(data, gameID: gameID, url: url)
+        clearNegativeSentinel(gameID: gameID)
+        return StoredCover(coverFile: coverFile, providerID: "manual", candidates: [])
     }
 
     // MARK: - Manual override / removal

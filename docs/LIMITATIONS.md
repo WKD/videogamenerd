@@ -64,7 +64,11 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 
 ### Covers & matching
 - Cover downloads are not cancelled when a cell scrolls away; thumbnail decoding runs on the `CoverStore` actor. [watch — owner chose not to fix until scrolling actually stutters]
-- "Choose cover…" sheet (browse every candidate). **[doing]**
+- "Choose cover…" sheet (browse every candidate) — **built (wave 7, lane B).** Inspector button next to the cover actions; grid of candidates grouped by provider (provider · region · size), current cover shown, "Use This Cover" / double-click / "Choose File…". Notes:
+  - **IGDB contributes only the game's cover** — `artworks` are not modelled anywhere in the app, so they can't be enumerated. If wanted, model `game.artworks` (image ids) during enrichment and add them in `IGDBCoverProvider.allCandidates`. **[later]**
+  - **libretro browsing shows the best-matching title's regions/discs/revisions only** (the top fuzzy-score cluster), not near-but-different titles like numbered sequels. Capped at 60 tiles.
+  - **Candidate listing is live-mode only.** Sample mode (`-VGNSampleData`) must not touch the network, so the sheet lists no remote candidates there — the local "Choose File…" path still works. [watch]
+  - **Entry point is the inspector only.** A grid context-menu entry was out of reach this wave (another lane owns `LibraryGridView.swift`); add "Choose Cover…" there in a wave that owns the grid. **[later]**
 - Catalogue-cache title search is a linear scan per keystroke and the cache is never pruned. [later — owner chose not now]
 - Libretro hit rate on a real retro library is unmeasured (9 of 10 covers came from IGDB in the smoke test, as expected for modern platforms). Fuzzy thresholds 0.90 / 0.74 were hand-tuned, then held up in the live scan.
 

@@ -48,4 +48,19 @@ struct CoverProviderChain: Sendable {
         }
         return Result(allCandidates: all, bestConfident: best, hadTransientFailure: transient)
     }
+
+    /// Every candidate every provider can offer, in provider order and best-first
+    /// within each provider — for the "Choose Cover…" sheet (PLAN §5.2 step 4). No
+    /// short-circuit: even a confident libretro hit does not suppress the IGDB key
+    /// art, so the user always sees the full set. De-duplicated by candidate id.
+    func allCandidates(_ query: CoverQuery) async -> [CoverCandidate] {
+        var out: [CoverCandidate] = []
+        var seen = Set<String>()
+        for provider in providers {
+            for candidate in await provider.allCandidates(for: query) where seen.insert(candidate.id).inserted {
+                out.append(candidate)
+            }
+        }
+        return out
+    }
 }

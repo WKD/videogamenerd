@@ -39,4 +39,24 @@ enum ImageDownsampler {
         }
         return CGImageBox(image)
     }
+
+    /// Same as ``thumbnail(fromFileAt:maxPixelSize:)`` but from in-memory `data` —
+    /// used to preview a "Choose Cover…" candidate without ever writing it to disk
+    /// (unchosen candidates must not pollute `covers/`/`thumbs/`, PLAN §5.2 step 4).
+    static func thumbnail(fromData data: Data, maxPixelSize: Int) -> CGImageBox? {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return nil
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return CGImageBox(image)
+    }
 }

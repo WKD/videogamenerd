@@ -58,6 +58,14 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 - [ ] Inspector ▸ **Remove custom cover** re-fetches a cover right away.
 - [ ] `scripts/snapshots.sh --generate` then open `.build/snapshots/index.html` — the fastest way to look at every screen.
 
+### Choose Cover… sheet (wave 7, lane B) — needs owner eyes
+- [ ] Inspector ▸ **Choose Cover…** (button next to Refresh metadata): opens a sheet that lists real box art from libretro (retro platforms) and IGDB. Check the grouping, the per-tile `provider · region · size` labels, and that thumbnails load without stutter.
+- [ ] Pick a candidate → **Use This Cover** (or **double-click** a tile): the grid + inspector cover update immediately, and a subsequent **Refresh metadata** does *not* replace it (it's marked user-edited).
+- [ ] **Choose File…** (or drag an image onto the inspector cover) sets a local image the same way.
+- [ ] The **current** cover is shown for reference; **Cancel** (esc) and the empty state ("no covers found" → Choose File…) read correctly.
+- [ ] Sample mode (`--args -VGNSampleData YES`): the sheet opens and offers **Choose File…** but lists no remote candidates (no network in sample mode). This is expected.
+- [ ] After using the sheet, VGN still idles at ~0 % CPU (no render loop from the sheet).
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
