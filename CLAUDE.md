@@ -108,7 +108,10 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   v8 `products.subscription` (NULL = really owned, `'ps_plus'` = a PS Plus claim; free text, tolerant
   `ProductSubscription`) + a partial index — PS Plus copies §13.3;
   v9 `games.first_played_at` / `games.last_played_at` (nullable, **importer-filled only**, never
-  typed — PSN §13.3; monotonic via `LibraryStore.setPSNPlayedDates`)). `LibraryStore`
+  typed — PSN §13.3; monotonic via `LibraryStore.setPSNPlayedDates`);
+  v10 the **Batocera ROM catalogue** `rom_catalog` + `rom_catalog_sync` + `rom_catalog_fts`
+  (PLAN §15) — a *separate shelf* no library query ever reads; `promoted_game_id` REFERENCES
+  games ON DELETE SET NULL is the only bridge (`RomCatalogStore`)). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`

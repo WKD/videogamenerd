@@ -232,6 +232,43 @@ What landed, and what a later lane still owns:
   - **DEBUG normal-Sync gate (§13.5 D10)** — the normal Sync does *not* yet refuse in DEBUG "until the build steps have passed for the current account". It relies on the per-fetch probe guard instead. Add the gate with the build-steps panel.
 - **ASSUMPTION(S0) still open** — the mobile-app OAuth values, the sign-in URL / `npsso` cookie domain, DTO shapes, and the `getPurchasedGameList` persisted-query hash are all unverified until the gated live steps S1–S8 (see `docs/psn-import.md`). Nothing in this lane made a request to Sony.
 
+## 5d. Batocera ROM catalogue (§15, wave 12 — lane B, phase 1)
+Phase 1 landed the whole non-UI half; phase 2 (a later wave) owns everything visible.
+- **Landed.** Migration **v10** (`rom_catalog` + `rom_catalog_sync` + `rom_catalog_fts`, a
+  separate shelf no library query reads; `promoted_game_id` ON DELETE SET NULL); the streaming
+  `BatoceraGamelistReader`; `BatoceraShare` (locate systems + mtime/size); the pure
+  `BatoceraSystems` table + skip list, `BatoceraFolding` (libretro-key dedupe), `BatoceraPromotion`
+  (the `> 300 s` OR favourite rule); `RomCatalogStore` (upsert/remove, change detection,
+  promotion candidates, FTS search, per-system counts, never-played pool, taste queries) +
+  `RomCatalogTraits`; the change-detecting `BatoceraSync` actor; and promotion through the
+  existing importer commit path (`BatoceraImporter`/`BatoceraPromotionBuilder`/`BatoceraPromoter`,
+  `ProductSource.batocera`). Dry-run on the real share: 35 mapped systems, 9 skipped, **0 unknown**,
+  **10 912** entries after folding 112 dupes, **292** promotion candidates, **91.6 %** genre→trait
+  coverage, full read+fold in ~0.7 s (Swift perf test).
+- **Interim: Batocera play time storage.** There is no neutral `imported_playtime_s` column, so
+  Batocera `gametime` is written into `psn_playtime_s` **only when both `my_playtime_s` and
+  `psn_playtime_s` are NULL** (`LibraryStore.setImportedPlaytimeIfEmpty`, gated by
+  `PSNCommit.playtimeOnlyIfEmpty`) — a real PSN value is never clobbered, but a game with a
+  PSN time will not also show its Batocera time. **Proposed to lane A:** add `imported_playtime_s`
+  (or a `playtime_source` tag) in a future migration so the two coexist; the read-time playtime
+  precedence (manual > …) would then include it. Not added silently.
+- **Deferred (phase 2 — the UI lane).** The **Batocera sidebar browser** + search + "Add to
+  Library"; the **promotion review sheet** + banner + Undo after a sync (data ready:
+  `BatoceraSyncSummary.candidateCatalogIDs`, `BatoceraPromoter.Plan`, `gameHasROMCopy`); **Settings ▸
+  Batocera** (share-path picker remembered, Sync Now, skip-list override, auto-sync at launch);
+  **Play Next ▸ Discover** (platform best-ofs ∩ `neverPlayedPool`, scored with
+  `RomCatalogEntry.traits` + the crowd `rating`, "Not interested" → `setNotInterested`). The IGDB
+  match step that turns a candidate into a `.newGame`/`.existingGame` target (and computes the
+  duplicate flag) is also phase 2 — `BatoceraImporter.fetch` yields staging rows, the match runs
+  through the shared coordinator.
+- **`GameOrigin` for Batocera** is carried as `.other("batocera")` (label "Batocera") — no new
+  enum case, so no UI switch fallout. `ProductSource.batocera` **is** a real case (the commit needs
+  it so the promoted game's origin is tagged `batocera`, not `manual`).
+- **Folding is a safety net, not the mechanism** — 1G1R means only 112/11 024 raw entries fold on
+  the real box. The libretro key is title-only (region/disc/rev stripped); genuinely-distinct games
+  that share a normalised title would fold, but none were observed. Multi-disc PS1/Sega-CD titles
+  fold correctly (Disc 1 kept).
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.
