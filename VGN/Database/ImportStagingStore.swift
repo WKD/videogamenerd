@@ -34,14 +34,21 @@ struct ImportCommitItem: Sendable, Equatable {
     var platformID: String
     var format: ProductFormat
     var target: Target
+    /// Edition to record on the committed copy (Delicious, PLAN §5.5). nil for GOG/PSN.
+    var edition: String?
+    /// When the copy was acquired, recorded on the committed product. nil for GOG/PSN.
+    var acquiredAt: Date?
 
     init(source: String, externalID: String, platformID: String,
-         format: ProductFormat = .digital, target: Target) {
+         format: ProductFormat = .digital, target: Target,
+         edition: String? = nil, acquiredAt: Date? = nil) {
         self.source = source
         self.externalID = externalID
         self.platformID = platformID
         self.format = format
         self.target = target
+        self.edition = edition
+        self.acquiredAt = acquiredAt
     }
 }
 
@@ -176,7 +183,8 @@ struct ImportStagingStore: Sendable {
                 case .existingGame(let gameID):
                     let (_, created) = try LibraryStore.attachSingleImportProduct(
                         gameID: gameID, platformID: item.platformID, format: item.format,
-                        sourceRaw: item.source, externalID: item.externalID, db: db)
+                        sourceRaw: item.source, externalID: item.externalID,
+                        edition: item.edition, acquiredAt: item.acquiredAt, db: db)
                     if created { result.productsAdded += 1 }
                     result.affectedGameIDs.append(gameID)
                     try Self.markMatched(source: item.source, externalID: item.externalID,
@@ -192,7 +200,8 @@ struct ImportStagingStore: Sendable {
                     if case .created = outcome { result.gamesCreated += 1 }
                     let (_, created) = try LibraryStore.attachSingleImportProduct(
                         gameID: gameID, platformID: item.platformID, format: item.format,
-                        sourceRaw: item.source, externalID: item.externalID, db: db)
+                        sourceRaw: item.source, externalID: item.externalID,
+                        edition: item.edition, acquiredAt: item.acquiredAt, db: db)
                     if created { result.productsAdded += 1 }
                     result.affectedGameIDs.append(gameID)
                     try Self.markMatched(source: item.source, externalID: item.externalID,
@@ -202,7 +211,8 @@ struct ImportStagingStore: Sendable {
                     let productID = try LibraryStore.insertImportProductRow(
                         platformID: item.platformID, format: item.format,
                         sourceRaw: item.source, externalID: item.externalID,
-                        kindRaw: "compilation", title: title, db: db)
+                        kindRaw: "compilation", title: title,
+                        edition: item.edition, acquiredAt: item.acquiredAt, db: db)
                     result.productsAdded += 1
                     for member in members {
                         let outcome = try LibraryStore.upsertCompilationMember(

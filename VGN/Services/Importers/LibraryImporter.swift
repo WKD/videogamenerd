@@ -33,13 +33,17 @@ struct ImportFetchResult: Sendable, Equatable {
     /// Product ids seen on the library pages that were not in the owned-id list
     /// (PLAN §14.2 — reported, not fatal). Carried into ``ImportSyncSummary/ownedGap``.
     var ownedGap: Int
+    /// Rows read from a **file** source (Delicious, PLAN §5.5); drives the file-flavoured
+    /// summary line. 0 for network importers.
+    var fromFile: Int
 
     init(rows: [ImportStagingRow], fromCache: Int = 0, fromNetwork: Int = 0,
-         budgetUsed: Int = 0, ownedGap: Int = 0) {
+         budgetUsed: Int = 0, ownedGap: Int = 0, fromFile: Int = 0) {
         self.rows = rows
         self.fromCache = fromCache
         self.fromNetwork = fromNetwork
         self.budgetUsed = budgetUsed
         self.ownedGap = ownedGap
+        self.fromFile = fromFile
     }
 }
