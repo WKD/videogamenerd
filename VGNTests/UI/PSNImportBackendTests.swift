@@ -42,15 +42,15 @@ struct PSNImportBackendTests {
     @Test(.timeLimit(.minutes(1)))
     func forceRefreshDropsDataSetButKeepsProbeMarkers() async throws {
         let (backend, db) = try makeBackend()
-        try seed(db, key: "trophyTitles?npServiceName=trophy2&limit=800&offset=0")
-        try seed(db, key: "probe:trophyTitles:trophy2:test")     // probe marker — must survive
+        try seed(db, key: "trophyTitles?limit=800&offset=0")
+        try seed(db, key: "probe:trophyTitles:test")             // probe marker — must survive
         try seed(db, key: "gameList?limit=200&offset=0")          // other data set — must survive
 
         try await backend.forceRefresh(dataSetID: PSNEndpoint.trophyTitles)
 
         let remaining = try keys(db)
         #expect(!remaining.contains { $0.hasPrefix("trophyTitles?") })
-        #expect(remaining.contains("probe:trophyTitles:trophy2:test"))
+        #expect(remaining.contains("probe:trophyTitles:test"))
         #expect(remaining.contains("gameList?limit=200&offset=0"))
     }
 

@@ -12,6 +12,15 @@ import Testing
         #expect(PSNDuration.seconds(fromISO8601: "PT90M") == 5400)
     }
 
+    /// Exact strings seen on the real account (live, 2026-09-20).
+    @Test func parsesRealAccountDurations() {
+        #expect(PSNDuration.seconds(fromISO8601: "PT33H34M17S") == 33 * 3600 + 34 * 60 + 17)
+        #expect(PSNDuration.seconds(fromISO8601: "PT5M22S") == 5 * 60 + 22)          // Myst: 322 s
+        #expect(PSNDuration.seconds(fromISO8601: "PT221H51M37S") == 221 * 3600 + 51 * 60 + 37)
+        // Myst's 322 s stays under the 30-min played-promotion floor.
+        #expect((PSNDuration.seconds(fromISO8601: "PT5M22S") ?? 0) < PSNMapping.playedPromotionSeconds)
+    }
+
     @Test func parsesDateAndMixedComponents() {
         #expect(PSNDuration.seconds(fromISO8601: "P1D") == 86_400)
         #expect(PSNDuration.seconds(fromISO8601: "P1DT2H") == 86_400 + 7200)

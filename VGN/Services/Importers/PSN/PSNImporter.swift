@@ -33,8 +33,6 @@ struct PSNImporter: LibraryImporter, Sendable {
     static let trophyPageSize = 800
     static let gameListPageSize = 200
     static let purchasesPageSize = 100
-    /// PS4/PS5 (`trophy2`) then PS3/Vita (`trophy`) — every trophy service (PLAN §13.3).
-    static let trophyServices = ["trophy2", "trophy"]
 
     #if DEBUG
     init(auth: PSNAuth, transport: HTTPTransport, cache: ImportResponseCacheStore,
@@ -77,13 +75,15 @@ struct PSNImporter: LibraryImporter, Sendable {
     #endif
 
     var dataSets: [ImportDataSet] {
+        // Estimates reflect the live probes (2026-09-20): trophy titles 265 → 1 page at 800;
+        // game list 231 → 2 pages at 200; purchases 581 → ceil(581/100) = 6 pages at 100.
         var sets = [
             ImportDataSet(id: PSNEndpoint.profile, title: "Profile", estimatedRequests: 1),
-            ImportDataSet(id: PSNEndpoint.trophyTitles, title: "Trophy titles", estimatedRequests: 4),
-            ImportDataSet(id: PSNEndpoint.gameList, title: "Game list", estimatedRequests: 3),
+            ImportDataSet(id: PSNEndpoint.trophyTitles, title: "Trophy titles", estimatedRequests: 1),
+            ImportDataSet(id: PSNEndpoint.gameList, title: "Game list", estimatedRequests: 2),
         ]
         if includePurchases {
-            sets.append(ImportDataSet(id: PSNEndpoint.purchases, title: "Purchases", estimatedRequests: 4))
+            sets.append(ImportDataSet(id: PSNEndpoint.purchases, title: "Purchases", estimatedRequests: 6))
         }
         return sets
     }
@@ -104,24 +104,25 @@ struct PSNImporter: LibraryImporter, Sendable {
         if let onlineId = profile.onlineId { await client.addRedactionLiteral(onlineId) }
         if let accountId = profile.accountId { await client.addRedactionLiteral(accountId) }
 
-        // Trophy titles (probe → full, per service).
+        // Trophy titles (probe → full). ONE list — the endpoint returns every title of the
+        // account whatever the (unsent) `npServiceName`; each title carries its own
+        // `npServiceName` (live, 2026-09-20). `seen` also guards against the same
+        // `npCommunicationId` ever appearing twice.
         var trophyTitles: [PSNTrophyTitle] = []
-        for service in Self.trophyServices {
-            progress(ImportProgress(phase: .fetching, detail: "Trophy titles (\(service))"))
-            try await client.probe(.trophyTitles(service: service))
-            var offset = 0
-            var seen = Set<String>()
-            while true {
-                let page = try await client.trophyTitlesPage(
-                    service: service, limit: Self.trophyPageSize, offset: offset, seenIDs: seen)
-                trophyTitles.append(contentsOf: page.trophyTitles)
-                for t in page.trophyTitles { seen.insert(t.npCommunicationId) }
-                if await client.reachedRateLimitEnd { break }
-                guard let next = page.nextOffset, next > offset, !page.trophyTitles.isEmpty,
-                      seen.count < page.totalItemCount else { break }
-                offset = next
+        progress(ImportProgress(phase: .fetching, detail: "Trophy titles"))
+        try await client.probe(.trophyTitles)
+        var trophyOffset = 0
+        var trophySeen = Set<String>()
+        while true {
+            let page = try await client.trophyTitlesPage(
+                limit: Self.trophyPageSize, offset: trophyOffset, seenIDs: trophySeen)
+            for t in page.trophyTitles where trophySeen.insert(t.npCommunicationId).inserted {
+                trophyTitles.append(t)
             }
             if await client.reachedRateLimitEnd { break }
+            guard let next = page.nextOffset, next > trophyOffset, !page.trophyTitles.isEmpty,
+                  trophySeen.count < page.totalItemCount else { break }
+            trophyOffset = next
         }
 
         // Game list (probe → full).

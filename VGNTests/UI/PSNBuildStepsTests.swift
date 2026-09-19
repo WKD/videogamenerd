@@ -84,24 +84,22 @@ struct PSNBuildStepsTests {
 
         // Signed in, no probe recorded: only the profile probe is enabled.
         #expect(model.isEnabled(.probeProfile))
-        for kind in [PSNBuildStepKind.probeTrophy2, .probeTrophy, .probeGameList, .probePurchases,
+        for kind in [PSNBuildStepKind.probeTrophyTitles, .probeGameList, .probePurchases,
                      .fetchTrophyTitles, .fetchGameList, .fetchPurchases] {
             #expect(model.isEnabled(kind) == false, "\(kind) needs its prerequisites")
         }
 
-        // Profile probe passed → the four data-set probes unlock; full fetches stay locked.
+        // Profile probe passed → the three data-set probes unlock; full fetches stay locked.
         PSNBuildStepsGate.setPassed(label: "test", kind: .probeProfile, true)
-        for kind in [PSNBuildStepKind.probeTrophy2, .probeTrophy, .probeGameList, .probePurchases] {
+        for kind in [PSNBuildStepKind.probeTrophyTitles, .probeGameList, .probePurchases] {
             #expect(model.isEnabled(kind), "\(kind) unlocks after S2")
         }
         for kind in [PSNBuildStepKind.fetchTrophyTitles, .fetchGameList, .fetchPurchases] {
             #expect(model.isEnabled(kind) == false, "\(kind) needs its own probe")
         }
 
-        // Each full fetch needs ITS probe(s).
-        PSNBuildStepsGate.setPassed(label: "test", kind: .probeTrophy2, true)
-        #expect(model.isEnabled(.fetchTrophyTitles) == false, "trophy fetch needs BOTH trophy probes")
-        PSNBuildStepsGate.setPassed(label: "test", kind: .probeTrophy, true)
+        // Each full fetch needs ITS probe (trophy titles is one list now).
+        PSNBuildStepsGate.setPassed(label: "test", kind: .probeTrophyTitles, true)
         #expect(model.isEnabled(.fetchTrophyTitles))
 
         PSNBuildStepsGate.setPassed(label: "test", kind: .probeGameList, true)
@@ -128,7 +126,7 @@ struct PSNBuildStepsTests {
     func fullFetchAsksForConfirmationFirst() async {
         clearPrefs(); defer { clearPrefs() }
         let (model, runner) = await makeModel()
-        for kind in [PSNBuildStepKind.probeProfile, .probeTrophy2, .probeTrophy] {
+        for kind in [PSNBuildStepKind.probeProfile, .probeTrophyTitles] {
             PSNBuildStepsGate.setPassed(label: "test", kind: kind, true)
         }
         model.activate(.fetchTrophyTitles)
@@ -182,7 +180,7 @@ struct PSNBuildStepsTests {
         #expect(model.rejectMessage == nil)
         #expect(model.isEnabled(.probeProfile) == false)   // it is the failed step
         #expect(model.needsRetry(.probeProfile))
-        #expect(model.isEnabled(.probeTrophy2) == false)   // prereq (S2) still not passed
+        #expect(model.isEnabled(.probeTrophyTitles) == false)   // prereq (S2) still not passed
 
         // Retry is one new decision: confirm, then it can succeed.
         runner.scriptOutcome(PSNBuildStepOutcome(itemCount: 1, requestsUsedTotal: 2), for: .probeProfile)
@@ -191,7 +189,7 @@ struct PSNBuildStepsTests {
         model.confirmPending()
         await poll(until: { !model.isRunning && model.row(.probeProfile)?.status == .passed })
         #expect(model.failedStep == nil)
-        #expect(model.isEnabled(.probeTrophy2), "S2 passed on retry unlocks the probes")
+        #expect(model.isEnabled(.probeTrophyTitles), "S2 passed on retry unlocks the probes")
     }
 
     // MARK: - Deliverable 2: account label switch resets shown state

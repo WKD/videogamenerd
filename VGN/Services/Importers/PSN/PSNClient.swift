@@ -19,15 +19,17 @@ import Foundation
 /// tallies. Everything (transport, clock, wall clock, dev cache) is injected, so tests run
 /// entirely offline with a `ManualClock`.
 actor PSNClient {
-    /// The three PSN data sets a probe / full fetch operates on.
+    /// The three PSN data sets a probe / full fetch operates on. Trophy titles are **one
+    /// list** — the endpoint ignores `npServiceName` (live, 2026-09-20), so there is no
+    /// separate PS3/Vita data set.
     enum DataSet: Sendable, Hashable {
-        case trophyTitles(service: String)   // `trophy` (PS3/Vita) or `trophy2` (PS4/PS5)
+        case trophyTitles
         case gameList
         case purchases
 
         var probeMarkerKey: String {
             switch self {
-            case .trophyTitles(let s): return "probe:trophyTitles:\(s)"
+            case .trophyTitles: return "probe:trophyTitles"
             case .gameList: return "probe:gameList"
             case .purchases: return "probe:purchases"
             }
@@ -148,8 +150,8 @@ actor PSNClient {
     func probe(_ dataSet: DataSet) async throws -> Int {
         let count: Int
         switch dataSet {
-        case .trophyTitles(let service):
-            count = try await trophyTitlesPage(service: service, limit: Self.probeLimit,
+        case .trophyTitles:
+            count = try await trophyTitlesPage(limit: Self.probeLimit,
                                                offset: 0, requireProbe: false).trophyTitles.count
         case .gameList:
             count = try await gameListPage(limit: Self.probeLimit, offset: 0,
@@ -201,19 +203,20 @@ actor PSNClient {
         return dto
     }
 
-    /// One trophy-titles page. `service` = `trophy` (PS3/Vita) or `trophy2` (PS4/PS5).
-    /// A full page (`limit` 800) refuses to run unless a probe is on record.
-    func trophyTitlesPage(service: String, limit: Int, offset: Int,
+    /// One trophy-titles page — the whole account's launch history in a single list. **No
+    /// `npServiceName`**: the filter is ignored by this endpoint (live, 2026-09-20) and
+    /// psn-api's `getUserTitles` sends none either; each title carries its own `npServiceName`
+    /// on the DTO. A full page (`limit` 800) refuses to run unless a probe is on record.
+    func trophyTitlesPage(limit: Int, offset: Int,
                           requireProbe requiresProbe: Bool = true,
                           seenIDs: Set<String> = []) async throws -> PSNTrophyTitlesPage {
-        if requiresProbe { try await requireProbe(.trophyTitles(service: service)) }
-        let key = "trophyTitles?npServiceName=\(service)&limit=\(limit)&offset=\(offset)"
+        if requiresProbe { try await requireProbe(.trophyTitles) }
+        let key = "trophyTitles?limit=\(limit)&offset=\(offset)"
         var comps = URLComponents(string: Self.trophyBase)!
-        comps.queryItems = [.init(name: "npServiceName", value: service),
-                            .init(name: "limit", value: String(limit)),
+        comps.queryItems = [.init(name: "limit", value: String(limit)),
                             .init(name: "offset", value: String(offset))]
         let data = try await fetchValidated(
-            key: key, endpoint: PSNEndpoint.trophyTitles, devEndpoint: "trophyTitles-\(service)",
+            key: key, endpoint: PSNEndpoint.trophyTitles, devEndpoint: "trophyTitles",
             spec: PSNRequestSpec(url: comps.url!),
             context: ImportValidationContext(endpoint: PSNEndpoint.trophyTitles, seenIDs: seenIDs))
         guard let dto = try? PSNJSON.decoder.decode(PSNTrophyTitlesPage.self, from: data) else {

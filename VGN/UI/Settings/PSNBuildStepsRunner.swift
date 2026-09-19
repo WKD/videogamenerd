@@ -17,14 +17,13 @@ import Foundation
 /// (and, on the real account, a second confirmation). Every step's prerequisites must have
 /// succeeded for the current account label before it is enabled.
 enum PSNBuildStepKind: String, CaseIterable, Sendable, Identifiable, Hashable {
-    case probeProfile       // S2
-    case probeTrophy2       // S3a
-    case probeTrophy        // S3a′
-    case probeGameList      // S5 probe
-    case probePurchases     // S6 probe
-    case fetchTrophyTitles  // S3b/S4
-    case fetchGameList      // S5 full
-    case fetchPurchases     // S6 full
+    case probeProfile        // S2
+    case probeTrophyTitles   // S3a (one list — the endpoint ignores npServiceName)
+    case probeGameList       // S5 probe
+    case probePurchases      // S6 probe
+    case fetchTrophyTitles   // S3b/S4
+    case fetchGameList       // S5 full
+    case fetchPurchases      // S6 full
 
     var id: String { rawValue }
 
@@ -39,8 +38,7 @@ enum PSNBuildStepKind: String, CaseIterable, Sendable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .probeProfile:      return "S2 · Probe profile"
-        case .probeTrophy2:      return "S3a · Probe trophy titles — limit 10"
-        case .probeTrophy:       return "S3a′ · Probe trophy titles PS3/Vita — limit 10"
+        case .probeTrophyTitles: return "S3a · Probe trophy titles — limit 10"
         case .probeGameList:     return "S5 · Probe game list — limit 10"
         case .probePurchases:    return "S6 · Probe purchases — size 10"
         case .fetchTrophyTitles: return "S3b/S4 · Fetch all trophy titles"
@@ -52,24 +50,26 @@ enum PSNBuildStepKind: String, CaseIterable, Sendable, Identifiable, Hashable {
     /// The request-cost hint shown after the title ("(1)" or "(≈ n)").
     var costHint: String { isFullFetch ? "(≈ \(estimatedRequests))" : "(1)" }
 
-    /// A best-effort request count for the confirmation ("up to N requests — continue?").
+    /// A best-effort request count for the confirmation ("up to N requests — continue?"),
+    /// from the live probes (2026-09-20): trophy titles 265 → 1 page at 800; game list 231 →
+    /// 2 pages at 200; purchases 581 → ceil(581/100) = 6 pages at 100.
     var estimatedRequests: Int {
         switch self {
-        case .fetchTrophyTitles: return 4   // PS4/PS5 + PS3/Vita, a page each way + paging
-        case .fetchGameList:     return 3
-        case .fetchPurchases:    return 4
+        case .fetchTrophyTitles: return 1
+        case .fetchGameList:     return 2
+        case .fetchPurchases:    return 6
         default:                 return 1
         }
     }
 
     /// The steps that must have passed (for the current label) before this one is enabled.
-    /// A full fetch requires ITS probe(s); every probe requires the profile probe (S2).
+    /// A full fetch requires ITS probe; every probe requires the profile probe (S2).
     var prerequisites: [PSNBuildStepKind] {
         switch self {
         case .probeProfile:      return []
-        case .probeTrophy2, .probeTrophy, .probeGameList, .probePurchases:
+        case .probeTrophyTitles, .probeGameList, .probePurchases:
             return [.probeProfile]
-        case .fetchTrophyTitles: return [.probeTrophy2, .probeTrophy]
+        case .fetchTrophyTitles: return [.probeTrophyTitles]
         case .fetchGameList:     return [.probeGameList]
         case .fetchPurchases:    return [.probePurchases]
         }
@@ -204,10 +204,8 @@ actor LivePSNBuildRunner: PSNBuildRunner {
         case .probeProfile:
             _ = try await client.profile()
             count = 1
-        case .probeTrophy2:
-            count = try await client.probe(.trophyTitles(service: "trophy2"))
-        case .probeTrophy:
-            count = try await client.probe(.trophyTitles(service: "trophy"))
+        case .probeTrophyTitles:
+            count = try await client.probe(.trophyTitles)
         case .probeGameList:
             count = try await client.probe(.gameList)
         case .probePurchases:
@@ -235,25 +233,20 @@ actor LivePSNBuildRunner: PSNBuildRunner {
     // MARK: Full-fetch paging (bounded, respects the single-429 end)
 
     private func fetchTrophyTitles(_ client: PSNClient) async throws -> (Int, Int?) {
-        var seenTotal = 0
-        var grand: Int? = nil
-        for service in PSNImporter.trophyServices {
-            var offset = 0
-            var seen = Set<String>()
-            while true {
-                let page = try await client.trophyTitlesPage(
-                    service: service, limit: PSNImporter.trophyPageSize, offset: offset, seenIDs: seen)
-                for t in page.trophyTitles { seen.insert(t.npCommunicationId) }
-                grand = (grand ?? 0) + (offset == 0 ? page.totalItemCount : 0)
-                if await client.reachedRateLimitEnd { break }
-                guard let next = page.nextOffset, next > offset, !page.trophyTitles.isEmpty,
-                      seen.count < page.totalItemCount else { break }
-                offset = next
-            }
-            seenTotal += seen.count
+        var offset = 0
+        var seen = Set<String>()
+        var total: Int? = nil
+        while true {
+            let page = try await client.trophyTitlesPage(
+                limit: PSNImporter.trophyPageSize, offset: offset, seenIDs: seen)
+            for t in page.trophyTitles { seen.insert(t.npCommunicationId) }
+            if total == nil { total = page.totalItemCount }
             if await client.reachedRateLimitEnd { break }
+            guard let next = page.nextOffset, next > offset, !page.trophyTitles.isEmpty,
+                  seen.count < page.totalItemCount else { break }
+            offset = next
         }
-        return (seenTotal, grand)
+        return (seen.count, total)
     }
 
     private func fetchGameList(_ client: PSNClient) async throws -> (Int, Int?) {
@@ -313,11 +306,9 @@ actor LivePSNBuildRunner: PSNBuildRunner {
     private static func devEndpoints(_ step: PSNBuildStepKind) -> [String] {
         switch step {
         case .probeProfile:      return ["profile"]
-        case .probeTrophy2:      return ["trophyTitles-trophy2"]
-        case .probeTrophy:       return ["trophyTitles-trophy"]
+        case .probeTrophyTitles, .fetchTrophyTitles: return ["trophyTitles"]
         case .probeGameList, .fetchGameList: return ["gameList"]
         case .probePurchases, .fetchPurchases: return ["purchases"]
-        case .fetchTrophyTitles: return ["trophyTitles-trophy2", "trophyTitles-trophy"]
         }
     }
 }

@@ -22,10 +22,10 @@ import Testing
         let importer = makeImporter(db, transport: transport)
         let result = try await importer.fetch { _ in }
 
-        // profile(1) + trophy2[probe+2 pages](3) + trophy[probe+1](2) + gamelist[probe+1](2)
-        //   + purchases[probe+1](2) = 10 network requests.
-        #expect(result.fromNetwork == 10)
-        #expect(transport.requestCount == 10)
+        // profile(1) + trophyTitles[probe+2 pages](3) + gamelist[probe+1](2)
+        //   + purchases[probe+1](2) = 8 network requests (one trophy list, no PS3/Vita probe).
+        #expect(result.fromNetwork == 8)
+        #expect(transport.requestCount == 8)
         #expect(result.rows.count > 10)
 
         let byName = Dictionary(result.rows.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
