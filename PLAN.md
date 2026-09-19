@@ -207,7 +207,7 @@ There is a single total order of played games. Tiers S/A/B/C/D/F are **contiguou
 - moving a game across a divider in the Top list changes its tier; changing its tier moves it in the Top.
 
 ### Coarse: tiers — 1 keystroke, anywhere
-Select game(s) in any view → press `S` `A` `B` `C` `D` `F` (`0` clears). Also context menu, inspector, drag onto the tier board. For bulk backfill there's **Triage mode**: one big cover at a time, press a letter, next — ~2 s per game.
+Select game(s) → press the tier letter (`0` clears): plain `S` `A` `B` `C` `D` `F` on the Tier Board and in Triage; **`⇧S`…`⇧F` in the library grid**, where plain letters are type-to-select *(decided 2026-09-19)*; `⌃S`…`⌃F` in Quick Add. Also context menu, inspector, drag onto the tier board. For bulk backfill there's **Triage mode**: one big cover at a time, press a letter, next — ~2 s per game.
 
 ### Fine: binary-insertion duels, inside the tier
 To place game X in tier A (say 60 games already ordered): "X or Y?" against the middle game, then the middle of the remaining half… **⌈log₂ n⌉ ≈ 6 duels** and X has its exact spot. Tier first is what keeps this cheap: you never compare a masterpiece against shovelware.
@@ -313,7 +313,7 @@ Sidebar entry **Play Next** (LIBRARY section). Bracket picker on top; one **hero
 - Search = FTS5 prefix match on title + alt titles (finds "Baphomet" → *Broken Sword*), results as you type.
 - Filters combine (AND across kinds, OR within a kind), compile to one SQL query, shown as removable chips. Ownership **format** (physical / digital / ROM) is a filter kind too, and ROM copies carry a small badge in the grid.
 - Compilation members appear individually in the grid with a small stack marker; the inspector shows "Part of *Metal Gear Solid: The Legacy Collection* (PS3)" and toggling ownership there applies to the whole product, listing affected games.
-- Multi-select + keyboard everywhere: `S`…`F` tier, `O`/`P` toggle owned/played, `⌘I` inspector, `⌘F` search, `⌘N` quick add, `space` Quick Look-style big cover.
+- Multi-select + keyboard everywhere. In the grid, **plain letters always type-to-select**; the one-key actions take ⇧: `⇧S`…`⇧F` tier (`0` clears), `⇧O`/`⇧P` toggle owned/played *(decided 2026-09-19 — before, a letter did one or the other depending on timing)*. Marking several games owned asks **once for the batch** (format for all; each game's primary platform, ambiguous ones listed). `⌘I` inspector, `⌘F` search, `⌘N` quick add, `space` Quick Look-style big cover.
 
 ---
 
