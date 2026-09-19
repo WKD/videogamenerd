@@ -32,18 +32,32 @@ struct SettingsPaneSizingTests {
             ImportDataSet(id: PSNEndpoint.gameList, title: "Game list", estimatedRequests: 3),
             ImportDataSet(id: PSNEndpoint.purchases, title: "Purchases", estimatedRequests: 4),
         ]
+        // The latch is read at init, so arm it before building the "on" models and clear it
+        // before the latch-off one (the build-steps panel is behind a button, so it never
+        // affects the pane's own height).
+        AppPreferences.defaults.set(true, forKey: PSNImportBuilder.liveEnabledKey)
         let psnSignedIn = PSNAccountModel(
             backend: FakeImportBackend(source: ImportSourceID.psn, sourceLabel: "PlayStation",
                                        dataSets: psnDataSets, staging: ImportStagingStore(db),
                                        session: true, username: "nerd_ps"),
             login: nil)
         await psnSignedIn.refresh()
+        #if DEBUG
+        psnSignedIn.buildSteps = PSNBuildStepsModel(
+            runner: ScriptedPSNBuildRunner(session: true), accountLabel: "test")
+        #endif
         let psnSignedOut = PSNAccountModel(
             backend: FakeImportBackend(source: ImportSourceID.psn, sourceLabel: "PlayStation",
                                        dataSets: [], staging: ImportStagingStore(db), session: false),
             login: nil)
         psnSignedOut.pasteExpanded = true   // tallest signed-out layout
         await psnSignedOut.refresh()
+        AppPreferences.defaults.removeObject(forKey: PSNImportBuilder.liveEnabledKey)
+        let psnLatchOff = PSNAccountModel(
+            backend: FakeImportBackend(source: ImportSourceID.psn, sourceLabel: "PlayStation",
+                                       dataSets: [], staging: ImportStagingStore(db), session: false),
+            login: nil)
+        await psnLatchOff.refresh()
 
         let heights: [(String, CGFloat)] = [
             ("General", fittingHeight(GeneralTab())),
@@ -52,6 +66,7 @@ struct SettingsPaneSizingTests {
             ("GOG signed out", fittingHeight(GOGAccountTab(model: signedOut))),
             ("PSN signed in", fittingHeight(PSNAccountTab(model: psnSignedIn))),
             ("PSN signed out", fittingHeight(PSNAccountTab(model: psnSignedOut))),
+            ("PSN latch off", fittingHeight(PSNAccountTab(model: psnLatchOff))),
             ("Photo Scan", fittingHeight(PhotoScanSettingsTab())),
         ]
         print("SETTINGS pane heights:", heights.map { "\($0.0)=\(Int($0.1))" })

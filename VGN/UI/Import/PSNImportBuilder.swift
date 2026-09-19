@@ -35,6 +35,9 @@ enum PSNImportBuilder {
         let backend: any ImportBackend
         var login: PSNLoginConfig?
         var expiryProvider: @Sendable () async -> Date? = { nil }
+        #if DEBUG
+        var buildSteps: PSNBuildStepsModel?
+        #endif
 
         // SAFETY LATCH (orchestrator, 2026-09-19): the live PSN objects exist only once the
         // owner has explicitly armed them (`defaults write com.pomatelier.VideoGameNerd
@@ -71,14 +74,28 @@ enum PSNImportBuilder {
                 npssoCookieName: auth.npssoCookieName,
                 npssoCookieDomain: auth.npssoCookieDomain)
             expiryProvider = { await auth.sessionExpiry() }
+
+            #if DEBUG
+            // The gated live-steps panel (PLAN §13.5): a live runner over the same auth /
+            // cache / dev cache the importer uses, driven one request per click.
+            let devCache = try? DevImportResponseCache(root: DevImportResponseCache.defaultRoot())
+            let runner = LivePSNBuildRunner(
+                auth: auth, transport: transport, cache: cache, devCache: devCache)
+            buildSteps = PSNBuildStepsModel(runner: runner)
+            #endif
         } else {
             backend = InertImportBackend(
                 source: ImportSourceID.psn, sourceLabel: "PlayStation", staging: staging)
         }
 
+        let liveBuilt = backend is LivePSNImportBackend
         let account = PSNAccountModel(backend: backend, login: login)
         account.sessionExpiryProvider = expiryProvider
-        let presenter = PSNImportPresenter(backend: backend, onLibraryChanged: onLibraryChanged)
+        #if DEBUG
+        account.buildSteps = buildSteps
+        #endif
+        let presenter = PSNImportPresenter(
+            backend: backend, liveEnabled: liveBuilt, onLibraryChanged: onLibraryChanged)
         presenter.account = account
         account.onSyncRequested = { [weak presenter] in presenter?.syncNow() }
         // Keep the menu's signed-in check fresh before the user opens Settings.
