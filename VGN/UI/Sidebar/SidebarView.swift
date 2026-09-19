@@ -120,11 +120,15 @@ struct SidebarView: View {
     private func lengthRow(_ shelf: LengthShelf) -> some View {
         let count = vm.counts.count(for: .length(shelf)) ?? 0
         return Label {
-            HStack(spacing: 6) {
+            // Baseline-aligned: a caption centred against the larger name floats too high.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(shelf.name)
+                    .lineLimit(1)
+                    .layoutPriority(1)
                 Text(shelf.subtitle(bounds: lengthBounds))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
         } icon: {
             Image(systemName: shelf.symbol)
