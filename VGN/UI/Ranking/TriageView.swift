@@ -126,7 +126,7 @@ struct TriageView: View {
             HStack(spacing: 14) {
                 ForEach(model.tiers) { tier in
                     VStack(spacing: 4) {
-                        TierChip(letter: tier.letter, colorHex: tier.colorHex, size: 28)
+                        TierChip(letter: tier.letter, colorHex: tier.colorHex, size: 28, label: tier.label)
                         Text("\(model.perTierCounts[tier.id] ?? 0)")
                             .font(.headline.monospacedDigit())
                     }

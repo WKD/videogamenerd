@@ -410,11 +410,15 @@ private struct TierPickerRow: View {
                     Button {
                         onPick(tier.letter)
                     } label: {
-                        TierChip(letter: tier.letter, colorHex: tier.colorHex, size: 26)
+                        // The chip's own hover help is suppressed here so the single
+                        // tooltip lives on the outermost hit-testable view (the Button);
+                        // two nested `.help`s never fire reliably on macOS.
+                        TierChip(letter: tier.letter, colorHex: tier.colorHex, size: 26,
+                                 showsLabelOnHover: false)
                             .opacity(current == nil || current == tier.letter ? 1 : 0.4)
                     }
                     .buttonStyle(.plain)
-                    .help(tier.label)
+                    .help(TierChip.hoverText(letter: tier.letter, label: tier.label, labels: [:]))
                 }
                 Button {
                     onPick(nil)
