@@ -68,10 +68,12 @@ e-mail redacted, and wait for explicit owner approval** (one action per approval
   *Sign In to GOG…*. A private window opens on GOG's own login page (address line shows the
   host — it should stay `auth.gog.com` / `login.gog.com` / `www.gog.com`). The owner signs in.
   *Proper content:* the window closes itself and the pane flips to signed-in with the owner's
-  **username**. *If it shows "Blocked a page from `<host>`"* the login pulled in an
-  unlisted host (likely a captcha CDN) — **stop**, add that host to
-  `GOGAuthConfiguration.allowedNavigationHosts`, rebuild, retry. A refused client id/secret or
+  **username**. Sub-frames (GOG's captcha iframe) are allowed; only the *window's own* page is
+  held to the host list. *If it shows "Blocked a page from `<host>`"* the login tried to take
+  the whole window to an unlisted host — **stop** and report the host; do not add it blindly.
+  A refused client id/secret or
   an unexpected redirect ⇒ stop and ask. **Ask before G2.**
+- **G2–G5 run as ONE *Sync Now*** (the UI has no step mode): ≤ 15 requests, serial, ≥ 1 s apart, and the code stops at the first response that is not proper content — that is the stop-and-ask point; the pane then shows the reject. The owner approved this shape or asks for a step mode before the first sync.
 - **G2 — Account (1 request).** *Sync Now* begins; the first request is `userData.json`.
   *Proper content:* `isLoggedIn: true` + the owner's username shown. Report, continue if valid.
 - **G3 — Owned ids (1 request).** `user/data/games`. *Proper content:* a non-empty id list;
