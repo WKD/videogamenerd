@@ -38,6 +38,7 @@ struct VGNApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             LibraryCommands()
+            PlayedMarkCommands()
             StatsCommands()
             PhotoScanCommands()
             LibraryDataCommands(database: env.ranking?.library.database, library: env.library)

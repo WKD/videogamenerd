@@ -39,6 +39,9 @@ final class LibraryActions {
         vm.onSetPlayed = { [weak self] ids, value in
             Task { await self?.setPlayed(ids: ids, played: value) }
         }
+        vm.onMarkPlayed = { [weak self] ids, mark in
+            Task { await self?.markPlayed(ids: ids, mark: mark) }
+        }
         vm.onShowInspector = {}
         vm.onQuickAdd = { [weak self] in self?.vm?.quickAddPresented = true }
     }
@@ -177,6 +180,92 @@ final class LibraryActions {
             try? await store.setStatus(ids, status)
         }
         registerStatusUndo(redo)
+    }
+
+    // MARK: - Mark Played As (undoable; PLAN §8, owner request 2026-09-19)
+
+    /// Mark a set of games played (optionally with a completion status) in one
+    /// transaction, with one undo step for the whole batch and a summary banner.
+    /// `.played` leaves an existing status alone; `.status(x)` also sets the status.
+    func markPlayed(ids: Set<Int64>, mark: PlayedMark) async {
+        guard !ids.isEmpty else { return }
+        let previous = capturePreviousPlayState(ids)
+        let (changed, already) = classifyMark(ids, mark: mark, previous: previous)
+        do {
+            try await store.markPlayed(Array(ids), status: mark.status)
+            registerMarkPlayedUndo(previous, actionName: mark.menuTitle)
+            vm?.showBanner(PlayedMarkFeedback.banner(mark: mark, changed: changed, already: already),
+                           kind: .info)
+        } catch {
+            vm?.showBanner("Couldn't mark the games played.", kind: .error)
+        }
+    }
+
+    /// Count how many games this mark actually moves vs. how many already sit in
+    /// the target state (for the banner). `.played` = "already" iff already played;
+    /// `.status(x)` = "already" iff already played **and** already status `x`.
+    private func classifyMark(_ ids: Set<Int64>, mark: PlayedMark,
+                              previous: [Int64: PriorPlayState]) -> (changed: Int, already: Int) {
+        var already = 0
+        for id in ids {
+            guard let prior = previous[id] else { continue }
+            let unchanged: Bool
+            switch mark {
+            case .played: unchanged = prior.played
+            case let .status(s): unchanged = prior.played && prior.status == s
+            }
+            if unchanged { already += 1 }
+        }
+        return (ids.count - already, already)
+    }
+
+    private func capturePreviousPlayState(_ ids: Set<Int64>) -> [Int64: PriorPlayState] {
+        guard let vm else { return [:] }
+        var out: [Int64: PriorPlayState] = [:]
+        for id in ids {
+            if id == vm.selectedDetail?.id, let detail = vm.selectedDetail {
+                out[id] = PriorPlayState(played: detail.played, status: detail.status)
+            } else if let summary = vm.games.first(where: { $0.id == id }) {
+                out[id] = PriorPlayState(played: summary.played, status: summary.status)
+            }
+        }
+        return out
+    }
+
+    private func registerMarkPlayedUndo(_ previous: [Int64: PriorPlayState], actionName: String) {
+        guard let undo = vm?.undoManager, !previous.isEmpty else { return }
+        undo.registerUndo(withTarget: self) { target in
+            Task { await target.restoreMarkPlayed(previous, actionName: actionName) }
+        }
+        undo.setActionName(actionName)
+    }
+
+    /// Restore each game's exact prior played + status. A game that was **unplayed**
+    /// before is un-played again — *unless* it was tiered since the mark, in which
+    /// case un-playing would strip a valid tier (invariant 2); it is left played and
+    /// called out in a banner. A game that was already played only has its status
+    /// restored (its played flag never changed). `internal` so a test can drive the
+    /// inverse directly (`UndoManager.undo()` deadlocks headless).
+    func restoreMarkPlayed(_ previous: [Int64: PriorPlayState], actionName: String) async {
+        let redo = capturePreviousPlayState(Set(previous.keys))
+        var keptTiered: [Int64] = []
+        for (id, prior) in previous {
+            if prior.played {
+                // Played before the mark → only the status may have changed.
+                try? await store.setStatus([id], prior.status)
+            } else {
+                // Unplayed before the mark. If it has since been tiered, un-playing
+                // would clear that tier — skip it (leave it played).
+                let nowTiered = vm?.games.first { $0.id == id }?.tierID != nil
+                if nowTiered { keptTiered.append(id); continue }
+                _ = try? await store.setPlayed([id], false, confirmOrphanDelete: true)
+            }
+        }
+        registerMarkPlayedUndo(redo, actionName: actionName)
+        if !keptTiered.isEmpty {
+            let n = keptTiered.count
+            vm?.showBanner("^[\(n) game](inflect: true) kept played — ranked since the mark.", kind: .info)
+        }
     }
 
     // MARK: - My playtime (undoable)
