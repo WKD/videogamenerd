@@ -201,3 +201,7 @@ account id). **Wipe dev cache (this account)** clears this label's recorded bodi
 hash from `library.playstation.com/recently-purchased`'s network tab and update
 `PSNClient.purchasedGamesHash`. Owned-digital can ship later without blocking by building the
 importer with `includePurchases: false` until S6 passes.
+
+## Live log
+
+- **2026-09-19 — S1, test account, profile `psn-test` — first attempt FAILED client-side ("unsupported URL"), fixed.** The owner signed in on Sony's page (the web view opened `my.playstation.com`, which showed the PlayStation **homepage** — he had to click through to the sign-in form; the start URL is a known wart, not yet changed because a better one cannot be verified without loading Sony pages). The NPSSO cookie was captured and the `authorize` request was sent once; Sony answered with the expected `302 Location: com.scee.psxandroid.scecompcall://redirect/?code=…`, but the wiring had given `PSNAuth` a redirect-FOLLOWING session, so `URLSession` tried to follow the custom-scheme URL and failed with `NSURLErrorUnsupportedURL` before the code could be read. No token call was made, nothing was retried. Fix: `URLSessionTransport.ephemeral(followRedirects: false)` (a session whose delegate refuses redirects) is now used for the `authorize` step only, and all PSN traffic uses ephemeral sessions (no shared cookie jar / URL cache). Covered by `NoRedirectTransportTests`. Requests to Sony so far: the interactive login + 1 `authorize`.

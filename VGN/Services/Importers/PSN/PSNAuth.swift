@@ -21,13 +21,22 @@ actor PSNAuth {
     private var cached: PSNStoredToken?
     private var refreshTask: Task<PSNStoredToken, Error>?
 
+    /// Transport for the `authorize` step only. It MUST NOT follow redirects: Sony answers
+    /// with `302 Location: com.scee.psxandroid.scecompcall://redirect/?code=…`, and a
+    /// redirect-following session dies with "unsupported URL" instead of handing back the
+    /// 302 (first live sign-in, 2026-09-19). nil = use `transport` (tests' stubs return the
+    /// 302 directly).
+    private let authorizeTransport: HTTPTransport?
+
     init(transport: HTTPTransport,
+         authorizeTransport: HTTPTransport? = nil,
          configuration: PSNAuthConfiguration,
          tokenStore: any PSNTokenStoring,
          allowList: ImportAllowList = .psn,
          refreshLeeway: TimeInterval = 120,
          now: @Sendable @escaping () -> Date = { Date() }) {
         self.transport = transport
+        self.authorizeTransport = authorizeTransport
         self.configuration = configuration
         self.tokenStore = tokenStore
         self.allowList = allowList
@@ -126,9 +135,8 @@ actor PSNAuth {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("npsso=\(npsso)", forHTTPHeaderField: "Cookie")
-        // The real path uses a non-redirect-following session so the 302 is observed; a
-        // stub returns the 302 directly (S0 is fakes-only).
-        let (_, response) = try await transport.data(for: request)
+        // A non-redirect-following session, so the 302 is observed (see `authorizeTransport`).
+        let (_, response) = try await (authorizeTransport ?? transport).data(for: request)
         guard let code = Self.authorizationCode(from: response, redirectURI: configuration.redirectURI) else {
             throw ImportError.notAuthenticated
         }
