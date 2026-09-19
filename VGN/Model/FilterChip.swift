@@ -11,7 +11,11 @@ import Foundation
 /// ``LibraryFilterChips`` to remove one or clear all.
 struct FilterChip: Identifiable, Hashable, Sendable {
     enum Kind: String, Sendable, CaseIterable {
-        case search, genre, decade, tier, status, format, playtime, platform
+        case search, genre, decade
+        case tier, unrated
+        case status, notPlayed, noStatus
+        case format, notOwned
+        case playtime, platform
 
         var label: String {
             switch self {
@@ -19,10 +23,23 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .genre: return "Genre"
             case .decade: return "Decade"
             case .tier: return "Tier"
+            case .unrated: return "Unrated"
             case .status: return "Status"
+            case .notPlayed: return "Not Played"
+            case .noStatus: return "No Status"
             case .format: return "Format"
+            case .notOwned: return "Not Owned"
             case .playtime: return "Playtime"
             case .platform: return "Platform"
+            }
+        }
+
+        /// A standalone boolean facet renders as just its label ("Unrated"), with no
+        /// "Kind: value" split.
+        var isStandalone: Bool {
+            switch self {
+            case .unrated, .notPlayed, .noStatus, .notOwned: return true
+            default: return false
             }
         }
     }
@@ -38,11 +55,15 @@ struct FilterChip: Identifiable, Hashable, Sendable {
 
     var id: String { "\(kind.rawValue):\(value)" }
 
-    /// The chip's visible text: "Genre: RPG" for a group lead, "or Adventure" after.
-    var text: String { isGroupLead ? "\(kind.label): \(valueLabel)" : "or \(valueLabel)" }
+    /// The chip's visible text: "Unrated" for a standalone facet, "Genre: RPG" for a
+    /// group lead, "or Adventure" after.
+    var text: String {
+        if kind.isStandalone { return kind.label }
+        return isGroupLead ? "\(kind.label): \(valueLabel)" : "or \(valueLabel)"
+    }
 
-    /// Always-full label (accessibility / tooltip): "Genre: RPG".
-    var fullLabel: String { "\(kind.label): \(valueLabel)" }
+    /// Always-full label (accessibility / tooltip): "Genre: RPG", or "Unrated".
+    var fullLabel: String { kind.isStandalone ? kind.label : "\(kind.label): \(valueLabel)" }
 }
 
 /// Pure builders that turn a ``LibraryFilter`` into chips and apply chip removals.
@@ -76,16 +97,20 @@ enum LibraryFilterChips {
             .sorted { (tierByID[$0]?.sort ?? .max) < (tierByID[$1]?.sort ?? .max) }
             .map { (String($0), tierByID[$0]?.letter ?? "?") }
         add(.tier, tierPairs)
+        if filter.includeUnrated { add(.unrated, [("true", "Unrated")]) }
 
         let statusPairs = PlayStatus.allCases
             .filter { filter.statuses.contains($0) }
             .map { ($0.rawValue, $0.label) }
         add(.status, statusPairs)
+        if filter.includeNotPlayed { add(.notPlayed, [("true", "Not Played")]) }
+        if filter.includeNoStatus { add(.noStatus, [("true", "No Status")]) }
 
         let formatPairs = ProductFormat.allCases
             .filter { filter.formats.contains($0) }
             .map { ($0.rawValue, $0.label) }
         add(.format, formatPairs)
+        if filter.includeNotOwned { add(.notOwned, [("true", "Not Owned")]) }
 
         let playtimePairs = PlaytimeBucket.allCases
             .filter { filter.playtimes.contains($0) }
@@ -106,8 +131,12 @@ enum LibraryFilterChips {
         case .genre: f.genres.remove(chip.value)
         case .decade: if let d = Int(chip.value) { f.decades.remove(d) }
         case .tier: if let t = Int64(chip.value) { f.tierIDs.remove(t) }
+        case .unrated: f.includeUnrated = false
         case .status: if let s = PlayStatus(rawValue: chip.value) { f.statuses.remove(s) }
+        case .notPlayed: f.includeNotPlayed = false
+        case .noStatus: f.includeNoStatus = false
         case .format: if let fmt = ProductFormat(rawValue: chip.value) { f.formats.remove(fmt) }
+        case .notOwned: f.includeNotOwned = false
         case .playtime: if let b = PlaytimeBucket(rawValue: chip.value) { f.playtimes.remove(b) }
         case .platform: f.platforms.remove(chip.value)
         }

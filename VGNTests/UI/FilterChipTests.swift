@@ -80,4 +80,60 @@ struct FilterChipTests {
     @Test func noChipsWhenNoFacets() {
         #expect(LibraryFilterChips.chips(for: LibraryFilter(scope: .all), tiers: tiers).isEmpty)
     }
+
+    // MARK: - Extra facets ("Unrated" / "Not Played" / "No Status" / "Not Owned")
+
+    @Test func extraFacetChipsRenderStandaloneOrderedAndRemoveOnlyTheFlag() {
+        var f = LibraryFilter(scope: .all)
+        f.tierIDs = [1]
+        f.includeUnrated = true
+        f.includeNotPlayed = true
+        f.includeNoStatus = true
+        f.formats = [.physical]
+        f.includeNotOwned = true
+        let chips = LibraryFilterChips.chips(for: f, tiers: tiers)
+        // Each standalone chip follows its kind group, in menu order.
+        #expect(chips.map(\.kind) == [.tier, .unrated, .notPlayed, .noStatus, .format, .notOwned])
+
+        let unrated = try! #require(chips.first { $0.kind == .unrated })
+        #expect(unrated.text == "Unrated")          // standalone, no "Kind: value" split
+        #expect(unrated.fullLabel == "Unrated")
+
+        // Removing one flag chip clears only that flag.
+        let afterUnrated = LibraryFilterChips.removing(unrated, from: f)
+        #expect(afterUnrated.includeUnrated == false)
+        #expect(afterUnrated.tierIDs == [1])
+        #expect(afterUnrated.includeNotPlayed == true)
+
+        #expect(LibraryFilterChips.removing(
+            try! #require(chips.first { $0.kind == .notPlayed }), from: f).includeNotPlayed == false)
+        #expect(LibraryFilterChips.removing(
+            try! #require(chips.first { $0.kind == .noStatus }), from: f).includeNoStatus == false)
+        #expect(LibraryFilterChips.removing(
+            try! #require(chips.first { $0.kind == .notOwned }), from: f).includeNotOwned == false)
+
+        #expect(chips.first { $0.kind == .notOwned }?.text == "Not Owned")
+        #expect(Set(chips.map(\.id)).count == chips.count)   // unique ids
+    }
+
+    @Test func extraFlagsCountAsActiveFacetsAndClearAllResetsThem() {
+        #expect(LibraryFilter(includeUnrated: true, scope: .all).hasActiveFacets)
+        #expect(LibraryFilter(includeNotPlayed: true, scope: .all).hasActiveFacets)
+        #expect(LibraryFilter(includeNoStatus: true, scope: .all).hasActiveFacets)
+        #expect(LibraryFilter(includeNotOwned: true, scope: .all).hasActiveFacets)
+        #expect(!LibraryFilter(scope: .all).hasActiveFacets)
+
+        var f = LibraryFilter(scope: .all)
+        f.includeUnrated = true
+        f.includeNotPlayed = true
+        f.includeNoStatus = true
+        f.includeNotOwned = true
+        let cleared = LibraryFilterChips.cleared(f)
+        #expect(cleared.includeUnrated == false)
+        #expect(cleared.includeNotPlayed == false)
+        #expect(cleared.includeNoStatus == false)
+        #expect(cleared.includeNotOwned == false)
+        #expect(!cleared.hasActiveFacets)
+        #expect(LibraryFilterChips.chips(for: cleared, tiers: tiers).isEmpty)
+    }
 }

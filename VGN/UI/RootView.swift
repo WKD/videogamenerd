@@ -238,13 +238,15 @@ struct RootView: View {
             ForEach(vm.tiers) { tier in
                 Toggle("\(tier.letter) · \(tier.label)", isOn: membership(\.tierIDs, tier.id))
             }
-            if !vm.filter.tierIDs.isEmpty {
+            Divider()
+            Toggle("Unrated", isOn: flag(\.includeUnrated))
+            if !vm.filter.tierIDs.isEmpty || vm.filter.includeUnrated {
                 Divider()
-                Button("Clear") { clear(\.tierIDs) }
+                Button("Clear") { clearTierFacet() }
             }
         } label: {
             Label("Tier", systemImage: "chart.bar")
-                .symbolVariant(vm.filter.tierIDs.isEmpty ? .none : .fill)
+                .symbolVariant(vm.filter.tierIDs.isEmpty && !vm.filter.includeUnrated ? .none : .fill)
         }
         .accessibilityIdentifier(A11yID.toolbarFilterTier)
     }
@@ -254,15 +256,22 @@ struct RootView: View {
             ForEach(PlayStatus.allCases) { status in
                 Toggle(status.label, isOn: membership(\.statuses, status))
             }
-            if !vm.filter.statuses.isEmpty {
+            Divider()
+            Toggle("Not Played", isOn: flag(\.includeNotPlayed))
+            Toggle("No Status", isOn: flag(\.includeNoStatus))
+            if statusFacetActive {
                 Divider()
-                Button("Clear") { clear(\.statuses) }
+                Button("Clear") { clearStatusFacet() }
             }
         } label: {
             Label("Status", systemImage: "flag")
-                .symbolVariant(vm.filter.statuses.isEmpty ? .none : .fill)
+                .symbolVariant(statusFacetActive ? .fill : .none)
         }
         .accessibilityIdentifier(A11yID.toolbarFilterStatus)
+    }
+
+    private var statusFacetActive: Bool {
+        !vm.filter.statuses.isEmpty || vm.filter.includeNotPlayed || vm.filter.includeNoStatus
     }
 
     // Ownership format (physical / digital / ROM), driven by ProductFormat.
@@ -271,13 +280,15 @@ struct RootView: View {
             ForEach(ProductFormat.allCases, id: \.self) { format in
                 Toggle(format.label, isOn: membership(\.formats, format))
             }
-            if !vm.filter.formats.isEmpty {
+            Divider()
+            Toggle("Not Owned", isOn: flag(\.includeNotOwned))
+            if !vm.filter.formats.isEmpty || vm.filter.includeNotOwned {
                 Divider()
-                Button("Clear") { clear(\.formats) }
+                Button("Clear") { clearFormatFacet() }
             }
         } label: {
             Label("Format", systemImage: "opticaldisc")
-                .symbolVariant(vm.filter.formats.isEmpty ? .none : .fill)
+                .symbolVariant(vm.filter.formats.isEmpty && !vm.filter.includeNotOwned ? .none : .fill)
         }
     }
 
@@ -349,6 +360,43 @@ struct RootView: View {
     private func clear<T>(_ keyPath: WritableKeyPath<LibraryFilter, Set<T>>) {
         var f = vm.filter
         f[keyPath: keyPath].removeAll()
+        vm.setFilter(f)
+    }
+
+    /// A binding to a Bool facet flag (e.g. the "Unrated" / "Not Played" toggles).
+    private func flag(_ keyPath: WritableKeyPath<LibraryFilter, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { vm.filter[keyPath: keyPath] },
+            set: { isOn in
+                var f = vm.filter
+                f[keyPath: keyPath] = isOn
+                vm.setFilter(f)
+            }
+        )
+    }
+
+    /// "Clear" for the tier / status / format menus resets both the value set and
+    /// that menu's extra facet flags ("Unrated" / "Not Played" · "No Status" /
+    /// "Not Owned").
+    private func clearTierFacet() {
+        var f = vm.filter
+        f.tierIDs.removeAll()
+        f.includeUnrated = false
+        vm.setFilter(f)
+    }
+
+    private func clearStatusFacet() {
+        var f = vm.filter
+        f.statuses.removeAll()
+        f.includeNotPlayed = false
+        f.includeNoStatus = false
+        vm.setFilter(f)
+    }
+
+    private func clearFormatFacet() {
+        var f = vm.filter
+        f.formats.removeAll()
+        f.includeNotOwned = false
         vm.setFilter(f)
     }
 }

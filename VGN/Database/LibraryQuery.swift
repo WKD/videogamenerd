@@ -145,31 +145,50 @@ enum LibraryQuery {
             args.append(contentsOf: slugs.map { $0 as DatabaseValueConvertible })
             args.append(contentsOf: slugs.map { $0 as DatabaseValueConvertible })
         }
+        // Tier facet (OR within kind): selected tiers OR "Unrated" (played, no tier —
+        // mirrors the sidebar "Unranked" list).
+        var tierOrs: [String] = []
         if !filter.tierIDs.isEmpty {
             let ids = filter.tierIDs.sorted()
-            wheres.append("g.tier_id IN (\(placeholders(ids.count)))")
+            tierOrs.append("g.tier_id IN (\(placeholders(ids.count)))")
             args.append(contentsOf: ids.map { $0 as DatabaseValueConvertible })
         }
+        if filter.includeUnrated { tierOrs.append("(g.played = 1 AND g.tier_id IS NULL)") }
+        appendOR(tierOrs, into: &wheres)
         if !filter.decades.isEmpty {
             let ds = filter.decades.sorted()
             wheres.append("g.decade IN (\(placeholders(ds.count)))")
             args.append(contentsOf: ds.map { $0 as DatabaseValueConvertible })
         }
+        // Completion facet (OR within kind): selected statuses OR "Not Played"
+        // (played = 0) OR "No Status" (played but no completion status).
+        var statusOrs: [String] = []
         if !filter.statuses.isEmpty {
             let ss = filter.statuses.map(\.rawValue).sorted()
-            wheres.append("g.status IN (\(placeholders(ss.count)))")
+            statusOrs.append("g.status IN (\(placeholders(ss.count)))")
             args.append(contentsOf: ss.map { $0 as DatabaseValueConvertible })
         }
+        if filter.includeNotPlayed { statusOrs.append("g.played = 0") }
+        if filter.includeNoStatus { statusOrs.append("(g.played = 1 AND g.status IS NULL)") }
+        appendOR(statusOrs, into: &wheres)
+
+        // Format / ownership facet (OR within kind): a game matches if it has ≥ 1
+        // owned product in one of the formats (PLAN §4), OR "Not Owned" (no owned
+        // product/copy at all — the sidebar "Owned" definition, so compilation-owned
+        // games count as owned and are excluded by "Not Owned").
+        var formatOrs: [String] = []
         if !filter.formats.isEmpty {
-            // A game matches if it has ≥ 1 owned product in one of the formats
-            // (PLAN §4 — physical / digital / rom).
             let fs = filter.formats.map(\.rawValue).sorted()
-            wheres.append("""
+            formatOrs.append("""
                 EXISTS(SELECT 1 FROM product_games pg JOIN products p ON p.id = pg.product_id
                        WHERE pg.game_id = g.id AND p.format IN (\(placeholders(fs.count))))
                 """)
             args.append(contentsOf: fs.map { $0 as DatabaseValueConvertible })
         }
+        if filter.includeNotOwned {
+            formatOrs.append("NOT EXISTS(SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)")
+        }
+        appendOR(formatOrs, into: &wheres)
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
             wheres.append("""
@@ -183,6 +202,14 @@ enum LibraryQuery {
             wheres.append("g.id IN (SELECT rowid FROM games_fts WHERE games_fts MATCH ?)")
             args.append(match)
         }
+    }
+
+    /// Combine one facet's OR-branches (its value set plus any "unset"/negative
+    /// options — PLAN §8 "OR within a kind") into a single WHERE clause. Args for
+    /// each branch are appended by the caller as the branch is built, in order.
+    private static func appendOR(_ ors: [String], into wheres: inout [String]) {
+        guard !ors.isEmpty else { return }
+        wheres.append(ors.count == 1 ? ors[0] : "(" + ors.joined(separator: " OR ") + ")")
     }
 
     /// The seconds a game is bucketed on for the playtime filter: effective
