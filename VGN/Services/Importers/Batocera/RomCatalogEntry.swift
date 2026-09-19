@@ -98,6 +98,20 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
         return true
     }
 
+    /// Crowd rating on a 0…100 scale for the recommendation crowd prior: IGDB (already 0…100)
+    /// for a matched PS Plus entry, ScreenScraper (0…1 → ×100) for a Batocera ROM.
+    var crowdRating0to100: Double? {
+        if vaultSource == .psn { return igdbRating }
+        return rating.map { $0 * 100 }
+    }
+
+    /// The owner's **personal length** for a play style (PLAN §8), from the IGDB time-to-beat
+    /// on a matched PS Plus entry. A Batocera ROM has no length ⇒ nil (time fit stays neutral).
+    func personalLength(style: PlayStyle) -> PersonalLength? {
+        PersonalLength.compute(normallyS: lengthMainSeconds, completelyS: lengthCompleteSeconds,
+                               style: style)
+    }
+
     static func decodeTraits(_ json: String) -> [GameTrait]? {
         guard let data = json.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode([GameTrait].self, from: data)

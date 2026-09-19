@@ -49,16 +49,40 @@ enum DiscoverScorer {
         /// default is unbounded so non-UI callers see every favourite pinned.
         var maxPinnedFavourites = Int.max
 
+        // MARK: The Vault — PS Plus terms (PLAN §16)
+
+        /// The chosen time bracket. When set, an entry with a known IGDB length (a matched PS
+        /// Plus entry) gets a time-fit term; a ROM has no length, so its time stays neutral.
+        var bracket: TimeBracket?
+        /// The owner's play style, for the personal length behind the time-fit + finishability.
+        var playStyle: PlayStyle = .default
+        /// The owner's weekly pace, for the deadline finishability (§15).
+        var pace: PlayPace = .default
+        /// Months until the owner plans to leave PS Plus (nil ⇒ no date; the constant fallback
+        /// applies instead). Feeds ``PSPlusDeadlineBoost``.
+        var psPlusMonthsLeft: Double?
+        /// Prioritise PS Plus games with the small constant boost when no date is set (PLAN §16
+        /// — "Prioritise PS Plus games", on by default).
+        var prioritisePSPlus = true
+
         init(seed: UInt64 = 0, playedSystems: Set<String> = [],
              weights: RecommendationWeights = RecommendationWeights(),
              crowdWeightCap: Double = 0.25, systemAffinityBonus: Double = 0.03,
-             maxPinnedFavourites: Int = Int.max) {
+             maxPinnedFavourites: Int = Int.max,
+             bracket: TimeBracket? = nil, playStyle: PlayStyle = .default,
+             pace: PlayPace = .default, psPlusMonthsLeft: Double? = nil,
+             prioritisePSPlus: Bool = true) {
             self.seed = seed
             self.playedSystems = playedSystems
             self.weights = weights
             self.crowdWeightCap = crowdWeightCap
             self.systemAffinityBonus = systemAffinityBonus
             self.maxPinnedFavourites = maxPinnedFavourites
+            self.bracket = bracket
+            self.playStyle = playStyle
+            self.pace = pace
+            self.psPlusMonthsLeft = psPlusMonthsLeft
+            self.prioritisePSPlus = prioritisePSPlus
         }
     }
 
@@ -73,9 +97,9 @@ enum DiscoverScorer {
         let rankedCount = ranked.count
 
         let scored = entries.compactMap { entry -> Scored? in
-            // "Not Interested" / promoted rows never return (the pool query already excludes
-            // them; this is a defensive belt).
-            guard !entry.notInterested, entry.promotedGameID == nil else { return nil }
+            // "Not Interested" / promoted / unmatched-PS-Plus rows never return (the pool query
+            // already excludes them; this is a defensive belt).
+            guard !entry.notInterested, entry.promotedGameID == nil, entry.isSuggestable else { return nil }
             return scoreOne(entry, profile: profile, index: index,
                             rankedCount: rankedCount, options: options)
         }
@@ -114,15 +138,39 @@ enum DiscoverScorer {
         let tasteSignal = weights.traitAffinityWeight * affinity.deviation + linkResult.score
         let tasteScore = clamp(profile.mean + tasteSignal)
 
-        // Crowd rating as a prior only (ScreenScraper 0…1 → CrowdPrior's 0…100 scale). The
-        // weight shrinks as the owner ranks more games, and is capped well below the taste
-        // terms so it never drives the row.
+        // Crowd rating as a prior only (ScreenScraper 0…1 or IGDB 0…100 → CrowdPrior's 0…100
+        // scale). The weight shrinks as the owner ranks more games, and is capped well below the
+        // taste terms so it never drives the row.
         var blended = tasteScore
-        if let rating = entry.rating,
-           let crowdScore = CrowdPrior.score(rating: rating * 100) {
+        if let crowd100 = entry.crowdRating0to100,
+           let crowdScore = CrowdPrior.score(rating: crowd100) {
             let decay = weights.crowdRankedHalfLife / (weights.crowdRankedHalfLife + Double(rankedCount))
             let crowdWeight = min(options.crowdWeightCap, weights.crowdBaseWeight * decay)
             blended = (1 - crowdWeight) * tasteScore + crowdWeight * crowdScore
+        }
+
+        // Time fit — only when a length is known (matched PS Plus entries usually have IGDB
+        // times; ROMs do not, so the term is neutral, never a penalty). PLAN §16.
+        let personal = entry.personalLength(style: options.playStyle)
+        var timeTerm = 0.0
+        var timeFit: TimeFit.Result?
+        if let bracket = options.bracket, let personal {
+            let fit = TimeFit.evaluate(estimateSeconds: personal.seconds, bracket: bracket, weights: weights)
+            timeFit = fit
+            timeTerm = weights.timeFitWeight * (fit.fit - 1)
+        }
+
+        // PS Plus deadline ramp / constant fallback (PLAN §16) — only for PS Plus entries.
+        var subBonus = 0.0
+        let isPSPlus = entry.vaultSource == .psn
+        if isPSPlus {
+            if options.psPlusMonthsLeft != nil {
+                subBonus = PSPlusDeadlineBoost.boost(monthsLeft: options.psPlusMonthsLeft,
+                                                     personalLengthSeconds: personal?.seconds,
+                                                     pace: options.pace)
+            } else if options.prioritisePSPlus {
+                subBonus = weights.subscriptionBonus
+            }
         }
 
         // System affinity + weekly rotation jitter. A ★ favourite is a deliberate pick, so it
@@ -130,12 +178,26 @@ enum DiscoverScorer {
         let systemBonus = options.playedSystems.contains(entry.system) ? options.systemAffinityBonus : 0
         let jitter = entry.isFavorite ? 0 : RecommendationEngine.rotationJitter(
             seed: options.seed, id: entry.id, magnitude: weights.rotationMagnitude)
-        let finalScore = clamp(blended + systemBonus + jitter)
+        let finalScore = clamp(blended + timeTerm + systemBonus + subBonus + jitter)
 
         let evidenceMass = affinity.evidence + linkResult.links.map { abs($0.contribution) }.reduce(0, +)
         let strength = matchStrength(evidenceMass: evidenceMass, rankedCount: rankedCount, weights: weights)
         var reasons = buildReasons(entry: entry, affinity: affinity, links: linkResult.links,
-                                   crowdRating: entry.rating, strength: strength, weights: weights)
+                                   crowdRating: entry.crowdRating0to100, strength: strength, weights: weights)
+        // Time reason (matched PS Plus entries with a length).
+        if timeFit != nil, let bracket = options.bracket, let personal {
+            reasons.append(.fitsBracket(estimateSeconds: personal.seconds, bracket: bracket))
+        }
+        // PS Plus tail: the deadline reason (with a date) or the plain "leaves with PS Plus".
+        if isPSPlus {
+            if let months = options.psPlusMonthsLeft, months > 0 {
+                reasons.append(.leavesWithSubscriptionDeadline(
+                    monthsLeft: max(1, Int(months.rounded())),
+                    personalLengthSeconds: personal?.seconds))
+            } else {
+                reasons.append(.leavesWithSubscription)
+            }
+        }
         // A favourite leads with "★ your favourite", then its taste reasons (PLAN §15).
         if entry.isFavorite { reasons.insert(.batoceraFavouritePinned, at: 0) }
         return Scored(entry: entry, score: finalScore, reasons: reasons, strength: strength)
@@ -180,10 +242,10 @@ enum DiscoverScorer {
         drivers.sort { $0.magnitude > $1.magnitude }
         var reasons = drivers.prefix(3).map(\.reason)
 
-        // The crowd rating as a soft tail (ScreenScraper 0…1 → a 0…100 figure the formatter
-        // renders); only when the crowd likes it and it did not already earn taste drivers.
-        if reasons.isEmpty, let rating = crowdRating, rating >= 0.7 {
-            reasons.append(.crowdRated(rating: rating * 100, count: nil))
+        // The crowd rating as a soft tail (already on the 0…100 scale the formatter renders);
+        // only when the crowd likes it and it did not already earn taste drivers.
+        if reasons.isEmpty, let rating = crowdRating, rating >= 70 {
+            reasons.append(.crowdRated(rating: rating, count: nil))
         }
         if strength == .weak { reasons.append(.weakEvidence) }
         return reasons

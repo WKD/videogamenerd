@@ -78,6 +78,9 @@ enum PlayNextReasonFormatter {
             return "Little to go on yet"
         case .leavesWithSubscription:
             return "Leaves with PS Plus"
+        case let .leavesWithSubscriptionDeadline(monthsLeft, personalLengthSeconds):
+            return PSPlusDeadlineBoost.reason(monthsLeft: monthsLeft.map(Double.init),
+                                              personalLengthSeconds: personalLengthSeconds)
         case .batoceraFavourite:
             return "★ a favourite on your Batocera"
         case .batoceraFavouritePinned:
