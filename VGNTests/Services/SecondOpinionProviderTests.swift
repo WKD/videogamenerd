@@ -174,7 +174,7 @@ struct SecondOpinionProviderTests {
             _ = try await lib.addGame(GameDraft(title: "ZZZSecretGame", igdbID: 4,
                                                 platformIDs: ["ps4"])).gameID
 
-            let result = try await rec.recommend(bracket: TimeBracket(preset: .month))
+            let result = try await rec.recommend(bracket: TimeBracket(shelf: .fewWeeks))
             let request = try await rec.secondOpinionRequest(for: result)
 
             let runner = FakeClaudeRunner()

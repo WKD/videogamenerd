@@ -2,90 +2,88 @@ import Foundation
 
 // MARK: - Time commitment bracket
 
-/// The time-commitment bracket the user picks (PLAN §7b Inputs). One of four
-/// presets, or a precise custom budget (hours/week × weeks). The `completionist`
-/// toggle switches a candidate's estimate from IGDB `normally` to `completely`.
+/// The time-commitment bracket the user picks (PLAN §7b Inputs). One of the five
+/// "By Length" ``LengthShelf`` shelves (whose hour bounds derive from the owner's
+/// weekly ``PlayPace`` — the same source of truth as the sidebar), or a precise
+/// custom budget (hours/week × weeks). The `completionist` toggle switches a
+/// candidate's estimate from IGDB `normally` to `completely`.
 ///
-/// Foundation-only value; the engine reads `lowerSeconds` / `upperSeconds`.
+/// Foundation-only value; the engine reads `lowerSeconds` / `upperSeconds`. There is
+/// **one** source of truth for names + bounds: ``LengthShelf`` and
+/// ``LengthShelf/bounds(for:)`` — this type never re-defines them.
 struct TimeBracket: Hashable, Sendable, Codable {
-    enum Preset: String, Hashable, Sendable, Codable, CaseIterable, Identifiable {
-        case evening        // ≤ 5 h
-        case weekOrTwo      // 5–15 h
-        case month          // 15–40 h
-        case longHaul       // 40 h +
-
-        var id: String { rawValue }
-
-        var label: String {
-            switch self {
-            case .evening: return "An evening"
-            case .weekOrTwo: return "A week or two"
-            case .month: return "A month"
-            case .longHaul: return "A long haul"
-            }
-        }
-
-        /// Inclusive hour bounds; `nil` = unbounded on that side.
-        var lowerHours: Double? {
-            switch self {
-            case .evening: return nil
-            case .weekOrTwo: return 5
-            case .month: return 15
-            case .longHaul: return 40
-            }
-        }
-        var upperHours: Double? {
-            switch self {
-            case .evening: return 5
-            case .weekOrTwo: return 15
-            case .month: return 40
-            case .longHaul: return nil
-            }
-        }
-    }
-
-    /// The chosen preset, or `nil` for a custom budget.
-    var preset: Preset?
+    /// The chosen length shelf, or `nil` for a custom budget.
+    var shelf: LengthShelf?
+    /// The weekly pace that resolves a shelf's hour bounds (shared with the sidebar;
+    /// ignored for a custom budget). Changing it re-derives the bounds.
+    var pace: PlayPace
+    /// The owner's play style, which sets each candidate's **personal length** for the
+    /// time fit (owner request 2026-09-19). Shared with the sidebar. The
+    /// ``completionist`` flag overrides it to `.completionist` (plan for 100%).
+    var playStyle: PlayStyle
     /// Precise mode: a total budget in seconds (upper bound, no lower bound).
     var customBudgetSeconds: Int?
-    /// Estimate `completely` instead of `normally`.
+    /// Per-session "plan for 100%" override: estimate to `.completionist` (t = 1)
+    /// regardless of the owner's usual play style.
     var completionist: Bool
 
-    init(preset: Preset, completionist: Bool = false) {
-        self.preset = preset
+    init(shelf: LengthShelf, pace: PlayPace = .default,
+         playStyle: PlayStyle = .default, completionist: Bool = false) {
+        self.shelf = shelf
+        self.pace = pace
+        self.playStyle = playStyle
         self.customBudgetSeconds = nil
         self.completionist = completionist
     }
 
-    init(budgetSeconds: Int, completionist: Bool = false) {
-        self.preset = nil
+    init(budgetSeconds: Int, playStyle: PlayStyle = .default, completionist: Bool = false) {
+        self.shelf = nil
+        self.pace = .default
+        self.playStyle = playStyle
         self.customBudgetSeconds = budgetSeconds
         self.completionist = completionist
     }
 
+    /// The style the time fit actually uses: the "plan for 100%" toggle forces
+    /// `.completionist`, otherwise the owner's usual style.
+    var resolvedStyle: PlayStyle { completionist ? .completionist : playStyle }
+
     private static let secondsPerHour = 3600.0
 
-    /// Lower bound in seconds (`nil` = no lower bound / anything shorter is fine).
+    /// The shelf edges for the current pace (the one source of bounds).
+    private var bounds: LengthBounds { LengthShelf.bounds(for: pace) }
+
+    /// Lower bound in seconds (`nil` = no lower bound / anything shorter is fine —
+    /// e.g. "One Evening" is open below, and a custom budget has no floor).
     var lowerSeconds: Int? {
-        if preset == nil { return nil }               // custom budget: no lower bound
-        guard let h = preset?.lowerHours else { return nil }
-        return Int(h * Self.secondsPerHour)
+        guard let shelf else { return nil }
+        return shelf.secondsRange(in: bounds).lower
     }
 
-    /// Upper bound in seconds (`nil` = unbounded, e.g. "a long haul").
+    /// Upper bound in seconds (`nil` = unbounded above, e.g. "Epics").
     var upperSeconds: Int? {
         if let custom = customBudgetSeconds { return custom }
-        guard let h = preset?.upperHours else { return nil }
-        return Int(h * Self.secondsPerHour)
+        return shelf?.secondsRange(in: bounds).upper
     }
 
-    /// A short label for reasons / display.
+    /// A short label for reasons / display / the "Ask Claude" prompt: the shelf name
+    /// **with** its current hour range ("One Evening (under 4 h)"), or the budget.
     var label: String {
-        if let preset { return preset.label }
+        if let shelf { return "\(shelf.name) (\(shelf.subtitle(bounds: bounds)))" }
         if let budget = customBudgetSeconds {
             return "~\(Int((Double(budget) / Self.secondsPerHour).rounded())) h budget"
         }
         return "Any length"
+    }
+
+    /// Just the hour range for the selected bracket, e.g. "4–10 h", "under 4 h",
+    /// "80 h and more", or "≈ 16 h" for a custom budget (the bar's caption).
+    var rangeText: String {
+        if let shelf { return shelf.subtitle(bounds: bounds) }
+        if let budget = customBudgetSeconds {
+            return "≈ \(Int((Double(budget) / Self.secondsPerHour).rounded())) h"
+        }
+        return ""
     }
 }
 

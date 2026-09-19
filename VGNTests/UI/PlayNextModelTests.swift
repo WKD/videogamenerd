@@ -39,7 +39,7 @@ struct PlayNextModelTests {
         let defaults = ephemeral()
         let backend = ScriptedPlayNextBackend(result: PlayNextSamples.richResult())
         let m1 = makeModel(backend, defaults: defaults)
-        m1.selectPreset(.longHaul)
+        m1.selectShelf(.season)
         m1.setCompletionist(true)
         m1.setIncludeAbandoned(true)
         m1.setIncludePlayedWithoutStatus(true)
@@ -53,7 +53,7 @@ struct PlayNextModelTests {
         #expect(m2.usesCustom)
         #expect(m2.customHoursPerWeek == 10)
         #expect(m2.customWeeks == 3)
-        #expect(m2.bracketPreset == .longHaul)
+        #expect(m2.bracketShelf == .season)
     }
 
     // MARK: - Latest-wins recompute
@@ -66,10 +66,10 @@ struct PlayNextModelTests {
         }
         let model = makeModel(backend)
         await model.start()
-        model.selectPreset(.evening)
-        model.selectPreset(.month)
-        await waitUntil { model.result?.bracket.preset == .month }
-        #expect(model.result?.bracket.preset == .month)
+        model.selectShelf(.evening)
+        model.selectShelf(.fewWeeks)
+        await waitUntil { model.result?.bracket.shelf == .fewWeeks }
+        #expect(model.result?.bracket.shelf == .fewWeeks)
     }
 
     // MARK: - Re-roll
@@ -195,7 +195,7 @@ struct PlayNextModelTests {
         // A recompute yields a different shortlist → the opinion is invalidated.
         backend.result = PlayNextResult(
             hero: PlayNextSamples.suggestion(999, "Different", reasons: []),
-            bracket: TimeBracket(preset: .longHaul))
+            bracket: TimeBracket(shelf: .epic))
         model.reroll()
         await waitUntil { model.result?.hero?.id == 999 }
         #expect(model.secondOpinionState == .idle)

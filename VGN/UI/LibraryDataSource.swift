@@ -11,9 +11,10 @@ import Foundation
 /// the swap in `LibraryViewModel` is one line.
 protocol LibraryDataSource: Sendable {
     /// Live sidebar aggregate counts (PLAN §8 "one observed aggregate query").
-    /// `pace` sets the "By Length" shelf edges; a pace change re-subscribes this one
-    /// observation (never adds a second) so the shelf counts update.
-    func sidebarCounts(pace: PlayPace) -> AsyncStream<SidebarCounts>
+    /// `pace` sets the "By Length" shelf edges and `style` a game's personal length;
+    /// a change to either re-subscribes this one observation (never adds a second) so
+    /// the shelf counts update.
+    func sidebarCounts(pace: PlayPace, style: PlayStyle) -> AsyncStream<SidebarCounts>
 
     /// Platforms with ≥ 1 game, full `PlatformInfo` for grouping/labels.
     func platformsInUse() -> AsyncStream<[PlatformInfo]>

@@ -109,7 +109,7 @@ import GRDB
         try await lib.updateMetadata(gameID: neutral, MetadataPatch(
             ttbNormallyS: Rec.hours(20), traits: [GameTrait(kind: .developer, value: "Nobody")]))
 
-        let result = try await rec.recommend(bracket: TimeBracket(preset: .month))
+        let result = try await rec.recommend(bracket: TimeBracket(shelf: .fewWeeks))
         #expect(result.hero?.id == fromSoft)
         #expect(result.hero?.platformIDs.contains("ps5") == true)
     }
@@ -133,7 +133,7 @@ import GRDB
         // never removes `other`; snooze removes `cand`.
         try await rec.never(gameID: other)
         try await rec.snooze(gameID: cand)
-        let result = try await rec.recommend(bracket: TimeBracket(preset: .weekOrTwo))
+        let result = try await rec.recommend(bracket: TimeBracket(shelf: .weekend))
         let shown = Set(result.shortlist.map(\.id))
         #expect(!shown.contains(other))
         #expect(!shown.contains(cand))
@@ -164,7 +164,7 @@ import GRDB
                                                    platformIDs: ["ps5"], owned: true, format: .digital)).gameID
         try await lib.updateMetadata(gameID: cand, MetadataPatch(ttbNormallyS: Rec.hours(20)))
 
-        let result = try await rec.recommend(bracket: TimeBracket(preset: .month))
+        let result = try await rec.recommend(bracket: TimeBracket(shelf: .fewWeeks))
         let request = try await rec.secondOpinionRequest(for: result)
         #expect(request.topRanked.contains { $0.title == "Masterpiece" && $0.tier == "S" })
         #expect(request.didntClick.contains { $0.title == "Awful" && $0.tier == "F" })
@@ -183,9 +183,9 @@ import GRDB
             try await seedLibrary(size: size, lib: lib, db: db)
 
             // Warm one read, then time recommend.
-            _ = try await rec.recommend(bracket: TimeBracket(preset: .month))
+            _ = try await rec.recommend(bracket: TimeBracket(shelf: .fewWeeks))
             let start = Date()
-            let result = try await rec.recommend(bracket: TimeBracket(preset: .month))
+            let result = try await rec.recommend(bracket: TimeBracket(shelf: .fewWeeks))
             let ms = Date().timeIntervalSince(start) * 1000
             print("PERF recommend @\(size) games: \(String(format: "%.1f", ms)) ms, hero=\(result.hero?.id.description ?? "nil")")
             // Correctness only — the timing is printed for the handoff, never

@@ -31,6 +31,13 @@ final class PlayNextEnvironment {
     let secondOpinion: any SecondOpinionProviding
     /// Reveal a game in the library inspector (`⌘I` / `space`).
     let inspect: (@MainActor (Int64) -> Void)?
+    /// The shared weekly-play-pace controller (same one the sidebar "By Length"
+    /// section uses). Play Next reads its pace so a bracket covers the same hour range
+    /// as its sidebar shelf, and observes it so a pace change recomputes once.
+    let paceModel: PlayPaceModel?
+    /// One-shot: the "By Length" shelf last selected in the sidebar, consumed once when
+    /// Play Next opens so it preselects the matching bracket.
+    let bracketHint: (@MainActor () -> LengthShelf?)?
 
     init(
         recommendation: RecommendationStore,
@@ -38,7 +45,9 @@ final class PlayNextEnvironment {
         ranking: RankingStore,
         coverLoader: any CoverLoading,
         secondOpinion: any SecondOpinionProviding,
-        inspect: (@MainActor (Int64) -> Void)? = nil
+        inspect: (@MainActor (Int64) -> Void)? = nil,
+        paceModel: PlayPaceModel? = nil,
+        bracketHint: (@MainActor () -> LengthShelf?)? = nil
     ) {
         self.recommendation = recommendation
         self.library = library
@@ -46,6 +55,8 @@ final class PlayNextEnvironment {
         self.coverLoader = coverLoader
         self.secondOpinion = secondOpinion
         self.inspect = inspect
+        self.paceModel = paceModel
+        self.bracketHint = bracketHint
     }
 
     /// The data seam the model reads/writes through.

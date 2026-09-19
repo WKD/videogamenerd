@@ -71,6 +71,7 @@ enum A11yID {
     static func playNextBracket(_ n: Int) -> String { "playnext.bracket.\(n)" }
     static let playNextAskClaude = "playnext.askClaude"
     static let playNextReroll = "playnext.reroll"
+    static let playNextBracketRange = "playnext.bracketRange"
 
     // Scan
     static let scanSheet = "scan.sheet"

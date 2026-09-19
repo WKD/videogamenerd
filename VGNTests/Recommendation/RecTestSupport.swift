@@ -44,10 +44,14 @@ enum Rec {
             playStatus: playStatus)
     }
 
-    static func evening(completionist: Bool = false) -> TimeBracket {
-        TimeBracket(preset: .evening, completionist: completionist)
+    // "By Length" brackets at the default pace (8 h/week ⇒ edges 4 / 10 / 40 / 80).
+    // The play style defaults to `.storyFirst` (t = 0) so a candidate's personal length
+    // equals its raw `normally` estimate — the engine numerics these suites assert on.
+    static func evening(completionist: Bool = false, style: PlayStyle = .storyFirst) -> TimeBracket {
+        TimeBracket(shelf: .evening, playStyle: style, completionist: completionist)   // under 4 h
     }
-    static func month(completionist: Bool = false) -> TimeBracket {
-        TimeBracket(preset: .month, completionist: completionist)
+    /// A mid bracket (A Few Weeks: 10–40 h) — the successor to the old "A month".
+    static func month(completionist: Bool = false, style: PlayStyle = .storyFirst) -> TimeBracket {
+        TimeBracket(shelf: .fewWeeks, playStyle: style, completionist: completionist)
     }
 }

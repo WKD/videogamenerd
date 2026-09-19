@@ -107,6 +107,18 @@ struct LibraryFilter: Hashable, Sendable {
     /// ``hasActiveFacets`` and only constrains a length scope.
     var playPace: PlayPace
 
+    /// The owner's play style, which sets each game's **personal length** (a blend of
+    /// the main and completionist estimates — owner request 2026-09-19). Carried on the
+    /// filter so the "By Length" scopes, the Length sort and the Playtime filter's
+    /// unplayed fallback all resolve length from the *same* value the counts use, and so
+    /// a style change re-runs the grid like a filter change. Not a facet.
+    ///
+    /// The **default is `.storyFirst`** (t = 0 ⇒ personal length = the raw main-story
+    /// estimate) so a bare filter bands by the plain `normally` time; the app always
+    /// injects the owner's real style (``PlayStyle/default`` = lots of side quests)
+    /// through ``LibraryViewModel``, and "Clear all" preserves it.
+    var playStyle: PlayStyle
+
     var sort: LibrarySort
     var ascending: Bool
 
@@ -128,6 +140,7 @@ struct LibraryFilter: Hashable, Sendable {
         platforms: Set<String> = [],
         scope: SidebarSelection = .all,
         playPace: PlayPace = .default,
+        playStyle: PlayStyle = .storyFirst,
         sort: LibrarySort = .title,
         ascending: Bool = true
     ) {
@@ -148,6 +161,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.platforms = platforms
         self.scope = scope
         self.playPace = playPace
+        self.playStyle = playStyle
         self.sort = sort
         self.ascending = ascending
     }

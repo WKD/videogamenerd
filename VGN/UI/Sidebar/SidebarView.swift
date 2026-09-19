@@ -103,7 +103,9 @@ struct SidebarView: View {
             HStack {
                 Text(LengthShelf.sectionHeader)
                 Spacer(minLength: 4)
-                PaceHeaderButton(label: vm.paceModel.headerLabel, isCTA: !vm.hasChosenPace) {
+                PaceHeaderButton(label: vm.paceModel.headerLabelWithStyle,
+                                 compactLabel: vm.paceModel.headerLabel,
+                                 isCTA: !vm.hasChosenPace) {
                     showPacePopover = true
                 }
             }

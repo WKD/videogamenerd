@@ -96,7 +96,7 @@ enum PlayNextSamples {
                               estimate: 190_800, score: 0.94, strength: .strong,
                               reasons: [.sameDeveloper(name: "FromSoftware", exemplar: 1),
                                         .similarTo(1),
-                                        .fitsBracket(estimateSeconds: 190_800, bracket: TimeBracket(preset: .longHaul))])
+                                        .fitsBracket(estimateSeconds: 190_800, bracket: TimeBracket(shelf: .epic))])
         let alts = [
             suggestion(201, "Hollow Knight", year: 2017, platforms: ["pc"], formats: [.digital],
                        estimate: 162_000, score: 0.72, strength: .fair,
@@ -123,7 +123,7 @@ enum PlayNextSamples {
         exclusions.byFeedback = 3
         exclusions.unknownLength = 1
         return PlayNextResult(hero: hero, alternatives: alts, unknownLength: unknown,
-                              exclusions: exclusions, bracket: TimeBracket(preset: .longHaul))
+                              exclusions: exclusions, bracket: TimeBracket(shelf: .epic))
     }
 
     /// Nothing fits the chosen bracket (all excluded by time).
@@ -131,13 +131,13 @@ enum PlayNextSamples {
         var exclusions = RecommendationExclusions()
         exclusions.byTime = 8
         return PlayNextResult(hero: nil, alternatives: [], unknownLength: [],
-                              exclusions: exclusions, bracket: TimeBracket(preset: .evening))
+                              exclusions: exclusions, bracket: TimeBracket(shelf: .evening))
     }
 
     /// No owned, unfinished games at all.
     static func emptyResult() -> PlayNextResult {
         PlayNextResult(hero: nil, alternatives: [], unknownLength: [],
-                       exclusions: RecommendationExclusions(), bracket: TimeBracket(preset: .weekOrTwo))
+                       exclusions: RecommendationExclusions(), bracket: TimeBracket(shelf: .weekend))
     }
 
     static func request(for result: PlayNextResult) -> SecondOpinionRequest {

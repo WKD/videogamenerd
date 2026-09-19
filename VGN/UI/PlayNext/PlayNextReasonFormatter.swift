@@ -54,7 +54,8 @@ enum PlayNextReasonFormatter {
             let phrase = traitPhrase(kind: kind, value: value)
             return lift > 0 ? "You rate \(phrase) highly" : "Not usually your thing (\(phrase))"
         case let .fitsBracket(estimateSeconds, _):
-            return "\(PlaytimeParser.formatApprox(seconds: estimateSeconds)) — fits '\(bracket.label)'"
+            // The estimate is the personal length at the owner's play style ("for you").
+            return "\(PlaytimeParser.formatApprox(seconds: estimateSeconds)) for you — fits '\(bracket.label)'"
         case let .remainingTime(remainingSeconds):
             return "about \(approxLeft(remainingSeconds)) left"
         case let .crowdRated(rating, _):

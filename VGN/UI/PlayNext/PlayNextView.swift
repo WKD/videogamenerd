@@ -29,12 +29,17 @@ struct PlayNextScreen: View {
 
     init(env: PlayNextEnvironment) {
         self.env = env
-        _model = State(initialValue: PlayNextModel(backend: env.backend,
-                                                   secondOpinion: env.secondOpinion))
+        _model = State(initialValue: PlayNextModel(
+            backend: env.backend,
+            secondOpinion: env.secondOpinion,
+            pace: env.paceModel?.pace ?? .default,
+            playStyle: env.paceModel?.style ?? .default,
+            bracketHint: env.bracketHint))
     }
 
     var body: some View {
-        PlayNextBody(model: model, loader: env.coverLoader, inspect: env.inspect)
+        PlayNextBody(model: model, loader: env.coverLoader, inspect: env.inspect,
+                     paceModel: env.paceModel)
     }
 }
 
@@ -45,6 +50,8 @@ struct PlayNextBody: View {
     @Bindable var model: PlayNextModel
     let loader: any CoverLoading
     var inspect: (@MainActor (Int64) -> Void)?
+    /// The shared pace controller; a change to its pace recomputes the picks once.
+    var paceModel: PlayPaceModel?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.rankingActions) private var rankingActions
@@ -76,6 +83,13 @@ struct PlayNextBody: View {
         .onAppear { model.undoManager = undoManager }
         .onChange(of: undoManager) { _, new in model.undoManager = new }
         .onDisappear { model.stop() }
+        // A pace / play-style change (sidebar "By Length" popover / Settings) recomputes once.
+        .onChange(of: paceModel?.pace) { _, newPace in
+            if let newPace { model.setPace(newPace) }
+        }
+        .onChange(of: paceModel?.style) { _, newStyle in
+            if let newStyle { model.setPlayStyle(newStyle) }
+        }
         .onChange(of: model.result?.hero?.id) { selectedIndex = 0 }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18),
                    value: model.result?.hero?.id)
@@ -241,8 +255,8 @@ struct PlayNextBody: View {
             } description: {
                 Text("\(result.exclusions.byTime) owned games were too long for this bracket. Try a longer one.")
             } actions: {
-                if let next = nextBracket(after: model.bracketPreset) {
-                    Button("Try ‘\(next.label)’") { model.selectPreset(next) }
+                if let next = nextShelf(after: model.bracketShelf) {
+                    Button("Try ‘\(next.name)’") { model.selectShelf(next) }
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -259,9 +273,9 @@ struct PlayNextBody: View {
         }
     }
 
-    private func nextBracket(after preset: TimeBracket.Preset) -> TimeBracket.Preset? {
-        let all = TimeBracket.Preset.allCases
-        guard let i = all.firstIndex(of: preset), i + 1 < all.count else { return nil }
+    private func nextShelf(after shelf: LengthShelf) -> LengthShelf? {
+        let all = LengthShelf.allCases
+        guard let i = all.firstIndex(of: shelf), i + 1 < all.count else { return nil }
         return all[i + 1]
     }
 
@@ -323,8 +337,8 @@ struct PlayNextBody: View {
             return inspectSelected()
         }
         switch press.characters.lowercased() {
-        case "1", "2", "3", "4":
-            if let n = Int(press.characters) { model.selectPreset(index: n - 1) }
+        case "1", "2", "3", "4", "5":
+            if let n = Int(press.characters) { model.selectShelf(index: n - 1) }
             return .handled
         case "r":
             model.reroll()

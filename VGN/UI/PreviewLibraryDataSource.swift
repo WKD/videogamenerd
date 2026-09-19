@@ -38,9 +38,9 @@ struct PreviewLibraryDataSource: LibraryDataSource {
         self.sampleTiers = tiers
     }
 
-    func sidebarCounts(pace: PlayPace) -> AsyncStream<SidebarCounts> {
-        // Pace is ignored: the preview games carry no time-to-beat estimate, so the
-        // "By Length" shelf counts are all 0 (see `SidebarCounts.derive`).
+    func sidebarCounts(pace: PlayPace, style: PlayStyle) -> AsyncStream<SidebarCounts> {
+        // Pace + style are ignored: the preview games carry no time-to-beat estimate,
+        // so the "By Length" shelf counts are all 0 (see `SidebarCounts.derive`).
         onceStream(SidebarCounts.derive(from: sampleGames))
     }
 

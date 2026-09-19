@@ -153,7 +153,7 @@ enum LibraryFilterChips {
     /// sidebar scope, sort, direction and weekly play pace ("Clear all"). The pace is
     /// not a facet, so clearing filters must not reset the "By Length" shelf bounds.
     static func cleared(_ filter: LibraryFilter) -> LibraryFilter {
-        LibraryFilter(scope: filter.scope, playPace: filter.playPace,
+        LibraryFilter(scope: filter.scope, playPace: filter.playPace, playStyle: filter.playStyle,
                       sort: filter.sort, ascending: filter.ascending)
     }
 }

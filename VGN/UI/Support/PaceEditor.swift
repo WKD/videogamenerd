@@ -30,6 +30,26 @@ struct PaceEditor: View {
 
             Divider()
 
+            // How the owner plays — sets each game's personal length (owner request
+            // 2026-09-19). Committing behaves like a pace change (one grid + counts run).
+            VStack(alignment: .leading, spacing: 6) {
+                Text("How do you play?").font(.subheadline.weight(.semibold))
+                Picker("How do you play?", selection: Binding(
+                    get: { model.style },
+                    set: { model.commitStyle($0) })) {
+                    ForEach(PlayStyle.allCases) { style in
+                        Text(style.name).tag(style)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+                Text(model.style.explanation).font(.caption).foregroundStyle(.secondary)
+                Text(model.style.editorExample).font(.caption2).foregroundStyle(.tertiary)
+            }
+
+            Divider()
+
             // Live preview of the five ranges (pure — no state writes in the body).
             VStack(alignment: .leading, spacing: 5) {
                 ForEach(PlayPaceModel.previewRows(forHours: draft), id: \.shelf) { row in
@@ -64,17 +84,31 @@ struct PaceEditor: View {
 /// with a real click (the popover it opens is view `@State`).
 struct PaceHeaderButton: View {
     let label: String
+    /// A shorter label used when the full one would not fit (no layout wiggle).
+    var compactLabel: String? = nil
     let isCTA: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(isCTA ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+            if let compactLabel {
+                ViewThatFits(in: .horizontal) {
+                    text(label)
+                    text(compactLabel)
+                }
+            } else {
+                text(label)
+            }
         }
         .buttonStyle(.plain)
-        .appKitTooltip("How much you can play in a week — sets the ranges below")
+        .appKitTooltip("How much you can play in a week and how you play — sets the ranges below")
+    }
+
+    private func text(_ string: String) -> some View {
+        Text(string)
+            .font(.caption2)
+            .lineLimit(1)
+            .foregroundStyle(isCTA ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
     }
 }
 

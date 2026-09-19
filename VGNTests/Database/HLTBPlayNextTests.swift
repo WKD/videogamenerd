@@ -46,6 +46,6 @@ import GRDB
         #expect(hltb.estimateSeconds == 36000)
         #expect(hltb.completionistSeconds == 72000)
         #expect(hltb.estimateSeconds == igdb.estimateSeconds)
-        #expect(hltb.bracketEstimate(completionist: false) == igdb.bracketEstimate(completionist: false))
+        #expect(hltb.bracketEstimate(style: .default) == igdb.bracketEstimate(style: .default))
     }
 }
