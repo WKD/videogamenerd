@@ -59,7 +59,7 @@ struct PlayNextReasonFormatterTests {
     }
 
     @Test func fitsBracket() {
-        #expect(s(.fitsBracket(estimateSeconds: 32 * 3600, bracket: bracket)) == "≈ 32 h — fits 'A Few Weeks (10–40 h)'")
+        #expect(s(.fitsBracket(estimateSeconds: 32 * 3600, bracket: bracket)) == "≈ 32 h for you — fits 'A Few Weeks (10–40 h)'")
     }
 
     @Test func remainingTime() {

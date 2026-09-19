@@ -36,8 +36,9 @@ enum RecommendationEngine {
                 exclusions.byFeedback += 1; continue
             }
 
-            let fullEstimate = candidate.fullEstimate(completionist: bracket.completionist)
-            let bracketEstimate = candidate.bracketEstimate(completionist: bracket.completionist)
+            let style = bracket.resolvedStyle
+            let fullEstimate = candidate.fullEstimate(style: style)
+            let bracketEstimate = candidate.bracketEstimate(style: style)
 
             guard let estimate = bracketEstimate else {
                 // No estimate → unknown-length lane (PLAN §7b).

@@ -112,6 +112,20 @@ struct PlayNextBracketTests {
         #expect(backend.recommendCalls.count == before)
     }
 
+    @Test func playStyleChangeRecomputesOnce() async {
+        let backend = ScriptedPlayNextBackend(result: PlayNextSamples.richResult())
+        let model = PlayNextModel(backend: backend, secondOpinion: StubSecondOpinionProvider(),
+                                  defaults: ephemeral(), playStyle: .storyFirst,
+                                  recomputeDebounce: .milliseconds(1))
+        await model.start()
+        await waitUntil { model.hasLoaded }
+        let before = backend.recommendCalls.count
+        model.setPlayStyle(.completionist)
+        await waitUntil { backend.recommendCalls.count > before }
+        #expect(backend.recommendCalls.count == before + 1)
+        #expect(backend.recommendCalls.last?.bracket.resolvedStyle == .completionist)
+    }
+
     // MARK: - Custom pre-fill from pace
 
     @Test func customHoursPrefillFromPaceUnlessOverridden() {

@@ -94,21 +94,23 @@ import GRDB
         }
     }
 
-    // MARK: - "No Estimate" and the normally → hastily → completely fallback
+    // MARK: - "No Estimate" and the personal-length fallback (main + completionist only)
 
-    @Test func noEstimateAndTTBFallbackThroughSQL() async throws {
+    @Test func noEstimateAndPersonalLengthFallbackThroughSQL() async throws {
         let store = try await TestDB.makeStore()
-        // Only a *completely* estimate (no normally, no playtime): must be banded by it.
+        // The fallback uses the personal length (`.storyFirst` default = raw main-story).
+        // Only a *completely* estimate (no normally, no playtime): main ≈ 20 / 1.5 ≈ 13.3 h → h10to40.
         let onlyCompletely = try await store.addGame(GameDraft(title: "OnlyCompletely", igdbID: 1,
                                                                platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: onlyCompletely.gameID,
                                        MetadataPatch(ttbCompletelyS: 20 * h))   // → h10to40
-        // Only a *hastily* estimate: banded by it.
+        // Only a *hastily* (rushed) estimate: rushed is NEVER used → No Estimate.
         let onlyHastily = try await store.addGame(GameDraft(title: "OnlyHastily", igdbID: 2,
                                                             platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: onlyHastily.gameID,
-                                       MetadataPatch(ttbHastilyS: 5 * h))        // → h4to10
-        // A *normally* estimate wins over the others when present.
+                                       MetadataPatch(ttbHastilyS: 5 * h))        // → No Estimate
+        // main + rushed + completionist present: at `.storyFirst` the length is `normally`
+        // (20 h → h10to40); the rushed value is ignored.
         let normally = try await store.addGame(GameDraft(title: "Normally", igdbID: 3,
                                                          platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: normally.gameID,
@@ -124,27 +126,28 @@ import GRDB
             Set(try await store.gamesOnce(filter: filter).map(\.id))
         }
 
-        // Fallback: hastily/completely-only games are banded, not dropped.
-        #expect(try await ids(LibraryFilter(playtimes: [.h4to10], scope: .all))
-                == [onlyHastily.gameID])
+        // The rushed-only game is not banded — no personal length.
+        #expect(try await ids(LibraryFilter(playtimes: [.h4to10], scope: .all)).isEmpty)
         #expect(try await ids(LibraryFilter(playtimes: [.h10to40], scope: .all))
                 == [onlyCompletely.gameID, normally.gameID])
 
-        // "No Estimate" alone: only the two games with no time info at all.
+        // "No Estimate": the games with no personal length — the two blanks AND the
+        // rushed-only game (so the HLTB fetch can fill it).
         #expect(try await ids(LibraryFilter(includeNoTimeEstimate: true, scope: .all))
-                == [none1.gameID, none2.gameID])
+                == [none1.gameID, none2.gameID, onlyHastily.gameID])
 
         // Combined with a band (OR within the kind).
         #expect(try await ids(LibraryFilter(playtimes: [.h4to10], includeNoTimeEstimate: true, scope: .all))
-                == [onlyHastily.gameID, none1.gameID, none2.gameID])
+                == [none1.gameID, none2.gameID, onlyHastily.gameID])
 
         // Across kinds (AND): No Estimate AND scope Played → only the played none.
         #expect(try await ids(LibraryFilter(includeNoTimeEstimate: true, scope: .played))
                 == [none2.gameID])
-        // No Estimate AND scope Backlog (owned, not played) → only the unplayed none;
-        // the estimate-bearing backlog games are excluded.
+        // No Estimate AND scope Backlog (owned, not played) → the unplayed blank and the
+        // rushed-only game (both without a personal length); estimate-bearing backlog
+        // games are excluded.
         #expect(try await ids(LibraryFilter(includeNoTimeEstimate: true, scope: .backlog))
-                == [none1.gameID])
+                == [none1.gameID, onlyHastily.gameID])
     }
 
     // MARK: - In-memory banding (PlaytimeBucket.contains) parity with the SQL

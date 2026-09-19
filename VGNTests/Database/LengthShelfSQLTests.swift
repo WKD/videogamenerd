@@ -12,9 +12,14 @@ import GRDB
 
     private let h = 3600
 
+    // These mechanics tests (edges / pace re-band / one-query / AND-combine) use the
+    // `.storyFirst` style so a game's personal length equals its raw `normally`
+    // estimate; the personal-length blend across styles is covered in
+    // `PersonalLengthTests`.
     private func ids(_ store: LibraryStore, _ scope: SidebarSelection,
-                     pace: PlayPace = .default) async throws -> Set<Int64> {
-        Set(try await store.gamesOnce(filter: LibraryFilter(scope: scope, playPace: pace)).map(\.id))
+                     pace: PlayPace = .default, style: PlayStyle = .storyFirst) async throws -> Set<Int64> {
+        Set(try await store.gamesOnce(
+            filter: LibraryFilter(scope: scope, playPace: pace, playStyle: style)).map(\.id))
     }
 
     /// Add an owned game whose only time signal is a *normally* estimate.
@@ -61,22 +66,27 @@ import GRDB
 
     // MARK: - Estimate fallback normally → hastily → completely (never playtime)
 
-    @Test func estimateFallbackOrder() async throws {
+    @Test func personalLengthUsesMainAndCompletionistNeverRushed() async throws {
         let store = try await TestDB.makeStore()
-        // Only completely (20 h) → A Few Weeks.
+        // Only completely (20 h): at `.storyFirst` the main time ≈ 20 / 1.5 ≈ 13.3 h → A Few Weeks.
         let onlyComp = try await store.addGame(GameDraft(title: "C", igdbID: 1, platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: onlyComp.gameID, MetadataPatch(ttbCompletelyS: 20 * h))
-        // Only hastily (5 h) → A Weekend.
+        // Only hastily (rushed) → NEVER used → Unmeasured (so the HLTB fetch can fill it).
         let onlyHast = try await store.addGame(GameDraft(title: "H", igdbID: 2, platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: onlyHast.gameID, MetadataPatch(ttbHastilyS: 5 * h))
-        // normally wins over the others (2 h → One Evening despite a 90 h completely).
+        // main + rushed + completionist present: at `.storyFirst` the length is `normally`
+        // (2 h → One Evening), and the rushed value is ignored.
         let norm = try await store.addGame(GameDraft(title: "N", igdbID: 3, platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: norm.gameID,
                                        MetadataPatch(ttbHastilyS: 90 * h, ttbNormallyS: 2 * h, ttbCompletelyS: 90 * h))
 
         #expect(try await ids(store, .length(.fewWeeks)) == [onlyComp.gameID])
-        #expect(try await ids(store, .length(.weekend)) == [onlyHast.gameID])
         #expect(try await ids(store, .length(.evening)) == [norm.gameID])
+        // The rushed-only game is on no shelf — it is Unmeasured.
+        for shelf in LengthShelf.allCases {
+            #expect(!(try await ids(store, .length(shelf))).contains(onlyHast.gameID))
+        }
+        #expect(try await ids(store, .unmeasured) == [onlyHast.gameID])
     }
 
     @Test func ownPlaytimeNeverMovesAGameBetweenShelves() async throws {
@@ -168,7 +178,7 @@ import GRDB
             let start = clock.now
             _ = try await store.dbReader.read { d -> (SidebarCounts, ([LengthShelf: Int], Int)) in
                 (try LibraryStore.fetchSidebarCounts(d),
-                 try LibraryQuery.fetchLengthShelfCounts(d, bounds: bounds))
+                 try LibraryQuery.fetchLengthShelfCounts(d, bounds: bounds, style: .storyFirst))
             }
             best = min(best, Double((clock.now - start).components.attoseconds) / 1e15)
         }
@@ -179,8 +189,9 @@ import GRDB
     #endif
 
     /// First value from the (open) counts observation, then cancel it.
-    private func firstCounts(_ ds: GRDBLibraryDataSource, pace: PlayPace) async -> SidebarCounts {
-        for await c in ds.sidebarCounts(pace: pace) { return c }
+    private func firstCounts(_ ds: GRDBLibraryDataSource, pace: PlayPace,
+                             style: PlayStyle = .storyFirst) async -> SidebarCounts {
+        for await c in ds.sidebarCounts(pace: pace, style: style) { return c }
         return .empty
     }
 }

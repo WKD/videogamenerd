@@ -13,8 +13,8 @@ private final class RestartSpyDataSource: LibraryDataSource, @unchecked Sendable
     var countsCalls: Int { lock.withLock { _counts } }
     init(_ base: PreviewLibraryDataSource) { self.base = base }
 
-    func sidebarCounts(pace: PlayPace) -> AsyncStream<SidebarCounts> {
-        lock.withLock { _counts += 1 }; return base.sidebarCounts(pace: pace)
+    func sidebarCounts(pace: PlayPace, style: PlayStyle) -> AsyncStream<SidebarCounts> {
+        lock.withLock { _counts += 1 }; return base.sidebarCounts(pace: pace, style: style)
     }
     func games(filter: LibraryFilter) -> AsyncStream<[GameSummary]> {
         lock.withLock { _games += 1 }; return base.games(filter: filter)
@@ -121,6 +121,48 @@ struct LengthShelfSidebarTests {
         vm.paceModel.commit(hoursPerWeek: 2)
         #expect(vm.filter == f0)
         #expect(spy.gamesCalls == g0)
+    }
+
+    // MARK: - Play style change: one restart, like a pace change
+
+    @Test func styleChangeIsExactlyOneRestart() async {
+        let spy = RestartSpyDataSource(PreviewLibraryDataSource(games: games(3)))
+        let vm = await makeVM(games(3), dataSource: spy)
+        for _ in 0..<200 where vm.games.isEmpty { await Task.yield() }
+        let gBefore = spy.gamesCalls, cBefore = spy.countsCalls
+
+        // Committing the style (sidebar popover / Settings) → applyStyle.
+        vm.paceModel.commitStyle(.completionist)
+        for _ in 0..<200 where spy.gamesCalls == gBefore { await Task.yield() }
+
+        #expect(spy.gamesCalls == gBefore + 1)     // exactly one grid restart
+        #expect(spy.countsCalls == cBefore + 1)    // exactly one counts re-subscribe
+        #expect(vm.filter.playStyle == .completionist)
+
+        // A redundant style change is ignored (no loop / no extra restart).
+        let g0 = spy.gamesCalls
+        vm.paceModel.commitStyle(.completionist)
+        #expect(spy.gamesCalls == g0)
+    }
+
+    @Test func stylePersistenceRoundTripsAndShares() {
+        let store = InMemoryPlayPacePreferences()
+        #expect(store.playStyle() == .default)      // lots of side quests (the owner)
+
+        let m = PlayPaceModel(store: store)
+        #expect(m.style == .default)
+        m.commitStyle(.storyFirst)
+        #expect(store.playStyle() == .storyFirst)
+
+        // A second model over the same store sees it on reload (Settings ↔ sidebar).
+        let m2 = PlayPaceModel(store: store)
+        #expect(m2.style == .storyFirst)
+    }
+
+    @Test func headerLabelWithStyleFitsThePace() {
+        let m = PlayPaceModel(store: InMemoryPlayPacePreferences(pace: PlayPace(hoursPerWeek: 8),
+                                                                chosen: true, style: .lotsOfSideQuests))
+        #expect(m.headerLabelWithStyle == "8 h / week · lots of side quests")
     }
 
     // MARK: - Persistence + first-use flag; Settings and sidebar share the store

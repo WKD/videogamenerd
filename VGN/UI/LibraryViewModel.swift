@@ -210,6 +210,7 @@ final class LibraryViewModel {
         self.filter = LibraryFilter(
             scope: selection,
             playPace: paceModel.pace,
+            playStyle: paceModel.style,
             sort: initialSort?.sort ?? fallbackSort,
             ascending: initialSort?.ascending ?? (initialSort?.sort ?? fallbackSort).defaultAscending
         )
@@ -229,6 +230,7 @@ final class LibraryViewModel {
         // Committing a pace (from the sidebar popover or Settings) re-runs the grid +
         // counts. Weak self so the model never keeps the view model alive.
         self.paceModel.onCommit = { [weak self] pace in self?.applyPace(pace) }
+        self.paceModel.onStyleCommit = { [weak self] style in self?.applyStyle(style) }
     }
 
     /// The default sort for a freshly-selected scope with no persisted choice: the
@@ -268,6 +270,19 @@ final class LibraryViewModel {
         f.playPace = pace
         setFilter(f)       // one grid restart (the filter changed)
         restartCounts()    // re-subscribe the single counts observation with new bounds
+    }
+
+    /// Adopt a new play style: update the filter (so a length-dependent grid — the "By
+    /// Length" scopes, the Length sort, the Playtime filter's unplayed fallback —
+    /// re-runs) and re-subscribe the counts with the new personal length. Treated like
+    /// a filter change: one grid restart, one counts re-subscribe (owner request
+    /// 2026-09-19).
+    func applyStyle(_ style: PlayStyle) {
+        guard style != filter.playStyle else { return }
+        var f = filter
+        f.playStyle = style
+        setFilter(f)
+        restartCounts()
     }
 
     // MARK: Lifecycle
@@ -312,12 +327,14 @@ final class LibraryViewModel {
     }
 
     /// (Re)subscribe the single sidebar-counts observation with the current pace's
-    /// shelf bounds. One observation — never a second (PLAN §8). Re-run on pace change.
+    /// shelf bounds and the current play style's personal length. One observation —
+    /// never a second (PLAN §8). Re-run on a pace or style change.
     private func restartCounts() {
         countsTask?.cancel()
         let pace = paceModel.pace
+        let style = paceModel.style
         countsTask = Task { [dataSource] in
-            for await value in dataSource.sidebarCounts(pace: pace) { self.counts = value }
+            for await value in dataSource.sidebarCounts(pace: pace, style: style) { self.counts = value }
         }
     }
 

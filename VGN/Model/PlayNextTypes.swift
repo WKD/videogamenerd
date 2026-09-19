@@ -17,24 +17,36 @@ struct TimeBracket: Hashable, Sendable, Codable {
     /// The weekly pace that resolves a shelf's hour bounds (shared with the sidebar;
     /// ignored for a custom budget). Changing it re-derives the bounds.
     var pace: PlayPace
+    /// The owner's play style, which sets each candidate's **personal length** for the
+    /// time fit (owner request 2026-09-19). Shared with the sidebar. The
+    /// ``completionist`` flag overrides it to `.completionist` (plan for 100%).
+    var playStyle: PlayStyle
     /// Precise mode: a total budget in seconds (upper bound, no lower bound).
     var customBudgetSeconds: Int?
-    /// Estimate `completely` instead of `normally`.
+    /// Per-session "plan for 100%" override: estimate to `.completionist` (t = 1)
+    /// regardless of the owner's usual play style.
     var completionist: Bool
 
-    init(shelf: LengthShelf, pace: PlayPace = .default, completionist: Bool = false) {
+    init(shelf: LengthShelf, pace: PlayPace = .default,
+         playStyle: PlayStyle = .default, completionist: Bool = false) {
         self.shelf = shelf
         self.pace = pace
+        self.playStyle = playStyle
         self.customBudgetSeconds = nil
         self.completionist = completionist
     }
 
-    init(budgetSeconds: Int, completionist: Bool = false) {
+    init(budgetSeconds: Int, playStyle: PlayStyle = .default, completionist: Bool = false) {
         self.shelf = nil
         self.pace = .default
+        self.playStyle = playStyle
         self.customBudgetSeconds = budgetSeconds
         self.completionist = completionist
     }
+
+    /// The style the time fit actually uses: the "plan for 100%" toggle forces
+    /// `.completionist`, otherwise the owner's usual style.
+    var resolvedStyle: PlayStyle { completionist ? .completionist : playStyle }
 
     private static let secondsPerHour = 3600.0
 

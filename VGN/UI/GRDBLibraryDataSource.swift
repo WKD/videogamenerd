@@ -21,16 +21,17 @@ struct GRDBLibraryDataSource: LibraryDataSource {
         self.ranking = ranking
     }
 
-    func sidebarCounts(pace: PlayPace) -> AsyncStream<SidebarCounts> {
+    func sidebarCounts(pace: PlayPace, style: PlayStyle) -> AsyncStream<SidebarCounts> {
         // ONE observation: the existing scalar + per-platform aggregate
         // (`LibraryStore.fetchSidebarCounts`, unchanged) plus the pace-derived
-        // "By Length" shelf counts, composed here rather than adding a second
-        // observation. A pace change re-subscribes this stream with new bounds.
+        // "By Length" shelf counts over each game's personal length, composed here
+        // rather than adding a second observation. A pace/style change re-subscribes
+        // this stream with new bounds/length.
         let bounds = LengthShelf.bounds(for: pace)
         let observation = ValueObservation
             .tracking { db -> SidebarCounts in
                 var counts = try LibraryStore.fetchSidebarCounts(db)
-                let lengths = try LibraryQuery.fetchLengthShelfCounts(db, bounds: bounds)
+                let lengths = try LibraryQuery.fetchLengthShelfCounts(db, bounds: bounds, style: style)
                 counts.lengthShelves = lengths.shelves
                 counts.unmeasured = lengths.unmeasured
                 return counts

@@ -65,7 +65,7 @@ enum LibraryQuery {
         var wheres: [String] = []
         var args: [DatabaseValueConvertible] = []
         appendScope(filter.scope, bounds: LengthShelf.bounds(for: filter.playPace),
-                    into: &wheres, args: &args)
+                    style: filter.playStyle, into: &wheres, args: &args)
         appendFacets(filter, into: &wheres, args: &args)
 
         var sql = selectClause
@@ -89,7 +89,7 @@ enum LibraryQuery {
     // MARK: - Scope
 
     private static func appendScope(
-        _ scope: SidebarSelection, bounds: LengthBounds,
+        _ scope: SidebarSelection, bounds: LengthBounds, style: PlayStyle,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         switch scope {
@@ -108,24 +108,26 @@ enum LibraryQuery {
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
-            appendLengthScope(shelf, bounds: bounds, into: &wheres, args: &args)
+            appendLengthScope(shelf, bounds: bounds, style: style, into: &wheres, args: &args)
         case .unmeasured:
-            wheres.append("\(lengthEstimateExpr) IS NULL")
+            wheres.append("\(lengthEstimateExpr(style: style)) IS NULL")
         case let .platform(slug):
             appendPlatformMembership(slug, into: &wheres, args: &args)
         }
     }
 
-    /// WHERE clause for one "By Length" shelf: the estimate must exist and fall in
-    /// the shelf's `[lower, upper)` seconds window (bounds derived from the pace).
+    /// WHERE clause for one "By Length" shelf: the **personal length** must exist and
+    /// fall in the shelf's `[lower, upper)` seconds window (bounds derived from the
+    /// pace; length derived from the play style).
     private static func appendLengthScope(
-        _ shelf: LengthShelf, bounds: LengthBounds,
+        _ shelf: LengthShelf, bounds: LengthBounds, style: PlayStyle,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
+        let expr = lengthEstimateExpr(style: style)
         let range = shelf.secondsRange(in: bounds)
-        var conds = ["\(lengthEstimateExpr) IS NOT NULL"]
-        if let lower = range.lower { conds.append("\(lengthEstimateExpr) >= ?"); args.append(lower) }
-        if let upper = range.upper { conds.append("\(lengthEstimateExpr) < ?");  args.append(upper) }
+        var conds = ["\(expr) IS NOT NULL"]
+        if let lower = range.lower { conds.append("\(expr) >= ?"); args.append(lower) }
+        if let upper = range.upper { conds.append("\(expr) < ?");  args.append(upper) }
         wheres.append(conds.count == 1 ? conds[0] : "(" + conds.joined(separator: " AND ") + ")")
     }
 
@@ -221,7 +223,7 @@ enum LibraryQuery {
             args.append(contentsOf: gs.map { $0 as DatabaseValueConvertible })
         }
         appendPlaytimeFacet(filter.playtimes, includeNoEstimate: filter.includeNoTimeEstimate,
-                            into: &wheres, args: &args)
+                            style: filter.playStyle, into: &wheres, args: &args)
         if let match = ftsMatch(filter.searchText) {
             wheres.append("g.id IN (SELECT rowid FROM games_fts WHERE games_fts MATCH ?)")
             args.append(match)
@@ -236,26 +238,49 @@ enum LibraryQuery {
         wheres.append(ors.count == 1 ? ors[0] : "(" + ors.joined(separator: " OR ") + ")")
     }
 
-    /// The seconds a game is bucketed on for the playtime filter: effective
-    /// playtime (manual over PSN), falling back to the best available IGDB estimate
-    /// (main → rushed → completionist) for a game with none, so a game with only a
-    /// *hastily* or *completely* estimate is still banded rather than dropped
-    /// (PLAN §6.4/§8). Reused so the SQL, the band bounds and any test agree, and so
-    /// "No Estimate" (this expression `IS NULL`) means exactly "no time info to fetch".
-    static let playtimeBucketExpr =
-        "COALESCE(g.my_playtime_s, g.psn_playtime_s, g.ttb_normally_s, g.ttb_hastily_s, g.ttb_completely_s)"
+    /// SQL for a game's **personal length** in seconds — how long the game is *for the
+    /// owner* at a given play style (owner request 2026-09-19). It is the exact SQL
+    /// mirror of ``PersonalLength/compute(normallyS:completelyS:style:r:)``: a linear
+    /// blend of the *main* (`ttb_normally_s`) and *completionist* (`ttb_completely_s`)
+    /// estimates, with a missing side inflated by ``PlayStyle/sidesRatio`` and a dirty
+    /// `completely < normally` clamped up to `normally`. **Rushed (`ttb_hastily_s`) is
+    /// never used** — a game with only that estimate is `NULL` here (Unmeasured). The
+    /// style's `t` and the ratio `r` are inlined as decimal literals (app constants,
+    /// never user input); `ROUND` + `CAST … AS INTEGER` makes the value match the Swift
+    /// path to the second (no SQLite math-extension functions used).
+    static func lengthEstimateExpr(style: PlayStyle, r: Double = PlayStyle.sidesRatio) -> String {
+        let t = sqlLiteral(style.t)
+        let rl = sqlLiteral(r)
+        return "CAST(ROUND(CASE"
+            + " WHEN g.ttb_normally_s IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
+            + " THEN g.ttb_normally_s + \(t) * (CASE WHEN g.ttb_completely_s < g.ttb_normally_s"
+            + " THEN 0 ELSE g.ttb_completely_s - g.ttb_normally_s END)"
+            + " WHEN g.ttb_normally_s IS NOT NULL"
+            + " THEN g.ttb_normally_s * (1 + \(t) * (\(rl) - 1))"
+            + " WHEN g.ttb_completely_s IS NOT NULL"
+            + " THEN g.ttb_completely_s * (1 + \(t) * (\(rl) - 1)) / \(rl)"
+            + " ELSE NULL END) AS INTEGER)"
+    }
 
-    /// The time-to-beat **estimate** a game's *length* is measured by (PLAN §8 "By
-    /// Length" shelves): the best available IGDB estimate, `normally → hastily →
-    /// completely`. Deliberately **excludes** the owner's own/PSN playtime — unlike
-    /// ``playtimeBucketExpr`` — so a 100-hour RPG dropped after 2 h is still an epic.
-    static let lengthEstimateExpr = "COALESCE(g.ttb_normally_s, g.ttb_hastily_s, g.ttb_completely_s)"
+    /// The seconds a game is bucketed on for the playtime filter: effective playtime
+    /// (manual over PSN), falling back to the owner's **personal length** (see
+    /// ``lengthEstimateExpr(style:r:)``) for a game they have not played, so an unplayed
+    /// game is banded by how long it is *for them* rather than dropped (PLAN §6.4/§8).
+    /// The filter always prefers the owner's own playtime first. "No Estimate" (this
+    /// expression `IS NULL`) means exactly "no time info to fetch" (a rushed-only game
+    /// counts as No Estimate, since rushed is never used for length).
+    static func playtimeBucketExpr(style: PlayStyle) -> String {
+        "COALESCE(g.my_playtime_s, g.psn_playtime_s, \(lengthEstimateExpr(style: style)))"
+    }
 
     /// One grouped pass computing the five "By Length" shelf counts plus the
-    /// "Unmeasured" (no-estimate) count for the sidebar (PLAN §8). The pace-derived
-    /// bounds are passed as **arguments** (seconds), never literals, so changing the
-    /// pace only re-runs this query. Estimate only — see ``lengthEstimateExpr``.
-    static func lengthShelfCountsSQL(bounds: LengthBounds) -> (sql: String, arguments: StatementArguments) {
+    /// "Unmeasured" (no personal length) count for the sidebar (PLAN §8). The
+    /// pace-derived bounds are passed as **arguments** (seconds), never literals, so
+    /// changing the pace or style only re-runs this query. Personal length only — see
+    /// ``lengthEstimateExpr(style:r:)``.
+    static func lengthShelfCountsSQL(
+        bounds: LengthBounds, style: PlayStyle
+    ) -> (sql: String, arguments: StatementArguments) {
         var cols: [String] = []
         var args: [DatabaseValueConvertible] = []
         for shelf in LengthShelf.allCases {
@@ -268,7 +293,7 @@ enum LibraryQuery {
         cols.append("COALESCE(SUM(est IS NULL), 0) AS unmeasured")
         let sql = """
             SELECT \(cols.joined(separator: ",\n                   "))
-            FROM (SELECT \(lengthEstimateExpr) AS est FROM games g)
+            FROM (SELECT \(lengthEstimateExpr(style: style)) AS est FROM games g)
             """
         return (sql, StatementArguments(args))
     }
@@ -276,13 +301,20 @@ enum LibraryQuery {
     /// Fetch the per-shelf + "Unmeasured" counts. Composed into the single sidebar
     /// observation alongside the scalar/per-platform counts (never a second one).
     static func fetchLengthShelfCounts(
-        _ db: Database, bounds: LengthBounds
+        _ db: Database, bounds: LengthBounds, style: PlayStyle
     ) throws -> (shelves: [LengthShelf: Int], unmeasured: Int) {
-        let (sql, arguments) = lengthShelfCountsSQL(bounds: bounds)
+        let (sql, arguments) = lengthShelfCountsSQL(bounds: bounds, style: style)
         let row = try Row.fetchOne(db, sql: sql, arguments: arguments)!
         var shelves: [LengthShelf: Int] = [:]
         for shelf in LengthShelf.allCases { shelves[shelf] = row[shelf.rawValue] }
         return (shelves, row["unmeasured"])
+    }
+
+    /// Locale-independent decimal literal for a `Double` app constant (Swift's own
+    /// `Double` description; always carries a fractional part).
+    private static func sqlLiteral(_ value: Double) -> String {
+        let s = String(value)
+        return s.contains(".") ? s : s + ".0"
     }
 
     /// OR-within-kind playtime filter: a game matches if its bucket value falls in
@@ -290,22 +322,23 @@ enum LibraryQuery {
     /// (no effective playtime and no IGDB estimate of any kind). Buckets are emitted
     /// in canonical (ascending) order so the SQL is deterministic.
     private static func appendPlaytimeFacet(
-        _ buckets: Set<PlaytimeBucket>, includeNoEstimate: Bool,
+        _ buckets: Set<PlaytimeBucket>, includeNoEstimate: Bool, style: PlayStyle,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         guard !buckets.isEmpty || includeNoEstimate else { return }
+        let expr = playtimeBucketExpr(style: style)
         var ors: [String] = []
         for bucket in PlaytimeBucket.allCases where buckets.contains(bucket) {
-            var conds: [String] = ["\(playtimeBucketExpr) IS NOT NULL"]
+            var conds: [String] = ["\(expr) IS NOT NULL"]
             if let lower = bucket.lowerSeconds {
-                conds.append("\(playtimeBucketExpr) >= ?"); args.append(lower)
+                conds.append("\(expr) >= ?"); args.append(lower)
             }
             if let upper = bucket.upperSeconds {
-                conds.append("\(playtimeBucketExpr) < ?"); args.append(upper)
+                conds.append("\(expr) < ?"); args.append(upper)
             }
             ors.append("(" + conds.joined(separator: " AND ") + ")")
         }
-        if includeNoEstimate { ors.append("\(playtimeBucketExpr) IS NULL") }
+        if includeNoEstimate { ors.append("\(expr) IS NULL") }
         appendOR(ors, into: &wheres)
     }
 
@@ -328,8 +361,9 @@ enum LibraryQuery {
             terms = ["(COALESCE(g.my_playtime_s, g.psn_playtime_s) IS NULL)",
                      "COALESCE(g.my_playtime_s, g.psn_playtime_s) \(dir)"]
         case .length:
-            // By the time-to-beat estimate (how long the game is), NULLs always last.
-            terms = ["(\(lengthEstimateExpr) IS NULL)", "\(lengthEstimateExpr) \(dir)"]
+            // By the personal length (how long the game is for the owner), NULLs last.
+            let expr = lengthEstimateExpr(style: filter.playStyle)
+            terms = ["(\(expr) IS NULL)", "\(expr) \(dir)"]
         }
         return "ORDER BY " + (terms + ["g.sort_title ASC", "g.id ASC"]).joined(separator: ", ")
     }

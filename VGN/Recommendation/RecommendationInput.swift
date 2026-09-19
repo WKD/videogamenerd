@@ -88,15 +88,23 @@ struct Candidate: Hashable, Sendable {
 
     var similarIGDBIDs: [Int64] { traits.compactMap(\.similarGameID) }
 
-    /// The raw estimate for the chosen mode (before subtracting playtime).
-    func fullEstimate(completionist: Bool) -> Int? {
-        completionist ? (completionistSeconds ?? estimateSeconds) : estimateSeconds
+    /// The candidate's **personal length** for a play style — a blend of the main
+    /// (`estimateSeconds`) and completionist (`completionistSeconds`) estimates (owner
+    /// request 2026-09-19). The rushed estimate is never loaded, so a rushed-only game
+    /// has neither and lands in the unknown-length lane.
+    func personalLength(style: PlayStyle) -> PersonalLength? {
+        PersonalLength.compute(normallyS: estimateSeconds, completelyS: completionistSeconds, style: style)
     }
 
-    /// The estimate the bracket is tested against: the full estimate, minus the
+    /// The full personal length before subtracting playtime (the me-vs-estimate bar).
+    func fullEstimate(style: PlayStyle) -> Int? {
+        personalLength(style: style)?.seconds
+    }
+
+    /// The estimate the bracket is tested against: the personal length, minus the
     /// user's playtime when the game is already `playing` (PLAN §7b remaining time).
-    func bracketEstimate(completionist: Bool) -> Int? {
-        guard let full = fullEstimate(completionist: completionist) else { return nil }
+    func bracketEstimate(style: PlayStyle) -> Int? {
+        guard let full = fullEstimate(style: style) else { return nil }
         if status == .playing, let played = myPlaytimeSeconds {
             return max(0, full - played)
         }

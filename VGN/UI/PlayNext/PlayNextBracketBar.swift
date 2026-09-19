@@ -78,12 +78,15 @@ struct PlayNextBracketBar: View {
         HStack(spacing: density == .full ? 12 : 8) {
             bracketPicker(density)
 
-            Toggle(density == .full ? "Completionist" : "100%", isOn: Binding(
-                get: { model.completionist },
+            Toggle(density == .full ? "Plan for 100%" : "100%", isOn: Binding(
+                get: { model.completionistOn },
                 set: { model.setCompletionist($0) }))
                 .toggleStyle(.checkbox)
                 .fixedSize()
-                .appKitTooltip("Completionist — estimate to 100% instead of a normal playthrough")
+                .disabled(model.completionistForced)
+                .appKitTooltip(model.completionistForced
+                    ? "You already play as a completionist — lengths already estimate to 100%."
+                    : "Plan for 100% — estimate this session to full completion instead of your usual play style.")
 
             optionsMenu(iconOnly: density != .full)
 

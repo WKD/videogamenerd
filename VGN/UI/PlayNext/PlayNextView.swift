@@ -33,6 +33,7 @@ struct PlayNextScreen: View {
             backend: env.backend,
             secondOpinion: env.secondOpinion,
             pace: env.paceModel?.pace ?? .default,
+            playStyle: env.paceModel?.style ?? .default,
             bracketHint: env.bracketHint))
     }
 
@@ -82,9 +83,12 @@ struct PlayNextBody: View {
         .onAppear { model.undoManager = undoManager }
         .onChange(of: undoManager) { _, new in model.undoManager = new }
         .onDisappear { model.stop() }
-        // A pace change (sidebar "By Length" popover / Settings) recomputes once.
+        // A pace / play-style change (sidebar "By Length" popover / Settings) recomputes once.
         .onChange(of: paceModel?.pace) { _, newPace in
             if let newPace { model.setPace(newPace) }
+        }
+        .onChange(of: paceModel?.style) { _, newStyle in
+            if let newStyle { model.setPlayStyle(newStyle) }
         }
         .onChange(of: model.result?.hero?.id) { selectedIndex = 0 }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18),

@@ -47,6 +47,11 @@ final class PlayNextModel {
     /// Fed in by the view from the shared ``PlayPaceModel``; a change recomputes once.
     private(set) var pace: PlayPace
 
+    /// The owner's play style — the *same* value the sidebar uses — which sets each
+    /// candidate's personal length for the time fit. The "plan for 100%" toggle
+    /// (``completionist``) overrides it per session. A change recomputes once.
+    private(set) var playStyle: PlayStyle
+
     /// A one-shot hint (consumed at ``start()``): the "By Length" shelf last selected
     /// in the sidebar, so opening Play Next preselects the matching bracket.
     private let bracketHint: (@MainActor () -> LengthShelf?)?
@@ -112,6 +117,7 @@ final class PlayNextModel {
         secondOpinion: any SecondOpinionProviding,
         defaults: UserDefaults = AppPreferences.defaults,
         pace: PlayPace = .default,
+        playStyle: PlayStyle = .default,
         bracketHint: (@MainActor () -> LengthShelf?)? = nil,
         recomputeDebounce: Duration = .milliseconds(250),
         toastDuration: Duration = .seconds(4),
@@ -121,6 +127,7 @@ final class PlayNextModel {
         self.secondOpinion = secondOpinion
         self.defaults = defaults
         self.pace = pace
+        self.playStyle = playStyle
         self.bracketHint = bracketHint
         self.recomputeDebounce = recomputeDebounce
         self.toastDuration = toastDuration
@@ -145,10 +152,18 @@ final class PlayNextModel {
     var bracket: TimeBracket {
         if usesCustom {
             let seconds = Int((customHoursPerWeek * customWeeks * 3600).rounded())
-            return TimeBracket(budgetSeconds: max(3600, seconds), completionist: completionist)
+            return TimeBracket(budgetSeconds: max(3600, seconds),
+                               playStyle: playStyle, completionist: completionist)
         }
-        return TimeBracket(shelf: bracketShelf, pace: pace, completionist: completionist)
+        return TimeBracket(shelf: bracketShelf, pace: pace,
+                           playStyle: playStyle, completionist: completionist)
     }
+
+    /// The "plan for 100%" toggle is forced on and disabled when the owner already
+    /// plays as a completionist (there is nothing further to override).
+    var completionistForced: Bool { playStyle == .completionist }
+    /// What the toggle shows (on when forced by the style, else the session override).
+    var completionistOn: Bool { completionist || completionistForced }
 
     var options: RecommendationOptions {
         RecommendationOptions(
@@ -227,6 +242,14 @@ final class PlayNextModel {
         pace = newPace
         // Keep the custom pre-fill in step with the pace until the owner overrides it.
         if !customHoursSet { customHoursPerWeek = newPace.hoursPerWeek }
+        recompute(debounce: false)
+    }
+
+    /// Adopt a new play style (from the shared ``PlayPaceModel``). Recomputes once —
+    /// each candidate's personal length changes with the style.
+    func setPlayStyle(_ newStyle: PlayStyle) {
+        guard newStyle != playStyle else { return }
+        playStyle = newStyle
         recompute(debounce: false)
     }
 
@@ -520,11 +543,15 @@ struct SecondOpinionCacheKey: Hashable {
     var shortlist: [Int64]
     var bracketLabel: String
     var completionist: Bool
+    /// The play style shapes the personal lengths sent to Claude, so it is part of the
+    /// bracket's identity here (two equal shortlists at different styles differ).
+    var style: PlayStyle
 
     init(result: PlayNextResult) {
         self.shortlist = result.shortlist.map(\.id)
         self.bracketLabel = result.bracket.label
         self.completionist = result.bracket.completionist
+        self.style = result.bracket.resolvedStyle
     }
 }
 
