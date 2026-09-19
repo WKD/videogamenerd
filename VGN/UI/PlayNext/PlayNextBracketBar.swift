@@ -7,21 +7,41 @@ struct PlayNextBracketBar: View {
     @Bindable var model: PlayNextModel
     @State private var showCustom = false
 
-    /// A discrete choice for the segmented picker: one of the presets, or custom.
+    /// A discrete choice for the segmented picker: one of the five "By Length"
+    /// shelves, or custom.
     private enum Choice: Hashable {
-        case preset(TimeBracket.Preset)
+        case shelf(LengthShelf)
         case custom
     }
 
     private var choice: Binding<Choice> {
         Binding(
-            get: { model.usesCustom ? .custom : .preset(model.bracketPreset) },
+            get: { model.usesCustom ? .custom : .shelf(model.bracketShelf) },
             set: { newValue in
                 switch newValue {
-                case let .preset(preset): model.selectPreset(preset)
+                case let .shelf(shelf): model.selectShelf(shelf)
                 case .custom: showCustom = true
                 }
             })
+    }
+
+    /// The always-visible caption under the control: the selected bracket's name +
+    /// current hour range so the owner sees the numbers without hovering. For a shelf
+    /// it also states the pace the range derives from.
+    private var selectedCaption: String {
+        if model.usesCustom {
+            return "Custom · \(model.bracket.rangeText)"
+        }
+        let shelf = model.bracketShelf
+        return "\(shelf.name) · \(model.bracket.rangeText) at \(LengthShelf.formatHours(model.pace.hoursPerWeek)) h a week"
+    }
+
+    /// The picker-level hover tooltip (SwiftUI's segmented picker can't host reliable
+    /// per-segment tooltips — the caption is the primary display).
+    private var pickerTooltip: String {
+        model.usesCustom
+            ? "Custom budget — \(model.bracket.rangeText)"
+            : "\(model.bracketShelf.name) — \(model.bracket.rangeText) at \(LengthShelf.formatHours(model.pace.hoursPerWeek)) h a week. Same shelves as the sidebar’s By Length."
     }
 
     private var candidateCount: Int { model.result?.shortlist.count ?? 0 }
@@ -38,6 +58,11 @@ struct PlayNextBracketBar: View {
                 row(.iconButtons)
                 row(.compact)
             }
+
+            Text(selectedCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier(A11yID.playNextBracketRange)
 
             if !model.hasShownAskDisclosure {
                 Label("Ask Claude sends your tier list and these \(candidateCount) candidates — nothing else.",
@@ -102,13 +127,14 @@ struct PlayNextBracketBar: View {
     @ViewBuilder
     private func bracketPicker(_ density: Density) -> some View {
         let picker = Picker("Time I have", selection: choice) {
-            ForEach(TimeBracket.Preset.allCases) { preset in
-                Text(preset.label).tag(Choice.preset(preset))
+            ForEach(LengthShelf.allCases) { shelf in
+                Text(shelf.name).tag(Choice.shelf(shelf))
             }
             Text("Custom…").tag(Choice.custom)
         }
         .labelsHidden()
         .fixedSize()
+        .appKitTooltip(pickerTooltip)
         .popover(isPresented: $showCustom, arrowEdge: .bottom) {
             CustomBudgetPopover(model: model)
         }

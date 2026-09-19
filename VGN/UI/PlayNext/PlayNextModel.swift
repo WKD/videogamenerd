@@ -30,11 +30,26 @@ final class PlayNextModel {
 
     // MARK: - Bracket (persisted)
 
-    private(set) var bracketPreset: TimeBracket.Preset
+    /// The chosen length shelf (one of the five "By Length" shelves). Its hour bounds
+    /// come from ``LengthShelf/bounds(for:)`` at the current ``pace``.
+    private(set) var bracketShelf: LengthShelf
     private(set) var usesCustom: Bool
     private(set) var customHoursPerWeek: Double
     private(set) var customWeeks: Double
     private(set) var completionist: Bool
+
+    /// Whether the owner has ever explicitly set the custom hours/week (vs. it being
+    /// pre-filled from the pace). Governs whether a pace change re-seeds the pre-fill.
+    private var customHoursSet: Bool
+
+    /// The owner's weekly play pace — the *same* value the sidebar "By Length" shelves
+    /// use, so a Play Next bracket and its sidebar shelf cover the same hour range.
+    /// Fed in by the view from the shared ``PlayPaceModel``; a change recomputes once.
+    private(set) var pace: PlayPace
+
+    /// A one-shot hint (consumed at ``start()``): the "By Length" shelf last selected
+    /// in the sidebar, so opening Play Next preselects the matching bracket.
+    private let bracketHint: (@MainActor () -> LengthShelf?)?
 
     // MARK: - Options (persisted)
 
@@ -96,6 +111,8 @@ final class PlayNextModel {
         backend: any PlayNextBackend,
         secondOpinion: any SecondOpinionProviding,
         defaults: UserDefaults = AppPreferences.defaults,
+        pace: PlayPace = .default,
+        bracketHint: (@MainActor () -> LengthShelf?)? = nil,
         recomputeDebounce: Duration = .milliseconds(250),
         toastDuration: Duration = .seconds(4),
         undoToastDuration: Duration = .seconds(10)
@@ -103,14 +120,19 @@ final class PlayNextModel {
         self.backend = backend
         self.secondOpinion = secondOpinion
         self.defaults = defaults
+        self.pace = pace
+        self.bracketHint = bracketHint
         self.recomputeDebounce = recomputeDebounce
         self.toastDuration = toastDuration
         self.undoToastDuration = undoToastDuration
 
         let store = Prefs(defaults: defaults)
-        self.bracketPreset = store.preset
+        self.bracketShelf = store.shelf
         self.usesCustom = store.usesCustom
-        self.customHoursPerWeek = store.customHoursPerWeek
+        self.customHoursSet = store.customHoursSet
+        // The custom "hours per week" is pre-filled from the pace unless the owner has
+        // explicitly chosen one (the old stored value is ignored — owner request).
+        self.customHoursPerWeek = store.customHoursSet ? store.customHoursPerWeek : pace.hoursPerWeek
         self.customWeeks = store.customWeeks
         self.completionist = store.completionist
         self.includeAbandoned = store.includeAbandoned
@@ -125,7 +147,7 @@ final class PlayNextModel {
             let seconds = Int((customHoursPerWeek * customWeeks * 3600).rounded())
             return TimeBracket(budgetSeconds: max(3600, seconds), completionist: completionist)
         }
-        return TimeBracket(preset: bracketPreset, completionist: completionist)
+        return TimeBracket(shelf: bracketShelf, pace: pace, completionist: completionist)
     }
 
     var options: RecommendationOptions {
@@ -142,6 +164,13 @@ final class PlayNextModel {
     // MARK: - Lifecycle
 
     func start() async {
+        // One-shot sidebar → Play Next preselect: if a "By Length" shelf was the last
+        // sidebar selection, open on the matching bracket (consumed once).
+        if let hint = bracketHint?() {
+            usesCustom = false
+            bracketShelf = hint
+            persist()
+        }
         if let sig = try? await backend.inputsSignatureOnce() { rankedCount = sig.ranked }
         recompute(debounce: false)
         await loadBacktest()
@@ -177,22 +206,33 @@ final class PlayNextModel {
 
     // MARK: - Bracket / option changes
 
-    func selectPreset(_ preset: TimeBracket.Preset) {
+    func selectShelf(_ shelf: LengthShelf) {
         usesCustom = false
-        bracketPreset = preset
+        bracketShelf = shelf
         persist()
         recompute(debounce: false)
     }
 
-    /// `1`…`4` keyboard shortcut → the nth preset.
-    func selectPreset(index: Int) {
-        let presets = TimeBracket.Preset.allCases
-        guard presets.indices.contains(index) else { return }
-        selectPreset(presets[index])
+    /// `1`…`5` keyboard shortcut → the nth "By Length" shelf.
+    func selectShelf(index: Int) {
+        let shelves = LengthShelf.allCases
+        guard shelves.indices.contains(index) else { return }
+        selectShelf(shelves[index])
+    }
+
+    /// Adopt a new weekly pace (from the shared ``PlayPaceModel``). Recomputes once —
+    /// a shelf bracket's hour bounds move with the pace, like the sidebar shelves.
+    func setPace(_ newPace: PlayPace) {
+        guard newPace != pace else { return }
+        pace = newPace
+        // Keep the custom pre-fill in step with the pace until the owner overrides it.
+        if !customHoursSet { customHoursPerWeek = newPace.hoursPerWeek }
+        recompute(debounce: false)
     }
 
     func useCustom(hoursPerWeek: Double, weeks: Double) {
         usesCustom = true
+        customHoursSet = true
         customHoursPerWeek = max(0.5, hoursPerWeek)
         customWeeks = max(0.5, weeks)
         persist()
@@ -460,8 +500,9 @@ final class PlayNextModel {
 
     private func persist() {
         let store = Prefs(defaults: defaults)
-        store.preset = bracketPreset
+        store.shelf = bracketShelf
         store.usesCustom = usesCustom
+        store.customHoursSet = customHoursSet
         store.customHoursPerWeek = customHoursPerWeek
         store.customWeeks = customWeeks
         store.completionist = completionist
@@ -493,8 +534,9 @@ struct SecondOpinionCacheKey: Hashable {
 private struct Prefs {
     let defaults: UserDefaults
     private enum Key {
-        static let preset = "playNext.preset"
+        static let preset = "playNext.preset"       // now holds a LengthShelf raw value
         static let usesCustom = "playNext.usesCustom"
+        static let customHoursSet = "playNext.customHoursSet"
         static let customHoursPerWeek = "playNext.customHoursPerWeek"
         static let customWeeks = "playNext.customWeeks"
         static let completionist = "playNext.completionist"
@@ -503,13 +545,36 @@ private struct Prefs {
         static let hasShownAskDisclosure = "playNext.hasShownAskDisclosure"
     }
 
-    var preset: TimeBracket.Preset {
-        get { (defaults.string(forKey: Key.preset)).flatMap(TimeBracket.Preset.init) ?? .weekOrTwo }
+    /// The remembered bracket, as a ``LengthShelf``. Old four-preset raw values are
+    /// migrated to the nearest shelf so no one lands on an invalid selection; an
+    /// unknown value → "A Few Weeks".
+    var shelf: LengthShelf {
+        get {
+            guard let raw = defaults.string(forKey: Key.preset) else { return .fewWeeks }
+            if let shelf = LengthShelf(rawValue: raw) { return shelf }
+            return Self.migrateLegacyPreset(raw)
+        }
         nonmutating set { defaults.set(newValue.rawValue, forKey: Key.preset) }
     }
+
+    /// Map an old `TimeBracket.Preset` raw value to the nearest new shelf.
+    static func migrateLegacyPreset(_ raw: String) -> LengthShelf {
+        switch raw {
+        case "evening":   return .evening      // (also a valid new value; handled above)
+        case "weekOrTwo": return .weekend
+        case "month":     return .fewWeeks
+        case "longHaul":  return .season
+        default:          return .fewWeeks
+        }
+    }
+
     var usesCustom: Bool {
         get { defaults.bool(forKey: Key.usesCustom) }
         nonmutating set { defaults.set(newValue, forKey: Key.usesCustom) }
+    }
+    var customHoursSet: Bool {
+        get { defaults.bool(forKey: Key.customHoursSet) }
+        nonmutating set { defaults.set(newValue, forKey: Key.customHoursSet) }
     }
     var customHoursPerWeek: Double {
         get { defaults.object(forKey: Key.customHoursPerWeek) as? Double ?? 8 }

@@ -12,7 +12,7 @@ struct PlayNextReasonFormatterTests {
         2: ExemplarInfo(title: "Elden Ring", tierLetter: "A"),
         3: ExemplarInfo(title: "Untiered", tierLetter: nil),
     ]
-    private let bracket = TimeBracket(preset: .month)
+    private let bracket = TimeBracket(shelf: .fewWeeks)
 
     private func s(_ reason: PlayNextReason) -> String {
         PlayNextReasonFormatter.sentence(for: reason, exemplars: exemplars, bracket: bracket)
@@ -59,7 +59,7 @@ struct PlayNextReasonFormatterTests {
     }
 
     @Test func fitsBracket() {
-        #expect(s(.fitsBracket(estimateSeconds: 32 * 3600, bracket: bracket)) == "≈ 32 h — fits 'A month'")
+        #expect(s(.fitsBracket(estimateSeconds: 32 * 3600, bracket: bracket)) == "≈ 32 h — fits 'A Few Weeks (10–40 h)'")
     }
 
     @Test func remainingTime() {

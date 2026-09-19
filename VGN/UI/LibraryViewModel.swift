@@ -246,6 +246,18 @@ final class LibraryViewModel {
     /// Whether the owner has set a pace at least once (drives the first-use CTA).
     var hasChosenPace: Bool { paceModel.hasChosen }
 
+    /// The "By Length" shelf last selected in the sidebar, awaiting a Play Next open
+    /// (owner request 2026-09-19: preselect the matching bracket). Set from ``select``,
+    /// read once by ``consumePlayNextBracketHint()``.
+    private var pendingPlayNextShelfHint: LengthShelf?
+
+    /// Consume the one-shot sidebar → Play Next bracket hint (called from Play Next's
+    /// `start()`, never a body). Returns the last-selected "By Length" shelf, once.
+    func consumePlayNextBracketHint() -> LengthShelf? {
+        defer { pendingPlayNextShelfHint = nil }
+        return pendingPlayNextShelfHint
+    }
+
     /// Adopt a new weekly play pace: update the filter (so the grid re-runs for a "By
     /// Length" scope) and re-subscribe the counts observation with the new shelf
     /// bounds. Treated like a filter change — one grid restart, one counts
@@ -423,6 +435,9 @@ final class LibraryViewModel {
 
     func select(_ newValue: SidebarSelection?) {
         guard let newValue, newValue != selection else { return }
+        // Remember a "By Length" shelf so opening Play Next next preselects the matching
+        // bracket (a one-shot hint, consumed by ``consumePlayNextBracketHint()``).
+        if case let .length(shelf) = newValue { pendingPlayNextShelfHint = shelf }
         selection = newValue
         var f = filter
         f.scope = newValue

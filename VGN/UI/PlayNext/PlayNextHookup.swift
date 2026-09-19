@@ -32,7 +32,9 @@ extension PlayNextEnvironment {
             inspect: { [weak viewModel] id in
                 viewModel?.selectOnly(id)
                 viewModel?.showInspector()
-            }
+            },
+            paceModel: viewModel.paceModel,
+            bracketHint: { [weak viewModel] in viewModel?.consumePlayNextBracketHint() }
         )
     }
 }

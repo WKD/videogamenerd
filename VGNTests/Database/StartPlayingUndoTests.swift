@@ -116,10 +116,10 @@ import GRDB
 
         let token = try await rec.startPlayingCapturingUndo(gameID: cand)
         // A playing game is still a candidate, but now carries the playing status.
-        #expect(candidate(try await rec.recommend(bracket: TimeBracket(preset: .weekOrTwo)))?.status == .playing)
+        #expect(candidate(try await rec.recommend(bracket: TimeBracket(shelf: .weekend)))?.status == .playing)
 
         _ = try await rec.undoStartPlaying(token)
-        let restored = candidate(try await rec.recommend(bracket: TimeBracket(preset: .weekOrTwo)))
+        let restored = candidate(try await rec.recommend(bracket: TimeBracket(shelf: .weekend)))
         #expect(restored != nil)                 // still a candidate
         #expect(restored?.status == nil)         // back to unplayed, as it was
     }

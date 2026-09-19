@@ -69,7 +69,7 @@ struct PlayNextEndToEndTests {
         let model = PlayNextModel(backend: backend, secondOpinion: StubSecondOpinionProvider(),
                                   defaults: UserDefaults(suiteName: "playnext.e2e.\(UUID())")!,
                                   recomputeDebounce: .milliseconds(1))
-        model.selectPreset(.longHaul)
+        model.selectShelf(.season)
         await model.start()
 
         let deadline = ContinuousClock.now + .seconds(5)

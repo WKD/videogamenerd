@@ -42,7 +42,7 @@ struct ScalePerfTests {
         }
         let tierBoard = try await bestMS { _ = try await rank.tierBoardOnce() }
         let theTop = try await bestMS { _ = try await rank.theTopOnce(filter: LibraryFilter(scope: .all)) }
-        let recommend = try await bestMS { _ = try await rec.recommend(bracket: TimeBracket(preset: .month)) }
+        let recommend = try await bestMS { _ = try await rec.recommend(bracket: TimeBracket(shelf: .fewWeeks)) }
         let enqueue = try await bestMS {
             _ = try await db.dbWriter.write { d in
                 try EnrichmentCoordinator.enqueueMissingJobs(now: Date(), db: d)

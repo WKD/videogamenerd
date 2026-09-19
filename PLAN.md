@@ -258,7 +258,7 @@ A 1–10 score is an **output** of the ranking, not an input (absolute scores dr
 - Consequence: a game with no IGDB match (manual entry, obscure ROM) has no traits — it can still be recommended on time fit alone, and is labelled "no metadata" instead of being silently ranked last.
 
 ### Inputs
-- **Time commitment bracket** (one click): *An evening* (≤ 5 h) · *A week or two* (5–15 h) · *A month* (15–40 h) · *A long haul* (40 h+). Optional precise mode: hours per week × weeks → a budget. A *completionist* toggle switches the estimate from IGDB `normally` to `completely`.
+- **Time commitment bracket** (one click) *(2026-09-19: the brackets are the five "By Length" shelves so a bracket and its sidebar shelf cover the same hours)*: *One Evening* · *A Weekend* · *A Few Weeks* · *A Season* · *Epics*. Their hour ranges are **not fixed** — they derive from the same weekly **play pace** the sidebar uses (§8), so at 8 h/week the edges are 4 / 10 / 40 / 80 h; "One Evening" is open below and "Epics" open above. The selected bracket's range is shown as a caption ("A Few Weeks · 10–40 h at 8 h a week"). Optional precise mode: hours per week × weeks → a budget (its hours/week pre-filled from the pace). A *completionist* toggle switches the estimate from IGDB `normally` to `completely`. Opening Play Next straight from a BY LENGTH sidebar shelf preselects the matching bracket.
 - **Taste profile** from my rankings: every ranked game gets a score in 0…1 from its global position (percentile), tiered-but-unplaced games get their tier's midpoint. The ranking work *is* the training data — nothing is asked twice.
 
 ### Candidates
@@ -273,7 +273,7 @@ Owned games (any format, incl. ROMs and compilation members) whose status is not
 3. **Rotate.** Small freshness term so the same game isn't pitched forever; **Not this one** snoozes a game for a few weeks, **Never** removes it (`rec_feedback`). `R` re-rolls among near-ties.
 4. **Explain.** Every suggestion lists the 2–3 contributions that actually drove its score, in plain words — *"Because you ranked Bloodborne S and Dark Souls A · FromSoftware · ≈ 32 h fits 'A month'"* — plus a **match strength** (strong / fair / weak) derived from how much evidence backed the score. A weak match says so.
 
-All weights are constants in one file, unit-tested on synthetic libraries (a souls-like lover gets the unplayed souls-like; a 60 h JRPG never appears in "An evening"; one outlier never crowns a genre).
+All weights are constants in one file, unit-tested on synthetic libraries (a souls-like lover gets the unplayed souls-like; a 60 h JRPG never appears in "One Evening"; one outlier never crowns a genre).
 
 ### Will it work with ~100 games, half of them played? — yes, as a shortlist-ranker, not as a "learning" system
 Honest sizing: ~50 ranked games is far too little for anything statistical in the Netflix sense, and the design doesn't pretend otherwise.

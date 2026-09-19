@@ -52,22 +52,27 @@ struct RecommendationComponentTests {
 
     @Test func timeFitInsideFalloffAndHardExclusion() throws {
         let w = RecommendationWeights()
-        let evening = TimeBracket(preset: .evening)
+        // "By Length" shelves at the default pace (8 h/week ⇒ edges 4 / 10 / 40 / 80).
+        // One Evening: under 4 h — open below, hard limit 4 × 1.5 = 6 h.
+        let evening = TimeBracket(shelf: .evening)
         #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(3), bracket: evening, weights: w).fit == 1)
-        let edge = TimeFit.evaluate(estimateSeconds: Rec.hours(6), bracket: evening, weights: w)
+        let edge = TimeFit.evaluate(estimateSeconds: Rec.hours(5), bracket: evening, weights: w)
         #expect(edge.fit > 0 && edge.fit < 1 && !edge.excluded)
         #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(8), bracket: evening, weights: w).excluded)
 
-        let month = TimeBracket(preset: .month)
-        #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(30), bracket: month, weights: w).fit == 1)
-        let short = TimeFit.evaluate(estimateSeconds: Rec.hours(5), bracket: month, weights: w)
+        // A Few Weeks: 10–40 h — hard limit 40 × 1.5 = 60 h.
+        let fewWeeks = TimeBracket(shelf: .fewWeeks)
+        #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(30), bracket: fewWeeks, weights: w).fit == 1)
+        let short = TimeFit.evaluate(estimateSeconds: Rec.hours(5), bracket: fewWeeks, weights: w)
         #expect(short.fit >= w.timeShortFloor && short.fit < 1 && !short.excluded)
-        #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(70), bracket: month, weights: w).excluded)
+        #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(70), bracket: fewWeeks, weights: w).excluded)
 
-        // Long haul: unbounded upper, never excluded.
-        let longHaul = TimeBracket(preset: .longHaul)
-        #expect(!TimeFit.evaluate(estimateSeconds: Rec.hours(200), bracket: longHaul, weights: w).excluded)
-        #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(50), bracket: longHaul, weights: w).fit == 1)
+        // Epics: 80 h and more — unbounded upper, never excluded.
+        let epics = TimeBracket(shelf: .epic)
+        #expect(!TimeFit.evaluate(estimateSeconds: Rec.hours(200), bracket: epics, weights: w).excluded)
+        #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(100), bracket: epics, weights: w).fit == 1)
+        // Open below One Evening: a very short game still fits fully (no lower bound).
+        #expect(TimeFit.evaluate(estimateSeconds: Rec.hours(1), bracket: evening, weights: w).fit == 1)
     }
 
     // MARK: - Crowd prior

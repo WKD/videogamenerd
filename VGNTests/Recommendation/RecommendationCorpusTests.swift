@@ -53,7 +53,7 @@ struct RecommendationCorpusTests {
             candidate(try meta("Resident Evil 2"), estimateHours: 42),
         ]
         let result = RecommendationEngine.recommend(RecommendationInput(
-            ranked: ranked, candidates: candidates, bracket: TimeBracket(preset: .longHaul),
+            ranked: ranked, candidates: candidates, bracket: TimeBracket(shelf: .epic),
             options: RecommendationOptions(seed: 0)))
 
         let elden = try meta("Elden Ring")
