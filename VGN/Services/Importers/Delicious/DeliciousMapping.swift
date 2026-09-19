@@ -105,14 +105,17 @@ enum DeliciousMapping {
     /// Multi-word media / platform noise removed for matching (before the word filter).
     static let multiWordNoise = [
         "dvd rom", "cd rom", "gd rom", "blu ray", "cartouche de jeu",
-        "xbox 360", "xbox one", "wii u",
+        "xbox 360", "xbox one",
     ]
 
     /// Single-word platform / media tags removed for matching (whole-word, case &
     /// diacritic insensitive).
     static let singleWordNoise: Set<String> = [
         "ps3", "ps2", "ps1", "psx", "psp", "vita",
-        "wii", "wiiu", "gamecube", "ngc", "n64", "3ds", "ds",
+        // NOT "wii" / "wii u" / "ds" / "3ds": they are part of real titles ("Mario Kart
+        // Wii", "New Super Mario Bros. Wii", "Wii Sports", "Mario Kart DS") — stripping
+        // them matched the wrong game. The matcher is platform-constrained anyway.
+        "gamecube", "ngc", "n64",
         "gba", "gbc", "gb", "snes", "nes",
         "xbox", "xbox360", "dreamcast",
         "pc", "mac", "windows",

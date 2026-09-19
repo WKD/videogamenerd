@@ -68,7 +68,11 @@ struct DeliciousMappingTests {
         ("God of War Collector's Edition PS2", "God of War", "Collector's Edition"),
         ("Some Game DVD-ROM", "Some Game", String?.none),
         ("The Legend of Zelda: Ocarina of Time", "The Legend of Zelda: Ocarina of Time", String?.none),
-        ("Resident Evil 4 Wii", "Resident Evil 4", String?.none),
+        // "Wii" / "DS" are part of real titles — never stripped (owner-file cases).
+        ("Resident Evil 4 Wii", "Resident Evil 4 Wii", String?.none),
+        ("Mario Kart Wii", "Mario Kart Wii", String?.none),
+        ("New Super Mario Bros Wii", "New Super Mario Bros Wii", String?.none),
+        ("Heavy Rain PS3", "Heavy Rain", String?.none),
     ])
     func cleansTitleAndExtractsEdition(raw: String, expectedTitle: String, expectedEdition: String?) {
         let out = DeliciousMapping.clean(raw)
