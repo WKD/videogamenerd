@@ -125,6 +125,55 @@ struct ReconcileStoreTests {
         #expect(MergePlanner.decide(sc, against: [tc]).outcome == .keep)
     }
 
+    // MARK: - Rule 4: never collapse across a subscription boundary (PLAN §13.3, v8)
+
+    @Test func planNeverCollapsesSubscriptionIntoNonSubscription() {
+        var sc = copy(1, "ps5", .physical, .psn, "s1"); sc.subscription = .psPlus
+        let tc = copy(2, "ps5", .physical, .manual, nil)   // really owned, same platform+format
+        #expect(MergePlanner.decide(sc, against: [tc]).effectiveOutcome == .keep)
+    }
+
+    @Test func planNeverCollapsesNonSubscriptionIntoSubscription() {
+        let sc = copy(1, "ps5", .physical, .manual, nil)   // really owned
+        var tc = copy(2, "ps5", .physical, .psn, "s1"); tc.subscription = .psPlus
+        #expect(MergePlanner.decide(sc, against: [tc]).effectiveOutcome == .keep)
+    }
+
+    @Test func planCollapsesSameSubscriptionIdenticalCopy() {
+        var sc = copy(1, "ps5", .physical, .psn, "s1"); sc.subscription = .psPlus
+        var tc = copy(2, "ps5", .physical, .psn, "s1"); tc.subscription = .psPlus
+        #expect(MergePlanner.decide(sc, against: [tc]).outcome == .collapse(into: 2, keepBothAllowed: false))
+    }
+
+    @Test func planCollapsesSubscriptionIntoRightTargetAmongMany() {
+        // A ps_plus copy must collapse into the ps_plus target, not the really-owned one
+        // that happens to come first on the same platform + format.
+        var sc = copy(1, "ps5", .physical, .psn, "s1"); sc.subscription = .psPlus
+        let owned = copy(9, "ps5", .physical, .manual, nil)         // first, but really owned
+        var plus = copy(2, "ps5", .physical, .psn, "s1"); plus.subscription = .psPlus
+        #expect(MergePlanner.decide(sc, against: [owned, plus]).outcome
+                == .collapse(into: 2, keepBothAllowed: false))
+    }
+
+    @Test func copiesOfReadsSubscription() async throws {
+        let store = LibraryStore(try AppDatabase.inMemory())
+        let gid = try await addGame(store, title: "Stray")
+        try await store.dbWriter.write { db in
+            try db.execute(sql: """
+                INSERT INTO platforms (id, name, short, manufacturer, group_name, kind, sort)
+                VALUES ('ps5', 'PS5', 'PS5', 'Sony', 'Sony', 'console', 1)
+                """)
+            try db.execute(sql: """
+                INSERT INTO products (id, platform_id, kind, format, source, subscription)
+                VALUES (100, 'ps5', 'single', 'digital', 'psn', 'ps_plus')
+                """)
+            try db.execute(sql: "INSERT INTO product_games (product_id, game_id, position) VALUES (100, ?, 0)",
+                           arguments: [gid])
+        }
+        let sub = try await firstCopy(store, gid)?.subscription
+        #expect(sub == .psPlus)
+    }
+
     // MARK: - Link
 
     @Test func linkSetsIGDBAndAdoptsTitlePushingOldToAlt() async throws {
