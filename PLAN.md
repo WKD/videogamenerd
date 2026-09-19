@@ -345,7 +345,7 @@ Each ends with a runnable app and a commit/push.
 | 5b | **Play Next + ROM format** | `format = rom` end to end (schema, Quick Add `⌘D`, inspector, badge, filter); `game_traits` + IGDB rating enrichment; `RecommendationEngine` (+ tests on synthetic libraries); Play Next view with brackets, reasons, snooze/never, Start playing; "Ask Claude" second opinion on the shortlist | With ≥ 15 ranked games, each bracket proposes a sensible unfinished game with a reason I agree with |
 | 6 | **Photo scan** | Tiling, Claude recogniser, Vision fallback + serial extraction, matching, review sheet | The 6 sample photos import with ≥ 90 % correct pre-matches |
 | 7 | **PSN import** (§13) | Web login, token store, `LibraryImporter` protocol + shared review sheet, **validated 30-day response cache**, request budget + rate limit, played list (from trophies) / game list / purchased, playtime, re-sync; built in gated live steps with owner approval on any unexpected response | Full PSN history imported; a second sync within 30 days makes **zero** PSN requests and shows only deltas |
-| 8 | **GOG import** | Second `LibraryImporter`: web login, owned list → review sheet | GOG library imported as owned PC/Mac games |
+| 8 | **GOG import** *(built before 7 — §14)* | First `LibraryImporter` + the shared cache / validator / budget / review sheet: web login, owned list → review sheet | GOG library imported as owned PC/Mac games (§14.6) |
 | 9 | **Polish** | Liquid Glass touches under `#available(macOS 26)`, stats view, Top export as image, backups, app icon, empty states | — |
 
 Order rationale: 0–4 deliver the whole core loop (add → browse → rank) with manual entry only; 5–8 are independent accelerators and can be reordered freely (e.g. PSN before photos).
@@ -372,6 +372,7 @@ Order rationale: 0–4 deliver the whole core loop (add → browse → rank) wit
 | Project type | **Plain Xcode project**, folder-synchronised groups, single app target. |
 | Computers | One **Mac** platform, one **PC**, plus distinct retro computers. |
 | Other importers | **GOG** later; Steam / Xbox / Nintendo not planned. |
+| Importer order *(2026-09-19)* | **GOG (M8) is built before PSN (M7)**: lower risk, and it builds the shared importer machinery (§14). Same cache-first / stop-and-ask protocol for both. |
 | Sample photos | Originals git-ignored; **downsized JPEG fixtures committed**. |
 | Persistence | GRDB stays even with Xcode available (see §1). |
 | ROMs *(added 2026-09-18)* | Third ownership format next to physical/digital. Manual entry only for now — no romlord/emulator import. |
@@ -399,7 +400,7 @@ PSN has no public API; this uses the endpoints the official mobile app and web s
 ### 13.2 Response cache — 30 days, valid responses only
 Every PSN response is validated before anything else happens to it. **Valid ⇒ cached for 30 days. Bogus ⇒ never cached, never overwrites a good entry, and the sync stops.**
 
-- Table (migration v5): `psn_cache(key TEXT PRIMARY KEY, endpoint TEXT, params_json TEXT, fetched_at DATETIME, expires_at DATETIME, status INTEGER, body BLOB, item_count INTEGER, schema_version INTEGER)` and `psn_cache_rejects(id, endpoint, params_json, received_at, status, reason TEXT, body_excerpt TEXT)` (last 50 kept, bodies truncated to 4 KB, tokens and account identifiers redacted) for diagnosis.
+- Table: the **shared** `import_cache` / `import_cache_rejects` of §14.2 with `source = 'psn'` (GOG is built first and creates them in migration v5): key, endpoint, canonical params, fetched/expires dates, status, body, item count, schema version; rejects keep the last 50 per source with 4 KB excerpts, tokens and account identifiers redacted.
 - **Key** = endpoint + canonicalised parameters (incl. page offset/limit and service name). Paged lists are cached **per page** plus a small manifest (total count, page keys) so a partial fetch can resume without re-requesting good pages.
 - **"Not bogus" means all of:** HTTP 200; `Content-Type` JSON; decodes into the expected DTO with every *required* field present; no error envelope (`error`, `errors`, `code` ≠ success); pagination coherent (`totalItemCount` ≥ items seen, offsets contiguous, no duplicate ids across pages); list not *suspiciously empty* (an empty list where the previous valid cache had ≥ 1 item is treated as bogus until I confirm it); ids match their expected patterns (`NPWR…` communication ids, `CUSA/PPSA/…` title ids). Anything else is a **reject**.
 - **Reads:** a sync asks the cache first. Fresh entry (< 30 days) ⇒ use it, no request. Stale or missing ⇒ one request (within the budget), validate, store. The sync summary always states "n responses from cache · m from network".
@@ -444,3 +445,62 @@ Total live budget for the whole build ≈ 15–20 requests. Recommended: run S1�
 
 ### 13.6 Done when
 A first sync imports my PSN history through the review sheet with ≤ 20 requests; an immediate second sync makes **0** requests and proposes nothing new; after adding a game on the console and forcing a refresh of one data set, only that data set is re-fetched and only the new title appears; every reject path shows a clear message and leaves the last good cache intact; signing out removes the tokens.
+
+---
+
+## 14. GOG Sync — detailed plan (milestone 8, built before PSN)
+
+**Goal.** Import what I own on GOG as *owned (digital)* PC/Mac games, through the same staging table and review sheet as every importer. Decided 2026-09-19: GOG is built **before** PSN — it is the simpler service, so it is where the shared importer machinery (protocol, response cache, validator, budget limiter, review sheet) gets built and proven; PSN (§13) then plugs into it.
+
+**Non-goals.** Play time, achievements, friends, wishlist (GOG only exposes play time to Galaxy; I do not use Galaxy — not installed on this Mac, so its local database is not an option). Downloading installers. Anything that writes to the account. Background or scheduled syncing.
+
+### 14.1 Risk posture
+GOG has no documented public API either, but its account endpoints have been stable for a decade and are what open-source launchers and library managers use daily; GOG is DRM-free and tolerant of them. The exposure is far lower than PSN — and the rules are **the same anyway**, because they cost nothing and the machinery is shared:
+1. **Read-only allow-list**: `auth.gog.com/token`, `embed.gog.com/userData.json`, `embed.gog.com/user/data/games`, `embed.gog.com/account/getFilteredProducts`. Anything else traps in DEBUG. (`account/gameDetails/<id>.json` is *not* on the list in v1 — it is one request per game and adds nothing the import needs.)
+2. **User-initiated only**; serial; ≥ 1 s (jittered) between requests; **budget 15 requests per sync** (a 300-game library needs 1 + 1 + 3 pages = 5).
+3. **No retry loops**: 401 → one token refresh, once; 429 → honour `Retry-After` once, then the sync ends; 403 / HTML / captcha / unknown envelope → stop and surface.
+4. **Credentials**: I log in on GOG's own page in a `WKWebView` (non-persistent data store). VGN never sees the password; it keeps only the refresh/access tokens in the Keychain (service = bundle id, account `gog`). Sign out deletes them (and optionally the cache).
+5. **Cache first** (§14.2).
+
+**Sign-in mechanism — to be confirmed with me at step G1, before any live request.** Two known routes: (a) the OAuth *authorization-code* flow used by community launchers (login page → redirect carrying `code` → `auth.gog.com/token` → access token ~1 h + refresh token), which relies on the Galaxy client's publicly known client id/secret — those are GOG's, not mine, and must not be committed in clear without my say-so; (b) a plain web-session login where VGN reuses the session cookie for the `embed.gog.com` calls (no client id at all, but a cookie instead of a refreshable token → I log in again when it expires). Recommendation: (a) for the unattended refresh, falling back to (b) if I prefer not to embed GOG's client credentials.
+
+### 14.2 Shared response cache — 30 days, valid responses only
+Same contract as §13.2, and **one implementation for every importer**: migration **v5** creates `import_cache(source TEXT, key TEXT, endpoint TEXT, params_json TEXT, fetched_at DATETIME, expires_at DATETIME, status INTEGER, body BLOB, item_count INTEGER, schema_version INTEGER, PRIMARY KEY (source, key))` and `import_cache_rejects(id, source, endpoint, params_json, received_at, status, reason, body_excerpt)` (last 50 per source, 4 KB excerpts, tokens / user ids / e-mail redacted). These replace the `psn_cache*` names of §13.2 — PSN will use `source = 'psn'`.
+- **Valid ⇒ cached 30 days. Bogus ⇒ never cached, never overwrites a good entry, the sync stops.** Inside the window a sync makes **zero** requests. Paged lists are cached per page + a manifest.
+- **"Not bogus" for GOG**: HTTP 200; JSON content type; decodes into the expected DTO with its required fields (`products[]`, `page`, `totalPages`, `totalProducts`; per product `id`, `title`, `worksOn`); pages coherent (`page` echoes the request, `totalPages`/`totalProducts` identical across pages, no duplicate ids, Σ products = `totalProducts`); the owned-id list and the product pages agree (every product id ∈ owned ids; a gap is reported, not fatal); not *suspiciously empty* (empty where the last valid cache had ≥ 1 item ⇒ bogus until I confirm); a login page or `isLoggedIn: false` in `userData.json` ⇒ auth failure, never cached.
+- Force refresh per data set behind a confirmation stating the request cost and the age of the cached data. TTL, delay and budget are constants in one file.
+
+### 14.3 Data sets and mapping
+| Data set | Endpoint | Gives | Becomes |
+|---|---|---|---|
+| Account | `embed.gog.com/userData.json` (1) | username, `isLoggedIn` | sanity check that the token is mine; shown in Settings (username only) |
+| Owned ids | `embed.gog.com/user/data/games` (1) | `owned: [product id]` | cross-check for the pages below |
+| Library pages | `embed.gog.com/account/getFilteredProducts?mediaType=1&page=n` (100 per page) | id, title, `worksOn` {Windows, Mac, Linux}, `isGame`, category, release date, image, `isHidden`, tags | one `import_titles` row per product: `source = gog`, `external_id` = product id, signal **owned** |
+
+- **Platform**: the owned copy is one digital Product. Default platform = `mac` when `worksOn.Mac`, else `pc` (I play on a Mac) — switchable for the whole import ("Mac when available" / "Always PC") and per row in the review sheet. Linux-only titles map to `pc` with a note.
+- **Noise, filtered by default and remembered** (shown under *Ignored*, one click to restore): `isGame = false`, movies (`mediaType = 2` is never requested), DLC / expansions that GOG lists as separate products, soundtracks / artbooks / "goodies" packs, demos and prologues, hidden products.
+- **Packs / collections**: a product that IGDB knows as a bundle becomes a compilation Product with its member games (reusing the §5.1 bundle expansion — reverse lookup, nested bundles, add-ons dropped); otherwise it is an ordinary game.
+- **Matching** reuses the photo-scan ladder (IGDB autocomplete constrained to PC/Mac → `FuzzyMatch` buckets → alternatives), GOG's release year as the tie-breaker (the same `release_dates.y` filter Quick Add uses). Confident matches are pre-ticked; the rest wait under *New*. Decisions persist in `import_titles.matched_game_id / ignored`, so a later sync proposes only new purchases. Already-owned-on-GOG games are recognised by an existing Product with `source = gog` + the same external id, never by title alone.
+- **Commit** = one transaction: digital Products (`source = gog`, external id kept for idempotency), `game_platforms`, games created *owned, not played* (they land in Backlog); nothing is marked played, no tier is touched; then `notifyLibraryChanged()` and the usual enrichment/cover jobs.
+
+### 14.4 Architecture
+`VGN/Services/Importers/` — shared: `LibraryImporter` protocol (`authenticate` → `fetch(progress:)` → staging rows), `ImportResponseCache` (the §14.2 table, injected clock), `ImportResponseValidator` protocol + `ImportRequestBudget` + `ImportRequestPacer` (delay/jitter, injected clock), `ImportAllowList`; `GOG/GOGAuth` (web-view bridge + token actor with single-flight refresh, Keychain), `GOG/GOGClient` (actor: allow-list, serial queue, pacer, budget, validation, cache-first reads), `GOG/GOGMapping` (pure: DTO → staging rows, platform rule, noise rules), `ImportSyncCoordinator` (orchestrates one sync for any importer: progress, summary "n from cache · m from network", reject handling). Database (lane A): migration v5, `ImportStagingStore` (upsert rows, decisions, idempotent commit). UI: Settings ▸ Accounts ▸ GOG (sign in, username, last sync, cache age per data set, Force refresh, Sign out & wipe) and the **shared import review sheet** (*New / Already matched / Ignored*, platform switch, per-row alternatives — built from the photo-scan review components where they fit). Everything behind protocols with fakes; **unit tests never touch the network** (synthetic then recorded-and-scrubbed fixtures, injected clock: TTL, delay, budget, every reject path, resume after a partial paged fetch).
+
+### 14.5 Build protocol — gated live steps, stop and ask
+The §13.5 rule applies verbatim, with "GOG" for "PSN": **at every live step make exactly the listed requests; if the response is not the proper content — wrong status, HTML/login page/captcha, error envelope, schema mismatch, suspicious emptiness, rate limit, auth challenge, anything unforeseen — stop all GOG traffic, do not retry or try a variant, report what was sent and received (tokens, user id, e-mail redacted), and wait for my explicit approval. Approval covers one next action.**
+
+| Step | Live requests (budget) | Proper content = | Checkpoint |
+|---|---|---|---|
+| G0 Scaffolding | 0 | — | shared importer machinery, migration v5, GOG DTOs from community documentation, mapping, review sheet, Settings pane — all on synthetic fixtures |
+| G1 Sign-in | **ask first**: I choose route (a) or (b) (§14.1); then the web login (I do it) + 1 token call | tokens with expiry (a) or a valid session (b) | **ask before G2** |
+| G2 Account | 1 | `isLoggedIn: true` + my username | report, continue if valid |
+| G3 Owned ids | 1 | a non-empty id list | report the count |
+| G4 Library page 1 | 1 | products + `totalPages` | report counts; **ask before paging** if `totalPages` > 5 |
+| G5 Remaining pages | ≤ 5 | coherent pages, Σ = `totalProducts` | report |
+| G6 Full sync from cache | 0 | — | staging, matching (IGDB calls only), review sheet, commit — offline as far as GOG is concerned |
+| G7 Second sync | 0 (inside the cache window) | — | proves "zero requests, nothing new proposed" |
+
+Total live budget for the whole build ≈ 10 requests. Fixtures are scrubbed of username, user id, e-mail, avatar and order data before they are committed; tokens and cookies never appear in logs, fixtures, prompts or commits. My real GOG account is acceptable for the build (read-only, single-digit request count), unless G1 turns up something unexpected.
+
+### 14.6 Done when
+A first sync imports my GOG library through the review sheet in ≤ 10 requests; an immediate second sync makes **0** requests and proposes nothing new; after a new purchase and a forced refresh only the library pages are re-fetched and only the new title appears; DLC / goodies are ignored by default and restorable; every reject path shows a clear message and leaves the last good cache intact; signing out removes the tokens.
