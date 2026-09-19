@@ -187,7 +187,7 @@ strip `Authorization`/`Client-ID` and tokens from anything recorded):
 - `record-igdb-fixtures.swift` — refresh the IGDB search/game/bundle/time-to-beat JSON in
   `VGNTests/Fixtures/`.
 - `record-libretro-fixture.swift` / `record-vision-fixture.swift` — libretro tree + Vision OCR fixtures.
-- `record-hltb-fixtures.swift` — bounded (≤ 12 requests, ≥ 2 s apart, stop on first unexpected response) HowLongToBeat recorder → `VGNTests/Fixtures/hltb-*.json` (PLAN §5.3, `docs/hltb.md`). No credentials.
+- `record-hltb-fixtures.swift` — bounded (≤ 25 requests, ≥ 2 s apart, stop on first unexpected response) HowLongToBeat recorder → `VGNTests/Fixtures/hltb-*.json` (PLAN §5.3, `docs/hltb.md`). No credentials.
 - `crop-tiles.swift` — regenerate shelf tiles from the (git-ignored) originals in `../samples/` (see `docs/fixtures.md`).
 - `smoke-live.swift` — one live IGDB round-trip to sanity-check credentials.
 - `scan-accuracy.sh` — arms the gated photo-scan accuracy harness (`docs/recognition-accuracy.md`); inert otherwise.
