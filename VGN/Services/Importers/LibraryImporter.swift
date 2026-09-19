@@ -36,14 +36,22 @@ struct ImportFetchResult: Sendable, Equatable {
     /// Rows read from a **file** source (Delicious, PLAN §5.5); drives the file-flavoured
     /// summary line. 0 for network importers.
     var fromFile: Int
+    /// **(The Vault, PLAN §16)** PS Plus claims to upsert into the Vault (source `psn`),
+    /// separate from `rows`. Empty for every other importer.
+    var vaultEntries: [RomCatalogEntry]
+    /// Every external id the latest fetch currently vaults, so absent ones can be removed.
+    var vaultPresentIDs: Set<String>
 
     init(rows: [ImportStagingRow], fromCache: Int = 0, fromNetwork: Int = 0,
-         budgetUsed: Int = 0, ownedGap: Int = 0, fromFile: Int = 0) {
+         budgetUsed: Int = 0, ownedGap: Int = 0, fromFile: Int = 0,
+         vaultEntries: [RomCatalogEntry] = [], vaultPresentIDs: Set<String> = []) {
         self.rows = rows
         self.fromCache = fromCache
         self.fromNetwork = fromNetwork
         self.budgetUsed = budgetUsed
         self.ownedGap = ownedGap
         self.fromFile = fromFile
+        self.vaultEntries = vaultEntries
+        self.vaultPresentIDs = vaultPresentIDs
     }
 }

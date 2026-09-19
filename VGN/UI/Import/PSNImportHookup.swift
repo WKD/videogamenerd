@@ -82,6 +82,14 @@ final class PSNImportPresenter {
                     Task { @MainActor in self.progress = p }
                 })
                 if Task.isCancelled { self.reset(); return }
+                // The Vault (PLAN §16): upsert the PS Plus claims this sync vaulted, and remove
+                // any that vanished or crossed the 10-minute gate. A separate shelf — never the
+                // library. Belt-and-braces guard: only when this sync actually vaulted claims.
+                if backend.source == ImportSourceID.psn, !result.vaultPresentIDs.isEmpty {
+                    try? await RomCatalogStore(backend.staging.database)
+                        .syncPSNVault(entries: result.vaultEntries,
+                                      presentExternalIDs: result.vaultPresentIDs)
+                }
                 self.reviewModel = ImportReviewModel(
                     source: backend.source, sourceLabel: backend.sourceLabel,
                     staging: backend.staging, result: result,

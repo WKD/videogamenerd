@@ -52,6 +52,48 @@ enum PSNMapping {
         return index.ordered.compactMap { $0.row() }
     }
 
+    /// Build the PS Plus **Vault** entries from the three lists (PLAN §16). A vaulted game is a
+    /// PS Plus claim (never a bought copy) played at or below the 10-minute gate — including
+    /// never launched. Cross-gen twins are one entry (the same merge as ``stagingRows``), so a
+    /// re-sync is stable. Returns the entries plus the set of external ids currently vaulted,
+    /// for ``RomCatalogStore/syncPSNVault(entries:presentExternalIDs:)`` to remove claims that
+    /// vanished (or crossed the gate into the review sheet).
+    static func vaultEntries(trophyTitles: [PSNTrophyTitle],
+                             gameList: [PSNGameListTitle],
+                             purchases: [PSNPurchasedGame])
+        -> (entries: [RomCatalogEntry], presentExternalIDs: Set<String>) {
+        let index = MergeIndex()
+        for title in trophyTitles {
+            let (slug, combined) = platformSlug(title.trophyTitlePlatform)
+            index.upsert(concept: nil, title: nil, name: title.trophyTitleName)
+                .absorbTrophy(title, slug: slug, combined: combined)
+        }
+        for title in gameList {
+            index.upsert(concept: title.concept?.id, title: title.titleId, name: title.name)
+                .absorbGameList(title, slug: slug(fromCategory: title.category))
+        }
+        for purchase in purchases {
+            let (slug, _) = platformSlug(purchase.platform ?? "")
+            index.upsert(concept: purchase.conceptId, title: purchase.titleId, name: purchase.name)
+                .absorbPurchase(purchase, slug: slug)
+        }
+
+        var entries: [RomCatalogEntry] = []
+        var present = Set<String>()
+        for merged in index.ordered where merged.isVaulted {
+            let ext = merged.externalID
+            present.insert(ext)
+            entries.append(RomCatalogEntry.makePSNVault(
+                externalID: ext,
+                platform: merged.bestSlug ?? "",
+                name: merged.name,
+                coverURL: merged.coverURL,
+                membership: ProductSubscription.psPlus.rawValue,
+                crossGenNote: merged.vaultCrossGenNote))
+        }
+        return (entries, present)
+    }
+
     // MARK: - Join index
 
     /// A small union index keyed by concept id, title id and canonical name. A source item
@@ -236,6 +278,8 @@ enum PSNMapping {
         var anyEntitlementId: String?
         var isPreOrder = false
         var isActive = true
+        /// The PS Store cover URL (first purchase that carries one) — for the Vault (PLAN §16).
+        var coverURL: String?
 
         init(name: String) { self.name = name }
 
@@ -282,6 +326,24 @@ enum PSNMapping {
             if let unknown = m.unknownRaw { unknownMembership = unknownMembership ?? unknown }
             isPreOrder = isPreOrder || (p.isPreOrder ?? false)
             if p.isActive == false { isActive = false }
+            if coverURL == nil, let url = p.image?.url, !url.isEmpty { coverURL = url }
+        }
+
+        /// Whether this merged game goes to **The Vault** (PLAN §16): a PS Plus claim only
+        /// (never a bought copy), played at or below the 10-minute gate. Mirrors ``row()``'s
+        /// `vaulted` branch exactly, so the review sheet and the Vault never disagree.
+        var isVaulted: Bool {
+            guard purchaseSeen, !boughtSeen, plusSeen else { return false }
+            return (playDurationS ?? 0) <= PSNMapping.vaultGateSeconds
+        }
+
+        /// A "PS4 & PS5 versions"-style note when a vaulted claim spans generations.
+        var vaultCrossGenNote: String? {
+            guard purchasePlatforms.count > 1 else { return nil }
+            let names = purchasePlatforms
+                .sorted { PSNMapping.generationRankPublic($0) < PSNMapping.generationRankPublic($1) }
+                .map { $0.uppercased() }
+            return names.joined(separator: " & ") + " versions"
         }
 
         /// The chosen entitlement id for a cross-gen game: the **PS5** one wins, else PS4,
