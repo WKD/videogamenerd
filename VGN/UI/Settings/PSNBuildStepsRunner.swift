@@ -47,6 +47,13 @@ enum PSNBuildStepKind: String, CaseIterable, Sendable, Identifiable, Hashable {
         }
     }
 
+    /// The row title without its "S… · " label prefix ("Fetch all trophy titles") — used in
+    /// the confirm row's title and in the "run X first" notes.
+    var actionTitle: String {
+        guard let range = title.range(of: " · ") else { return title }
+        return String(title[range.upperBound...])
+    }
+
     /// The request-cost hint shown after the title ("(1)" or "(≈ n)").
     var costHint: String { isFullFetch ? "(≈ \(estimatedRequests))" : "(1)" }
 

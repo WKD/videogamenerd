@@ -137,21 +137,95 @@ struct PSNBuildStepsTests {
         #expect(runner.calls == [.fetchTrophyTitles])
     }
 
+    /// The 2026-09-20 bug: on the real account a full fetch used to want a SECOND confirmation,
+    /// requested while the first dialog was dismissing — which macOS silently dropped, so the
+    /// fetch never ran. There is now exactly ONE confirmation per full fetch, on every label.
     @Test(.timeLimit(.minutes(1)))
-    func realAccountFullFetchNeedsASecondConfirmation() async {
+    func oneConfirmRunsEachFullFetch() async {
+        for label in ["test", "real"] {
+            for full in [PSNBuildStepKind.fetchTrophyTitles, .fetchGameList, .fetchPurchases] {
+                clearPrefs()
+                let (model, runner) = await makeModel(label: label)
+                for prereq in [PSNBuildStepKind.probeProfile] + full.prerequisites {
+                    PSNBuildStepsGate.setPassed(label: label, kind: prereq, true)
+                }
+                model.activate(full)
+                #expect(model.pendingConfirm == .fullFetch(full), "\(label)/\(full): one confirm expected")
+                #expect(model.isConfirming(full))
+                #expect(runner.calls.isEmpty, "\(label)/\(full): must not run before the single confirm")
+                model.confirmPending()   // ONE confirm → runs
+                #expect(model.pendingConfirm == nil, "\(label)/\(full): no chained second dialog")
+                await poll(until: { !model.isRunning && model.row(full)?.status == .passed })
+                #expect(runner.calls == [full], "\(label)/\(full): exactly one runner call after one confirm")
+                clearPrefs()
+            }
+        }
+    }
+
+    /// The real account gets a single, STRONGER confirm (title + wording), not a chained one.
+    @Test(.timeLimit(.minutes(1)))
+    func realAccountConfirmIsStrongerButStillSingle() async {
         clearPrefs(); defer { clearPrefs() }
         let (model, runner) = await makeModel(label: "real")
         for kind in [PSNBuildStepKind.probeProfile, .probeGameList] {
             PSNBuildStepsGate.setPassed(label: "real", kind: kind, true)
         }
-        #expect(model.isRealAccount)
         model.activate(.fetchGameList)
-        model.confirmPending()   // first confirm → escalates to the real-account confirm
-        #expect(model.pendingConfirm == .realFullFetch(.fetchGameList))
-        #expect(runner.calls.isEmpty)
-        model.confirmPending()   // second confirm → runs
+        #expect(model.confirmTitle.contains("REAL ACCOUNT"))
+        #expect(model.confirmMessage.contains("your real account"))
+        #expect(model.confirmMessage.contains("used this session"))
+        #expect(model.confirmButtonTitle == "Fetch (2 requests)")
+        model.confirmPending()
         await poll(until: { !model.isRunning && model.row(.fetchGameList)?.status == .passed })
-        #expect(runner.calls == [.fetchGameList])
+        #expect(runner.calls == [.fetchGameList], "one confirm on real → exactly one call")
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func cancellingAConfirmRunsNothing() async {
+        clearPrefs(); defer { clearPrefs() }
+        for label in ["test", "real"] {
+            let (model, runner) = await makeModel(label: label)
+            for kind in [PSNBuildStepKind.probeProfile, .probeTrophyTitles] {
+                PSNBuildStepsGate.setPassed(label: label, kind: kind, true)
+            }
+            model.activate(.fetchTrophyTitles)
+            #expect(model.isConfirming(.fetchTrophyTitles))
+            model.cancelPending()
+            #expect(model.pendingConfirm == nil)
+            #expect(runner.calls.isEmpty, "\(label): cancel must run nothing")
+            #expect(model.isEnabled(.fetchTrophyTitles), "\(label): cancel re-enables the button")
+        }
+    }
+
+    /// A confirm whose step can no longer start must SAY why in the row, never do nothing.
+    @Test(.timeLimit(.minutes(1)))
+    func aBlockedConfirmYieldsAVisibleNote() async {
+        clearPrefs(); defer { clearPrefs() }
+        let (model, runner) = await makeModel()
+        for kind in [PSNBuildStepKind.probeProfile, .probeTrophyTitles] {
+            PSNBuildStepsGate.setPassed(label: "test", kind: kind, true)
+        }
+        model.activate(.fetchTrophyTitles)
+        #expect(model.isConfirming(.fetchTrophyTitles))
+        // The prerequisite is revoked between showing the confirm and pressing Fetch.
+        PSNBuildStepsGate.setPassed(label: "test", kind: .probeTrophyTitles, false)
+        model.confirmPending()
+        #expect(runner.calls.isEmpty, "a blocked confirm must not run")
+        #expect(model.row(.fetchTrophyTitles)?.status != .running)
+        let note = model.actionNote(for: .fetchTrophyTitles)
+        #expect(note != nil, "a blocked start must leave a visible note")
+        #expect(note?.contains("first") == true)
+    }
+
+    /// Clicking a disabled/blocked run (via the model's guarded entry) leaves a note too.
+    @Test(.timeLimit(.minutes(1)))
+    func activatingABlockedStepLeavesANote() async {
+        clearPrefs(); defer { clearPrefs() }
+        let (model, runner) = await makeModel()   // signed in, nothing probed
+        model.activate(.fetchTrophyTitles)         // prereqs missing
+        #expect(model.pendingConfirm == nil)
+        #expect(runner.calls.isEmpty)
+        #expect(model.actionNote(for: .fetchTrophyTitles)?.contains("first") == true)
     }
 
     // MARK: - Deliverable 2: reject lock → acknowledge → retry

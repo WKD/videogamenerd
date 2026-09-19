@@ -94,6 +94,40 @@ struct PSNBuildStepsClickTests {
         #expect(runner.callCount == 0, "no disabled step button may reach the runner")
     }
 
+    /// The inline confirm row is click-testable (unlike a system `confirmationDialog`): a real
+    /// click on a full fetch's "Fetch" button reveals the inline confirm, and a real click on
+    /// its confirm button starts exactly one runner call — the flow the 2026-09-20 bug broke on
+    /// the real account. Runs on the real label to prove the single (stronger) confirm works.
+    @Test(.timeLimit(.minutes(5)))
+    func inlineConfirmClickRunsExactlyOneFullFetch() async throws {
+        clearPrefs(); defer { clearPrefs() }
+        let runner = ScriptedPSNBuildRunner(session: true, onlineID: "test_nerd")
+        for kind in [PSNBuildStepKind.probeProfile, .probeTrophyTitles] {
+            PSNBuildStepsGate.setPassed(label: "real", kind: kind, true)
+        }
+        let model = PSNBuildStepsModel(runner: runner, accountLabel: "real")
+        await model.refresh()
+        #expect(model.isEnabled(.fetchTrophyTitles))
+
+        let window = ClickProbeWindow(PSNBuildStepsPanel(model: model),
+                                      size: NSSize(width: 700, height: 760))
+        defer { window.close() }
+        try await window.settle()
+
+        // 1) Click the full fetch's "Fetch" button (by its unique step-title tooltip) → the
+        //    inline confirm row appears; the fetch has NOT run yet.
+        try await clickUntil(window, tooltip: PSNBuildStepKind.fetchTrophyTitles.title,
+                             done: { model.isConfirming(.fetchTrophyTitles) })
+        #expect(model.isConfirming(.fetchTrophyTitles), "the Fetch button must reveal the inline confirm")
+        #expect(runner.callCount == 0, "showing the confirm must not run the fetch")
+
+        // 2) Click the confirm button (its unique title tooltip) → exactly one runner call.
+        try await clickUntil(window, tooltip: model.confirmButtonTitle,
+                             done: { runner.callCount > 0 })
+        await poll(until: { !model.isRunning && model.row(.fetchTrophyTitles)?.status == .passed })
+        #expect(runner.calls == [.fetchTrophyTitles], "one confirm click → exactly one full fetch")
+    }
+
     @Test(.timeLimit(.minutes(5)))
     func acknowledgeButtonUnlocksAfterAReject() async throws {
         clearPrefs(); defer { clearPrefs() }
