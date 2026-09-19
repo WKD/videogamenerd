@@ -14,7 +14,7 @@ Legend: **[doing]** being built now · **[later]** deliberately postponed · **[
 | Bulk "Mark Owned" | **Ask once for the batch**: one sheet (format for all; platform = each game's primary one, ambiguous games listed and fixable). Replaces the silent "physical on primary platform". **[doing]** |
 | Grid: letters vs type-to-select | **Tier / owned / played keys need ⇧** in the library grid (`⇧S…⇧F`, `⇧O`, `⇧P`); plain letters always type-to-select. `0` still clears the tier. Tier Board, Triage and Quick Add keep their own keys. Deterministic rule in the pure `GridKeyRouter`; Caps Lock is not ⇧. **[done]** |
 | Play Next snooze | Keep the fixed 21 days. |
-| UI smoke suite | Prepare a `--per-class` runner (one `xcodebuild` run per test class) but **only execute it when the owner says they are away from the Mac** (~15 min of keyboard/mouse takeover). **[doing: script only]** |
+| UI smoke suite | Prepare a `--per-class` runner (one `xcodebuild` run per test class) but **only execute it when the owner says they are away from the Mac** (10–20 min of keyboard/mouse takeover). **Script ready, never run**: `scripts/uitests.sh --per-class` (12 classes; `--list` previews; `--per-test` is the fallback). |
 | Signing | Stay "Sign to Run Locally" (ad-hoc) for now. Consequence: macOS may re-ask for Keychain access after rebuilds; hardened runtime effectively relaxed. |
 | Photo-scan tile size | **Measured 2026-09-19, no change.** IMG_3683 with 1100 × 2400 px tiles (rows kept whole; 16 calls instead of 8): recall 57/59 (97 %), precision 100 % — the same recall as the shipping 1850 × 2400 tiles for twice the calls, time (141 s) and notional cost ($6.76). The two misses (*The Last of Us Part I*, *Final Fantasy XIII-2*) are hard spines, not a resolution problem. Tiles under ~1 570 px high would cut each shelf row — and its spine titles — in two (20–24 calls); not tried. Re-run any geometry with `VGN_SCAN_TILE=WxH[xOverlap] scripts/scan-accuracy.sh IMG_3683` (`VGN_SCAN_DRYRUN=1` counts tiles for free). |
 | Data folder | Stays `~/Library/Application Support/VGN/` although the app is now "Video Game Nerd" (`com.pomatelier.VideoGameNerd`). |
@@ -50,7 +50,6 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 ### Ranking
 - The Top: no insertion line while hovering during a reorder drag. **[doing]** Reorder and divider drag are disabled while a filter is active (by design).
 - Divider drag maps a fixed 44 pt to one game. [owner: judge the feel]
-- The ranking drag type (`com.videogamenerd.ranking-item`) is not declared in Info.plist → benign console note. **[doing: cleanup batch]**
 - Derived-score bands are constants for six tiers; any other tier count falls back to equal bands. Border duels are logged as `refine`; accepting a border suggestion moves the game to the new tier *unplaced*. Undo: per answer inside a placement + one step for the last completed action (history 50). Triage "back" clears the tier directly; a `U` un-play is not restored by "back".
 - Perf at 2 000 ranked games (DEBUG): tier board 43 ms, The Top ~50 ms, duel answer 7 ms. [watch]
 
@@ -70,7 +69,7 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 - Libretro hit rate on a real retro library is unmeasured (9 of 10 covers came from IGDB in the smoke test, as expected for modern platforms). Fuzzy thresholds 0.90 / 0.74 were hand-tuned, then held up in the live scan.
 
 ### Safety
-- Export (JSON/CSV) and Restore from Backup… are in the File menu; the restore *glue* (`PendingRestore`, applied at next launch after a safety snapshot) is not unit-tested yet. **[doing: cleanup batch]** [owner: try a restore once before relying on it]
+- Export (JSON/CSV) and Restore from Backup… are in the File menu; the restore glue (`PendingRestore`, applied at next launch after a safety snapshot) is unit-tested since 2026-09-19 (no bug found). [owner: still try a restore once before relying on it]
 
 ## 5. Out of scope for now [later]
 PSN import (M7, fully planned in PLAN §13) · Polish M9 (Liquid Glass touches, Dark/Tinted icon via Icon Composer — masters in `design/app-icon/`, Top export as image, richer empty states) · HowLongToBeat scraping (the "Open on HowLongToBeat" link exists) · TheGamesDB covers · `ClaudeAPIRecognizer` · editable tier labels/colours (owner: not now) · adjustable snooze.
