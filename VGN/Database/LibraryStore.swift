@@ -209,6 +209,29 @@ struct LibraryStore: Sendable {
         }
     }
 
+    /// Add one owned copy (a single Product) to each of several games in **one
+    /// transaction** — the write side of the ask-once "Mark Owned" batch (PLAN §8).
+    /// The caller decides which games to include (already-owned games are filtered
+    /// out beforehand) and the platform/format per game; this writes exactly what
+    /// it is given. Returns the new product ids, in the order supplied. Empty in →
+    /// empty out (no transaction).
+    @discardableResult
+    func addCopies(_ specs: [BatchCopySpec]) async throws -> [Int64] {
+        guard !specs.isEmpty else { return [] }
+        return try await dbWriter.write { db in
+            var productIDs: [Int64] = []
+            for spec in specs {
+                try Self.ensureGamePlatform(gameID: spec.gameID, platformID: spec.platformID,
+                                            played: false, db: db)
+                productIDs.append(try Self.makeSingleProduct(
+                    gameID: spec.gameID, platformID: spec.platformID,
+                    format: spec.format, source: .manual,
+                    edition: nil, region: nil, db: db))
+            }
+            return productIDs
+        }
+    }
+
     /// Remove a product (any kind). Un-owns every member game; compilation
     /// ownership is therefore all-or-nothing. Members left neither owned nor
     /// played trigger `.wouldOrphan` unless `confirmOrphanDelete` is set.

@@ -39,6 +39,9 @@ struct RootView: View {
         .sheet(item: $vm.ownershipRequest) { request in
             OwnershipPickerSheet(request: request) { vm.ownershipRequest = nil }
         }
+        .sheet(item: $vm.batchOwnershipRequest) { model in
+            BatchOwnershipSheet(model: model) { vm.batchOwnershipRequest = nil }
+        }
         .sheet(item: $vm.copyRemovalRequest) { request in
             CopyRemovalSheet(request: request) { vm.copyRemovalRequest = nil }
         }

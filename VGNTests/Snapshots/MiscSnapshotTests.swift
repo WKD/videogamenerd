@@ -89,6 +89,23 @@ struct MiscSnapshotTests {
         }
     }
 
+    @Test func batchOwnership() async {
+        let games = [
+            GameSummary(id: 1, title: "Elden Ring", owned: false, platformIDs: ["ps5", "ps4", "pc"]),
+            GameSummary(id: 2, title: "Hades II", owned: false, platformIDs: ["switch", "pc"]),
+            GameSummary(id: 3, title: "Celeste", owned: false, platformIDs: ["switch"]),
+            GameSummary(id: 4, title: "Hollow Knight", owned: false, platformIDs: ["pc"]),
+            GameSummary(id: 5, title: "Tunic", owned: true, platformIDs: ["pc"]),
+        ]
+        let model = BatchOwnershipModel(games: games, allPlatforms: PlatformLabels.all,
+                                        preferences: InMemoryBatchOwnershipPreferences(),
+                                        onConfirm: { _ in })
+        await SnapshotHarness.capture(group: sheetsGroup, "sheet-batch-owned",
+                                      size: SnapSize(width: 480, height: 460)) {
+            BatchOwnershipSheet(model: model, onClose: {})
+        }
+    }
+
     // MARK: Stats popover
 
     @Test func statsPopover() async {

@@ -110,6 +110,9 @@ final class LibraryViewModel {
     var pendingConfirmation: LibraryConfirmation?
     /// A pending "add a copy" flow needing a platform + format choice.
     var ownershipRequest: OwnershipRequest?
+    /// A pending ask-once "Mark N Games as Owned" batch sheet (PLAN §8). Set only
+    /// from an action handler, never a body/menu builder.
+    var batchOwnershipRequest: BatchOwnershipModel?
     /// A pending "remove which copies?" flow.
     var copyRemovalRequest: CopyRemovalRequest?
     /// The compilation editor sheet's model, or nil (PLAN §5.1). Set by the app's
