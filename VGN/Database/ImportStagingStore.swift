@@ -68,6 +68,11 @@ struct PSNCommit: Sendable, Equatable {
     var markPlayed: Bool
     /// PSN play time in seconds → `psn_playtime_s` (never overwrites manual `my_playtime_s`).
     var playDurationS: Int?
+    /// **(Batocera, PLAN §15)** Store `playDurationS` only when the game has NO play time at
+    /// all (both `my_playtime_s` and `psn_playtime_s` NULL), so a promoted ROM never clobbers
+    /// a real PSN value. false (default) keeps the PSN path byte-for-byte: PSN writes
+    /// `psn_playtime_s` unconditionally.
+    var playtimeOnlyIfEmpty: Bool
     /// A completion status to pre-fill **only when the game has none** (100 % title).
     var statusPrefill: PlayStatus?
     /// Earliest / latest known play date (v9, PLAN §13.3). Written monotonically
@@ -78,7 +83,8 @@ struct PSNCommit: Sendable, Equatable {
 
     init(createProduct: Bool, subscription: String? = nil, markPlayed: Bool = false,
          playDurationS: Int? = nil, statusPrefill: PlayStatus? = nil,
-         firstPlayedAt: Date? = nil, lastPlayedAt: Date? = nil) {
+         firstPlayedAt: Date? = nil, lastPlayedAt: Date? = nil,
+         playtimeOnlyIfEmpty: Bool = false) {
         self.createProduct = createProduct
         self.subscription = subscription
         self.markPlayed = markPlayed
@@ -86,6 +92,7 @@ struct PSNCommit: Sendable, Equatable {
         self.statusPrefill = statusPrefill
         self.firstPlayedAt = firstPlayedAt
         self.lastPlayedAt = lastPlayedAt
+        self.playtimeOnlyIfEmpty = playtimeOnlyIfEmpty
     }
 }
 
@@ -334,10 +341,13 @@ struct ImportStagingStore: Sendable {
         case .existingGame(let id):
             gameID = id
         case .newGame(let spec):
+            // The game's origin is the importer's source (PSN, Batocera, …) — not always PSN,
+            // now that Batocera also commits through this played-data path (PLAN §15).
             let draft = GameDraft(
                 title: spec.title, igdbID: spec.igdbID, year: spec.releaseYear,
                 altTitles: spec.altTitles, platformIDs: [item.platformID],
-                owned: false, played: psn.markPlayed, source: .psn)
+                owned: false, played: psn.markPlayed,
+                source: ProductSource(rawValue: item.source) ?? .psn)
             let outcome = try LibraryStore.insert(draft, db)
             gameID = outcome.gameID
             if case .created = outcome { result.gamesCreated += 1 }
@@ -358,8 +368,13 @@ struct ImportStagingStore: Sendable {
         if psn.markPlayed {
             try LibraryStore.markPlayedWithoutCopy(gameID: gameID, platformID: item.platformID, db: db)
         }
-        // PSN play time (never overwrites a manual value).
-        try LibraryStore.setPSNPlaytime(gameID: gameID, seconds: psn.playDurationS, db: db)
+        // Play time. PSN writes `psn_playtime_s` unconditionally (never over a manual value);
+        // Batocera (`playtimeOnlyIfEmpty`) writes only when the game has no play time at all.
+        if psn.playtimeOnlyIfEmpty {
+            try LibraryStore.setImportedPlaytimeIfEmpty(gameID: gameID, seconds: psn.playDurationS, db: db)
+        } else {
+            try LibraryStore.setPSNPlaytime(gameID: gameID, seconds: psn.playDurationS, db: db)
+        }
         // Earliest / latest known play date (monotonic; nil never overwrites).
         try LibraryStore.setPSNPlayedDates(gameID: gameID, first: psn.firstPlayedAt,
                                            last: psn.lastPlayedAt, db: db)
