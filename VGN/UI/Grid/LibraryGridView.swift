@@ -149,6 +149,11 @@ struct LibraryGridView: View {
             Button("Group as Compilation…") { act(on: game) { vm.onGroupAsCompilation($0) } }
         }
         Divider()
+        // Cover is per-game: only offered for a single target (not a multi-selection),
+        // and only when the loader can browse candidates. PURE — reads only.
+        if ids.count == 1, vm.canChooseCover {
+            Button("Choose Cover…") { vm.requestChooseCover(gameID: game.id) }
+        }
         Button("Show Inspector") {
             if !vm.selectedGameIDs.contains(game.id) { vm.selectOnly(game.id) }
             vm.showInspector()

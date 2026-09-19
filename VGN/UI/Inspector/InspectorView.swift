@@ -89,15 +89,8 @@ struct InspectorView: View {
 private struct SingleGameInspector: View {
     @Bindable var vm: LibraryViewModel
     let detail: GameDetail
-    /// The "Choose Cover…" sheet's model while presented (PLAN §5.2 step 4).
-    @State private var chooseCover: ChooseCoverModel?
 
     private var ids: Set<Int64> { [detail.id] }
-
-    /// The cover loader offers candidate browsing (live / sample services present).
-    private var coverChooser: (any ChooseCoverProviding)? {
-        vm.coverLoader as? (any ChooseCoverProviding)
-    }
 
     var body: some View {
         ScrollView {
@@ -125,12 +118,12 @@ private struct SingleGameInspector: View {
                     .help("Re-fetch metadata, cover and completion times from IGDB.")
 
                     Button {
-                        presentChooseCover()
+                        vm.requestChooseCover(gameID: detail.id)
                     } label: {
                         Label("Choose Cover…", systemImage: "photo.stack")
                     }
                     .buttonStyle(.borderless)
-                    .disabled(coverChooser == nil)
+                    .disabled(!vm.canChooseCover)
                     .help("Browse every cover from all providers, or pick an image file.")
 
                     if detail.userEditedCover {
@@ -170,20 +163,6 @@ private struct SingleGameInspector: View {
             }
             .padding(16)
         }
-        .sheet(item: $chooseCover) { model in
-            ChooseCoverSheet(model: model, loader: vm.coverLoader)
-        }
-    }
-
-    /// Build and present the "Choose Cover…" sheet for this game. Never called from
-    /// `body` — only from the button action — so it may write view state.
-    private func presentChooseCover() {
-        guard let chooser = coverChooser else { return }
-        let model = ChooseCoverModel(
-            gameID: detail.id, title: detail.title,
-            currentCoverFile: detail.coverFile, backend: chooser)
-        model.onFinished = { chooseCover = nil }
-        chooseCover = model
     }
 
     // MARK: Played + status
