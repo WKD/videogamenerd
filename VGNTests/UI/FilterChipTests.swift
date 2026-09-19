@@ -116,6 +116,48 @@ struct FilterChipTests {
         #expect(Set(chips.map(\.id)).count == chips.count)   // unique ids
     }
 
+    // MARK: - Playtime bands + "No Estimate"
+
+    @Test func playtimeBandAndNoEstimateChips() {
+        var f = LibraryFilter(scope: .all)
+        f.playtimes = [.over200, .short, .h80to100]
+        f.includeNoTimeEstimate = true
+        let chips = LibraryFilterChips.chips(for: f, tiers: tiers)
+        // Band chips in canonical (ascending) order, then the standalone No Estimate.
+        #expect(chips.map(\.kind) == [.playtime, .playtime, .playtime, .noEstimate])
+        #expect(chips.filter { $0.kind == .playtime }.map(\.valueLabel)
+                == ["< 10 h", "80–100 h", "> 200 h"])
+        #expect(chips.first?.text == "Playtime: < 10 h")
+        #expect(chips.dropFirst().first?.text == "or 80–100 h")
+
+        let noEstimate = try! #require(chips.first { $0.kind == .noEstimate })
+        #expect(noEstimate.text == "No Estimate")          // standalone
+        #expect(noEstimate.fullLabel == "No Estimate")
+
+        // Removing a band chip leaves the rest and the flag.
+        let short = try! #require(chips.first { $0.kind == .playtime && $0.value == "short" })
+        let afterShort = LibraryFilterChips.removing(short, from: f)
+        #expect(afterShort.playtimes == [.over200, .h80to100])
+        #expect(afterShort.includeNoTimeEstimate == true)
+
+        // Removing the No Estimate chip clears only the flag.
+        let afterNoEst = LibraryFilterChips.removing(noEstimate, from: f)
+        #expect(afterNoEst.includeNoTimeEstimate == false)
+        #expect(afterNoEst.playtimes == [.over200, .short, .h80to100])
+        #expect(Set(chips.map(\.id)).count == chips.count)
+    }
+
+    @Test func noEstimateCountsAsActiveAndClearsWithAll() {
+        #expect(LibraryFilter(includeNoTimeEstimate: true, scope: .all).hasActiveFacets)
+        var f = LibraryFilter(scope: .all)
+        f.playtimes = [.medium]
+        f.includeNoTimeEstimate = true
+        let cleared = LibraryFilterChips.cleared(f)
+        #expect(cleared.playtimes.isEmpty)
+        #expect(cleared.includeNoTimeEstimate == false)
+        #expect(!cleared.hasActiveFacets)
+    }
+
     @Test func extraFlagsCountAsActiveFacetsAndClearAllResetsThem() {
         #expect(LibraryFilter(includeUnrated: true, scope: .all).hasActiveFacets)
         #expect(LibraryFilter(includeNotPlayed: true, scope: .all).hasActiveFacets)

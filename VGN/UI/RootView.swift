@@ -300,23 +300,31 @@ struct RootView: View {
         }
     }
 
-    // Playtime bands (< 10 h / 10–40 h / > 40 h) over effective playtime, falling
-    // back to the IGDB main estimate when unplayed (PLAN §6.4).
+    // Playtime bands (< 10 h … > 200 h) over effective playtime, falling back to the
+    // best IGDB estimate (main → rushed → completionist) when unplayed; plus
+    // "No Estimate" for games with no time info at all (PLAN §6.4/§8, §5.3).
     private var playtimeMenu: some View {
         Menu {
             ForEach(PlaytimeBucket.allCases) { bucket in
                 Toggle(bucket.label, isOn: membership(\.playtimes, bucket))
             }
             Divider()
-            Text("Uses your time, or the IGDB main estimate when unplayed.")
-            if !vm.filter.playtimes.isEmpty {
+            Toggle("No Estimate", isOn: flag(\.includeNoTimeEstimate))
+                .help("Games with no completion time at all — nothing to fetch — which impairs Play Next.")
+            Divider()
+            Text("Uses your time, or the IGDB estimate when unplayed.")
+            if playtimeFacetActive {
                 Divider()
-                Button("Clear") { clear(\.playtimes) }
+                Button("Clear") { clearPlaytimeFacet() }
             }
         } label: {
             Label("Playtime", systemImage: "clock")
-                .symbolVariant(vm.filter.playtimes.isEmpty ? .none : .fill)
+                .symbolVariant(playtimeFacetActive ? .fill : .none)
         }
+    }
+
+    private var playtimeFacetActive: Bool {
+        !vm.filter.playtimes.isEmpty || vm.filter.includeNoTimeEstimate
     }
 
     // Platform multi-filter, usable from any scope incl. "All" (in-use platforms).
@@ -405,6 +413,13 @@ struct RootView: View {
         var f = vm.filter
         f.formats.removeAll()
         f.includeNotOwned = false
+        vm.setFilter(f)
+    }
+
+    private func clearPlaytimeFacet() {
+        var f = vm.filter
+        f.playtimes.removeAll()
+        f.includeNoTimeEstimate = false
         vm.setFilter(f)
     }
 }

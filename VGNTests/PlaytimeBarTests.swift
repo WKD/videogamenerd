@@ -52,12 +52,22 @@ import Testing
 
     @Test func bucketBoundaries() {
         #expect(PlaytimeBucket.short.contains(5 * h))
-        #expect(!PlaytimeBucket.short.contains(10 * h))      // 10 h is medium
+        #expect(!PlaytimeBucket.short.contains(10 * h))         // 10 h is medium
         #expect(PlaytimeBucket.medium.contains(10 * h))
         #expect(PlaytimeBucket.medium.contains(39 * h))
-        #expect(!PlaytimeBucket.medium.contains(40 * h))     // 40 h is long
-        #expect(PlaytimeBucket.long.contains(40 * h))
-        #expect(PlaytimeBucket.long.contains(200 * h))
+        #expect(!PlaytimeBucket.medium.contains(40 * h))        // 40 h → next band
+        #expect(PlaytimeBucket.h40to60.contains(40 * h))
+        #expect(!PlaytimeBucket.h40to60.contains(60 * h))       // 60 h → next band
+        #expect(PlaytimeBucket.h60to80.contains(79 * h))
+        #expect(!PlaytimeBucket.h60to80.contains(80 * h))       // 80 h → next band
+        #expect(PlaytimeBucket.h80to100.contains(80 * h))
+        #expect(!PlaytimeBucket.h80to100.contains(100 * h))
+        #expect(PlaytimeBucket.h100to150.contains(100 * h))
+        #expect(!PlaytimeBucket.h100to150.contains(150 * h))
+        #expect(PlaytimeBucket.h150to200.contains(150 * h))
+        #expect(!PlaytimeBucket.h150to200.contains(200 * h))    // 200 h → over200
+        #expect(PlaytimeBucket.over200.contains(200 * h))
+        #expect(PlaytimeBucket.over200.contains(1000 * h))
     }
 
     // MARK: - Derived-score line text

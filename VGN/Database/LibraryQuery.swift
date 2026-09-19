@@ -197,7 +197,8 @@ enum LibraryQuery {
                 """)
             args.append(contentsOf: gs.map { $0 as DatabaseValueConvertible })
         }
-        appendPlaytimeBuckets(filter.playtimes, into: &wheres, args: &args)
+        appendPlaytimeFacet(filter.playtimes, includeNoEstimate: filter.includeNoTimeEstimate,
+                            into: &wheres, args: &args)
         if let match = ftsMatch(filter.searchText) {
             wheres.append("g.id IN (SELECT rowid FROM games_fts WHERE games_fts MATCH ?)")
             args.append(match)
@@ -213,19 +214,25 @@ enum LibraryQuery {
     }
 
     /// The seconds a game is bucketed on for the playtime filter: effective
-    /// playtime (manual over PSN), falling back to the IGDB main estimate for a
-    /// game with none (PLAN §6.4). Reused so the SQL and any test agree.
-    static let playtimeBucketExpr = "COALESCE(g.my_playtime_s, g.psn_playtime_s, g.ttb_normally_s)"
+    /// playtime (manual over PSN), falling back to the best available IGDB estimate
+    /// (main → rushed → completionist) for a game with none, so a game with only a
+    /// *hastily* or *completely* estimate is still banded rather than dropped
+    /// (PLAN §6.4/§8). Reused so the SQL, the band bounds and any test agree, and so
+    /// "No Estimate" (this expression `IS NULL`) means exactly "no time info to fetch".
+    static let playtimeBucketExpr =
+        "COALESCE(g.my_playtime_s, g.psn_playtime_s, g.ttb_normally_s, g.ttb_hastily_s, g.ttb_completely_s)"
 
-    /// OR-within-kind band filter: a game matches if its bucket value falls in any
-    /// selected band. Games with no value at all are excluded.
-    private static func appendPlaytimeBuckets(
-        _ buckets: Set<PlaytimeBucket>,
+    /// OR-within-kind playtime filter: a game matches if its bucket value falls in
+    /// any selected band, OR (when `includeNoEstimate`) it has no bucket value at all
+    /// (no effective playtime and no IGDB estimate of any kind). Buckets are emitted
+    /// in canonical (ascending) order so the SQL is deterministic.
+    private static func appendPlaytimeFacet(
+        _ buckets: Set<PlaytimeBucket>, includeNoEstimate: Bool,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
-        guard !buckets.isEmpty else { return }
+        guard !buckets.isEmpty || includeNoEstimate else { return }
         var ors: [String] = []
-        for bucket in buckets.sorted(by: { $0.rawValue < $1.rawValue }) {
+        for bucket in PlaytimeBucket.allCases where buckets.contains(bucket) {
             var conds: [String] = ["\(playtimeBucketExpr) IS NOT NULL"]
             if let lower = bucket.lowerSeconds {
                 conds.append("\(playtimeBucketExpr) >= ?"); args.append(lower)
@@ -235,7 +242,8 @@ enum LibraryQuery {
             }
             ors.append("(" + conds.joined(separator: " AND ") + ")")
         }
-        wheres.append("(" + ors.joined(separator: " OR ") + ")")
+        if includeNoEstimate { ors.append("\(playtimeBucketExpr) IS NULL") }
+        appendOR(ors, into: &wheres)
     }
 
     // MARK: - Ordering

@@ -41,6 +41,24 @@ struct FilterChipsClickTests {
     }
 
     @Test(.timeLimit(.minutes(5)))
+    func playtimeBandChipRemoveButtonReceivesClicks() async throws {
+        let vm = LibraryViewModel(dataSource: PreviewLibraryDataSource.sampled)
+        var f = LibraryFilter(scope: .all)
+        f.playtimes = [.h80to100]
+        f.includeNoTimeEstimate = true
+        vm.setFilter(f)
+        #expect(vm.filterChips.map(\.kind) == [.playtime, .noEstimate])
+
+        let window = ClickProbeWindow(RootView(vm: vm).frame(minWidth: 900, minHeight: 600))
+        defer { window.close() }
+        try await window.settle()
+        let removed = try await window.sweep(band: 40, stepX: 10, stepY: 6) { vm.filterChips.count } until: { vm.filterChips.isEmpty }
+        #expect(removed >= 1, "no click reached the playtime chips")
+        #expect(vm.filterChips.isEmpty)
+        #expect(!vm.filter.hasActiveFacets)
+    }
+
+    @Test(.timeLimit(.minutes(5)))
     func clearAllAloneEmptiesTheFilter() async throws {
         let vm = makeVM()
         let bar = VStack(spacing: 0) { FilterChipsBar(vm: vm); Color.clear }.toolbar { Button("X") {} }
