@@ -159,9 +159,25 @@ private struct SingleGameInspector: View {
                 Divider()
                 playtimeSection
 
+                originFooter
+
                 Spacer(minLength: 0)
             }
             .padding(16)
+        }
+    }
+
+    /// A single, quiet line recording when and how the game entered the library
+    /// (owner request — debugging, not prominent): "Added 19 Sep 2026 · via GOG".
+    @ViewBuilder
+    private var originFooter: some View {
+        let added = detail.addedAt.formatted(date: .abbreviated, time: .omitted)
+        if let origin = detail.origin {
+            Text("Added \(added) · via \(origin.label)")
+                .font(.caption2).foregroundStyle(.tertiary)
+        } else {
+            Text("Added \(added)")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
     }
 
