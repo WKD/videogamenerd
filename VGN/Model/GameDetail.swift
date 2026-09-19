@@ -61,6 +61,13 @@ struct GameDetail: Sendable, Hashable, Identifiable {
     /// True when this game is a member of at least one compilation product.
     var isCompilationMember: Bool { copies.contains { $0.memberCount > 1 } }
 
+    /// True when the game is owned but **every** owned copy is a subscription copy
+    /// (PLAN §13.3 — "a game I own only through PS Plus is what matters"). A copy also
+    /// owned on disc is not at risk, so this is false. Drives the inspector "+" badge.
+    var ownedOnlyViaSubscription: Bool {
+        owned && !copies.isEmpty && copies.allSatisfy { $0.subscription != nil }
+    }
+
     /// The effective playtime shown to the user: manual value wins over PSN
     /// (PLAN §6.4).
     var effectivePlaytimeS: Int? { myPlaytimeS ?? psnPlaytimeS }
@@ -83,6 +90,10 @@ struct GameDetail: Sendable, Hashable, Identifiable {
         var edition: String?
         var region: String?
         var source: ProductSource
+        /// Subscription licence for this copy, or nil = really owned (PLAN §13.3). When
+        /// ``ProductSubscription/isPSPlus`` the inspector's copy row reads
+        /// "PS Plus — expires with the subscription".
+        var subscription: ProductSubscription?
         /// This game's 0-based position within the product.
         var position: Int
         /// Total number of games in the product (> 1 ⇒ compilation).
@@ -107,6 +118,7 @@ struct GameDetail: Sendable, Hashable, Identifiable {
             edition: String? = nil,
             region: String? = nil,
             source: ProductSource,
+            subscription: ProductSubscription? = nil,
             position: Int,
             memberCount: Int,
             memberTitles: [String] = [],
@@ -120,6 +132,7 @@ struct GameDetail: Sendable, Hashable, Identifiable {
             self.edition = edition
             self.region = region
             self.source = source
+            self.subscription = subscription
             self.position = position
             self.memberCount = memberCount
             self.memberTitles = memberTitles

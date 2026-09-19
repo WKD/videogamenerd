@@ -16,6 +16,9 @@ struct ProductRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendab
     var coverFile: String?
     var source: String               // ProductSource rawValue
     var psnEntitlement: String?
+    /// Subscription licence for this copy, or nil = really owned (v8, PLAN §13.3).
+    /// `'ps_plus'` for a PS Plus claim; a raw unknown membership string is kept as-is.
+    var subscription: String?
     var acquiredAt: Date?
     var createdAt: Date
     var updatedAt: Date
@@ -34,6 +37,7 @@ struct ProductRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendab
         case coverFile = "cover_file"
         case source
         case psnEntitlement = "psn_entitlement"
+        case subscription
         case acquiredAt = "acquired_at"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -55,6 +59,7 @@ struct ProductRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendab
         coverFile: String? = nil,
         source: ProductSource = .manual,
         psnEntitlement: String? = nil,
+        subscription: String? = nil,
         acquiredAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
@@ -70,6 +75,7 @@ struct ProductRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendab
         self.coverFile = coverFile
         self.source = source.rawValue
         self.psnEntitlement = psnEntitlement
+        self.subscription = subscription
         self.acquiredAt = acquiredAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt

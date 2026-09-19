@@ -22,6 +22,9 @@ struct GridQueryPerfTests {
                    WHERE pg.game_id = g.id AND p.kind = 'compilation') AS is_comp,
             EXISTS(SELECT 1 FROM product_games pgr JOIN products pr ON pr.id = pgr.product_id
                    WHERE pgr.game_id = g.id AND pr.format = 'rom') AS has_rom,
+            (SELECT COALESCE(MIN(p3.subscription IS NOT NULL), 0)
+               FROM product_games pg3 JOIN products p3 ON p3.id = pg3.product_id
+               WHERE pg3.game_id = g.id) AS sub_only,
             (SELECT group_concat(pid) FROM (
                 SELECT platform_id AS pid FROM game_platforms WHERE game_id = g.id
                 UNION
