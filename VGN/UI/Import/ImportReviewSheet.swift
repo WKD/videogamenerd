@@ -216,8 +216,14 @@ final class ImportReviewModel {
     }
 
     static func successMessage(from result: ImportCommitResult, sourceLabel: String) -> String {
-        let imported = result.gamesCreated + result.productsAdded
+        // One imported title = one copy added. A brand-new game ALSO bumps `gamesCreated`,
+        // so summing the two counted every new game twice ("10 selected → 20 imported").
+        let imported = result.productsAdded
         var bits = ["\(imported) game\(imported == 1 ? "" : "s") imported from \(sourceLabel)"]
+        let addedToExisting = imported - result.gamesCreated
+        if result.gamesCreated > 0, addedToExisting > 0 {
+            bits.append("\(result.gamesCreated) new · \(addedToExisting) added to games you already had")
+        }
         if result.skippedExisting > 0 {
             bits.append("\(result.skippedExisting) already in your library")
         }

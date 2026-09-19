@@ -177,9 +177,17 @@ struct ImportReviewModelTests {
 
     @Test(.timeLimit(.minutes(1)))
     func successMessageCountsImportedAndExisting() {
-        let result = ImportCommitResult(gamesCreated: 3, productsAdded: 1, skippedExisting: 2)
-        let message = ImportReviewModel.successMessage(from: result, sourceLabel: "GOG")
-        #expect(message == "4 games imported from GOG · 2 already in your library")
+        // Every imported title adds one copy; a brand-new game ALSO counts in
+        // `gamesCreated`. Owner bug 2026-09-19: the two were summed ("10 → 20").
+        let allNew = ImportCommitResult(gamesCreated: 10, productsAdded: 10, skippedExisting: 0)
+        #expect(ImportReviewModel.successMessage(from: allNew, sourceLabel: "GOG") == "10 games imported from GOG")
+
+        let mixed = ImportCommitResult(gamesCreated: 3, productsAdded: 4, skippedExisting: 2)
+        #expect(ImportReviewModel.successMessage(from: mixed, sourceLabel: "GOG")
+                == "4 games imported from GOG · 3 new · 1 added to games you already had · 2 already in your library")
+
+        let one = ImportCommitResult(gamesCreated: 1, productsAdded: 1, skippedExisting: 0)
+        #expect(ImportReviewModel.successMessage(from: one, sourceLabel: "GOG") == "1 game imported from GOG")
     }
 
     @Test(.timeLimit(.minutes(2)))
