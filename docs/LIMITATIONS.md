@@ -19,7 +19,7 @@ Legend: **[doing]** being built now · **[later]** deliberately postponed · **[
 | Photo-scan tile size | **Measured 2026-09-19, no change.** IMG_3683 with 1100 × 2400 px tiles (rows kept whole; 16 calls instead of 8): recall 57/59 (97 %), precision 100 % — the same recall as the shipping 1850 × 2400 tiles for twice the calls, time (141 s) and notional cost ($6.76). The two misses (*The Last of Us Part I*, *Final Fantasy XIII-2*) are hard spines, not a resolution problem. Tiles under ~1 570 px high would cut each shelf row — and its spine titles — in two (20–24 calls); not tried. Re-run any geometry with `VGN_SCAN_TILE=WxH[xOverlap] scripts/scan-accuracy.sh IMG_3683` (`VGN_SCAN_DRYRUN=1` counts tiles for free). |
 | Data folder | Stays `~/Library/Application Support/VGN/` although the app is now "Video Game Nerd" (`com.pomatelier.VideoGameNerd`). |
 | Build now | Library stats view · cleanup batch · insertion line for The Top's reorder drag. ("Choose cover…" sheet + grid entry and Undo for Play Next "Start playing" are **done**, wave 7 lane B.) **[doing]** |
-| Next milestone | **GOG import (M8)** — to be planned with the same cache-first / stop-and-ask posture as PSN (PLAN §13) before any live request. PSN (M7) and Polish (M9) after. |
+| Next milestone | **GOG import (M8)**, planned in PLAN §14 and built before PSN (it creates the shared importer machinery). Sign-in = **OAuth** (owner, 2026-09-19) with GOG's publicly documented Galaxy client credentials, kept in one file. Same cache-first / stop-and-ask protocol as PSN; live steps G1–G5 need the owner present. PSN (M7) and Polish (M9) after. |
 
 ## 2. The big caveat: the GUI has barely been driven
 
