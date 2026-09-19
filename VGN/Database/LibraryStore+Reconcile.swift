@@ -24,11 +24,13 @@ struct ReconcileCopy: Sendable, Hashable, Identifiable {
     var region: String?
     var acquiredAt: Date?
     var psnEntitlement: String?
+    /// The subscription licence on this copy, or nil = really owned (v8, PLAN §13.3).
+    /// Rule 4: a subscription copy is **never** collapsed into a non-subscription copy
+    /// (or a differently-subscribed one) — the merge planner keeps both.
+    var subscription: ProductSubscription? = nil
     /// The product has more than one member game (a compilation) — never collapsed;
     /// merging only re-points this game's membership.
     var isCompilation: Bool
-    // TODO(PSN merge): once `products.subscription` lands (PSN lane), carry it here and
-    // never collapse a subscription copy into a non-subscription one (rule 4).
 
     var id: Int64 { productID }
 }
@@ -91,9 +93,13 @@ enum MergePlanner {
         if sc.isCompilation {
             return CopyMergeDecision(copy: sc, outcome: .keep)
         }
-        // Rule 1: no target copy on the same platform + format → keep both.
+        // Rule 1 + Rule 4: a copy only ever collapses into a target copy on the same
+        // platform + format **and with the same subscription state** — a subscription copy
+        // is never collapsed into a non-subscription copy (or a differently-subscribed one),
+        // and vice-versa (different licences, different lifetimes). No such target → keep both.
         guard let tc = target.first(where: {
-            $0.platformID == sc.platformID && $0.format == sc.format && !$0.isCompilation
+            $0.platformID == sc.platformID && $0.format == sc.format
+                && $0.subscription == sc.subscription && !$0.isCompilation
         }) else {
             return CopyMergeDecision(copy: sc, outcome: .keep)
         }
@@ -475,6 +481,7 @@ extension LibraryStore {
             SELECT p.id AS id, p.platform_id AS platform_id, p.format AS format, p.source AS source,
                    p.external_id AS external_id, p.edition AS edition, p.region AS region,
                    p.acquired_at AS acquired_at, p.psn_entitlement AS psn_entitlement,
+                   p.subscription AS subscription,
                    (SELECT COUNT(*) FROM product_games pg2 WHERE pg2.product_id = p.id) AS member_count
             FROM products p JOIN product_games pg ON pg.product_id = p.id
             WHERE pg.game_id = ?
@@ -488,6 +495,7 @@ extension LibraryStore {
                 source: ProductSource(rawValue: row["source"]) ?? .manual,
                 externalID: row["external_id"], edition: row["edition"], region: row["region"],
                 acquiredAt: row["acquired_at"], psnEntitlement: row["psn_entitlement"],
+                subscription: ProductSubscription(storage: row["subscription"]),
                 isCompilation: members > 1)
         }
     }

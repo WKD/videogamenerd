@@ -33,6 +33,10 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
     var hltbID: Int64?
     /// How the game first entered the library, for debugging (v6). See ``GameOrigin``.
     var origin: String?
+    /// Earliest / latest known play date (v9), filled only by importers (PSN). See
+    /// ``LibraryStore/setPSNPlayedDates(gameID:first:last:db:)``.
+    var firstPlayedAt: Date?
+    var lastPlayedAt: Date?
     var addedAt: Date
     var updatedAt: Date
 
@@ -64,6 +68,8 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         case userEdited = "user_edited"
         case hltbID = "hltb_id"
         case origin
+        case firstPlayedAt = "first_played_at"
+        case lastPlayedAt = "last_played_at"
         case addedAt = "added_at"
         case updatedAt = "updated_at"
     }
@@ -100,6 +106,8 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         userEdited: String = "",
         hltbID: Int64? = nil,
         origin: String? = nil,
+        firstPlayedAt: Date? = nil,
+        lastPlayedAt: Date? = nil,
         addedAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -128,6 +136,8 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         self.userEdited = userEdited
         self.hltbID = hltbID
         self.origin = origin
+        self.firstPlayedAt = firstPlayedAt
+        self.lastPlayedAt = lastPlayedAt
         self.addedAt = addedAt
         self.updatedAt = updatedAt
     }

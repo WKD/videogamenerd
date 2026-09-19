@@ -365,6 +365,28 @@ enum Migrations {
         }
     }
 
+    // MARK: - v9 — first / last played dates (PLAN §13.3, PSN import)
+
+    /// v9 adds two nullable `games` columns filled **only by importers** (never typed by
+    /// the owner): the earliest and latest date a game is known to have been played.
+    /// PSN is the first source (trophy `firstPlayedDateTime` / `lastPlayedDateTime` and the
+    /// game list's play dates, PLAN §13.3); the inspector shows "Last played 12 Mar 2021"
+    /// in the played section, and ``LibrarySort/lastPlayed`` sorts by it (NULLs last).
+    ///
+    ///  - `first_played_at` — the earliest known play date (only ever moves **earlier**).
+    ///  - `last_played_at`  — the latest known play date (only ever moves **later**; a
+    ///    re-sync never moves it backwards, and a NULL never overwrites a known value —
+    ///    see ``LibraryStore/setPSNPlayedDates(gameID:first:last:db:)``).
+    ///
+    /// Pure `ALTER TABLE ADD COLUMN` (the v4/v6/v8 pattern) — no table rebuild, no deferred
+    /// foreign-key checks. Existing rows get NULL (unknown), which is exactly right.
+    static func registerV9(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v9") { db in
+            try db.execute(sql: "ALTER TABLE games ADD COLUMN first_played_at DATETIME;")
+            try db.execute(sql: "ALTER TABLE games ADD COLUMN last_played_at DATETIME;")
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

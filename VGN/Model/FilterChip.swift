@@ -14,7 +14,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         case search, genre, decade
         case tier, unrated
         case status, notPlayed, noStatus
-        case format, notOwned, multipleCopies
+        case format, notOwned, multipleCopies, subscriptionOnly
         case playtime, noEstimate, platform
 
         var label: String {
@@ -30,6 +30,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .format: return "Format"
             case .notOwned: return "Not Owned"
             case .multipleCopies: return "Multiple Copies"
+            case .subscriptionOnly: return "PS Plus"
             case .playtime: return "Playtime"
             case .noEstimate: return "No Estimate"
             case .platform: return "Platform"
@@ -40,7 +41,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         /// "Kind: value" split.
         var isStandalone: Bool {
             switch self {
-            case .unrated, .notPlayed, .noStatus, .notOwned, .multipleCopies, .noEstimate: return true
+            case .unrated, .notPlayed, .noStatus, .notOwned, .multipleCopies, .subscriptionOnly, .noEstimate: return true
             default: return false
             }
         }
@@ -114,6 +115,7 @@ enum LibraryFilterChips {
         add(.format, formatPairs)
         if filter.includeNotOwned { add(.notOwned, [("true", "Not Owned")]) }
         if filter.multipleCopies { add(.multipleCopies, [("true", "Multiple Copies")]) }
+        if filter.includeSubscriptionOnly { add(.subscriptionOnly, [("true", "PS Plus")]) }
 
         let playtimePairs = PlaytimeBucket.allCases
             .filter { filter.playtimes.contains($0) }
@@ -142,6 +144,7 @@ enum LibraryFilterChips {
         case .format: if let fmt = ProductFormat(rawValue: chip.value) { f.formats.remove(fmt) }
         case .notOwned: f.includeNotOwned = false
         case .multipleCopies: f.multipleCopies = false
+        case .subscriptionOnly: f.includeSubscriptionOnly = false
         case .playtime: if let b = PlaytimeBucket(rawValue: chip.value) { f.playtimes.remove(b) }
         case .noEstimate: f.includeNoTimeEstimate = false
         case .platform: f.platforms.remove(chip.value)

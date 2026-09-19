@@ -102,6 +102,13 @@ actor PSNAuth {
         try tokenStore.deleteToken()
     }
 
+    /// When the current session's **refresh token** expires — the "sign in again after…"
+    /// deadline the Settings pane shows (PLAN §13.1), or nil when there is no session.
+    /// UI-only; the tokens themselves never leave this actor. (Additive, wave 11 UI lane.)
+    func sessionExpiry() -> Date? {
+        (cached ?? (try? tokenStore.loadToken()))?.refreshExpiresAt
+    }
+
     /// Literal token strings to scrub from any persisted/logged text (PLAN §13.2).
     func redactionLiterals() -> [String] {
         guard let token = cached ?? (try? tokenStore.loadToken()) else { return [] }

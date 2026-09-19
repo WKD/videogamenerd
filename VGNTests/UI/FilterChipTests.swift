@@ -171,6 +171,19 @@ struct FilterChipTests {
         #expect(!removed.hasActiveFacets)
     }
 
+    @Test func subscriptionOnlyChipIsStandaloneAndRemovable() {
+        var f = LibraryFilter(scope: .all)
+        f.includeSubscriptionOnly = true
+        #expect(f.hasActiveFacets)
+        let chips = LibraryFilterChips.chips(for: f, tiers: tiers)
+        let chip = try! #require(chips.first { $0.kind == .subscriptionOnly })
+        #expect(chip.text == "PS Plus")               // standalone facet
+        #expect(chip.fullLabel == "PS Plus")
+        let removed = LibraryFilterChips.removing(chip, from: f)
+        #expect(removed.includeSubscriptionOnly == false)
+        #expect(!removed.hasActiveFacets)
+    }
+
     @Test func clearAllDropsMultipleCopiesButKeepsPace() {
         var f = LibraryFilter(scope: .all, playPace: PlayPace(hoursPerWeek: 3))
         f.multipleCopies = true

@@ -36,6 +36,8 @@ final class AppEnvironment {
     let playNext: PlayNextEnvironment?
     /// Presents the GOG import flow (progress + review sheets, PLAN §14); nil in tests.
     let gogImport: GOGImportPresenter?
+    /// Presents the PSN import flow (progress + review sheets, PLAN §13); nil in tests.
+    let psnImport: PSNImportPresenter?
     /// Presents the Delicious Library file-import flow (PLAN §5.5); nil in tests.
     let deliciousImport: DeliciousImportPresenter?
     /// Presents the HLTB time-estimate fallback (bulk sheet + single-game picker,
@@ -70,6 +72,7 @@ final class AppEnvironment {
         photoScan: PhotoScanPresenter? = nil,
         playNext: PlayNextEnvironment? = nil,
         gogImport: GOGImportPresenter? = nil,
+        psnImport: PSNImportPresenter? = nil,
         deliciousImport: DeliciousImportPresenter? = nil,
         hltb: HLTBFetchPresenter? = nil,
         igdbLink: IGDBLinkPresenter? = nil,
@@ -87,6 +90,7 @@ final class AppEnvironment {
         self.photoScan = photoScan
         self.playNext = playNext
         self.gogImport = gogImport
+        self.psnImport = psnImport
         self.deliciousImport = deliciousImport
         self.hltb = hltb
         self.igdbLink = igdbLink
@@ -160,6 +164,17 @@ final class AppEnvironment {
                 })
             settings.gogAccount = gogWiring.account
 
+            // PSN import (PLAN §13): live builds the real PSN objects (DEBUG also passes the
+            // dev cache + account label); other modes get an inert backend that never
+            // touches the network or the Keychain. A committed import notifies enrichment.
+            let psnWiring = PSNImportBuilder.build(
+                mode: mode, database: database, secrets: settings.secretStore,
+                graph: built?.graph, platformCatalog: built?.platformCatalog,
+                onLibraryChanged: {
+                    if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
+                })
+            settings.psnAccount = psnWiring.account
+
             // Delicious Library file import (PLAN §5.5): available in live AND sample mode
             // (a file needs no account). A committed import notifies enrichment like GOG.
             let deliciousImport = DeliciousImportBuilder.build(
@@ -189,6 +204,7 @@ final class AppEnvironment {
                 playNext: .live(database: database, library: store,
                                 coverLoader: coverLoader, viewModel: vm),
                 gogImport: gogWiring.presenter,
+                psnImport: psnWiring.presenter,
                 deliciousImport: deliciousImport,
                 hltb: hltb,
                 igdbLink: wiring.igdbLink,

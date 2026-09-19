@@ -26,11 +26,32 @@ struct SettingsPaneSizingTests {
             login: nil)
         await signedOut.refresh()
 
+        let psnDataSets = [
+            ImportDataSet(id: PSNEndpoint.profile, title: "Profile", estimatedRequests: 1),
+            ImportDataSet(id: PSNEndpoint.trophyTitles, title: "Trophy titles", estimatedRequests: 4),
+            ImportDataSet(id: PSNEndpoint.gameList, title: "Game list", estimatedRequests: 3),
+            ImportDataSet(id: PSNEndpoint.purchases, title: "Purchases", estimatedRequests: 4),
+        ]
+        let psnSignedIn = PSNAccountModel(
+            backend: FakeImportBackend(source: ImportSourceID.psn, sourceLabel: "PlayStation",
+                                       dataSets: psnDataSets, staging: ImportStagingStore(db),
+                                       session: true, username: "nerd_ps"),
+            login: nil)
+        await psnSignedIn.refresh()
+        let psnSignedOut = PSNAccountModel(
+            backend: FakeImportBackend(source: ImportSourceID.psn, sourceLabel: "PlayStation",
+                                       dataSets: [], staging: ImportStagingStore(db), session: false),
+            login: nil)
+        psnSignedOut.pasteExpanded = true   // tallest signed-out layout
+        await psnSignedOut.refresh()
+
         let heights: [(String, CGFloat)] = [
             ("General", fittingHeight(GeneralTab())),
             ("IGDB", fittingHeight(IGDBAccountTab(model: SettingsModel(secretStore: InMemorySecretStore())))),
             ("GOG signed in", fittingHeight(GOGAccountTab(model: signedIn))),
             ("GOG signed out", fittingHeight(GOGAccountTab(model: signedOut))),
+            ("PSN signed in", fittingHeight(PSNAccountTab(model: psnSignedIn))),
+            ("PSN signed out", fittingHeight(PSNAccountTab(model: psnSignedOut))),
             ("Photo Scan", fittingHeight(PhotoScanSettingsTab())),
         ]
         print("SETTINGS pane heights:", heights.map { "\($0.0)=\(Int($0.1))" })

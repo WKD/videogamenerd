@@ -288,8 +288,25 @@ final class ImportReviewModel {
             return ImportCommitItem(
                 source: source, externalID: row.externalID, platformID: platformID,
                 format: productFormat, target: target,
-                edition: row.edition, acquiredAt: row.acquiredAt)
+                edition: row.edition, acquiredAt: row.acquiredAt,
+                psn: psnCommit(for: row))
         }
+    }
+
+    /// The PSN-specific outcomes a row commits (PLAN §13.3), or nil for GOG/Delicious.
+    /// Built from the transient staging row: a purchase creates an owned digital copy
+    /// (with any PS Plus flag), a trophy/game-list title marks the game played (unless it
+    /// was merely *launched* at 0 %) and records its play time, dates and a 100 % status.
+    private func psnCommit(for row: ImportReviewRow) -> PSNCommit? {
+        guard source == ImportSourceID.psn, let t = transientByID[row.externalID] else { return nil }
+        return PSNCommit(
+            createProduct: t.signals.contains(.owned),
+            subscription: t.subscription?.rawValue,
+            markPlayed: t.signals.contains(.played) && !t.launchedNotPlayed,
+            playDurationS: t.playDurationS,
+            statusPrefill: t.statusPrefill,
+            firstPlayedAt: t.firstPlayedAt,
+            lastPlayedAt: t.lastPlayedAt)
     }
 
     func commit() {

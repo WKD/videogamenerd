@@ -70,14 +70,22 @@ struct PSNCommit: Sendable, Equatable {
     var playDurationS: Int?
     /// A completion status to pre-fill **only when the game has none** (100 % title).
     var statusPrefill: PlayStatus?
+    /// Earliest / latest known play date (v9, PLAN §13.3). Written monotonically
+    /// (`first` only earlier, `last` only later; a nil never overwrites) by
+    /// ``LibraryStore/setPSNPlayedDates(gameID:first:last:db:)``.
+    var firstPlayedAt: Date?
+    var lastPlayedAt: Date?
 
     init(createProduct: Bool, subscription: String? = nil, markPlayed: Bool = false,
-         playDurationS: Int? = nil, statusPrefill: PlayStatus? = nil) {
+         playDurationS: Int? = nil, statusPrefill: PlayStatus? = nil,
+         firstPlayedAt: Date? = nil, lastPlayedAt: Date? = nil) {
         self.createProduct = createProduct
         self.subscription = subscription
         self.markPlayed = markPlayed
         self.playDurationS = playDurationS
         self.statusPrefill = statusPrefill
+        self.firstPlayedAt = firstPlayedAt
+        self.lastPlayedAt = lastPlayedAt
     }
 }
 
@@ -352,6 +360,9 @@ struct ImportStagingStore: Sendable {
         }
         // PSN play time (never overwrites a manual value).
         try LibraryStore.setPSNPlaytime(gameID: gameID, seconds: psn.playDurationS, db: db)
+        // Earliest / latest known play date (monotonic; nil never overwrites).
+        try LibraryStore.setPSNPlayedDates(gameID: gameID, first: psn.firstPlayedAt,
+                                           last: psn.lastPlayedAt, db: db)
         // Status pre-fill only when the game has none.
         if let status = psn.statusPrefill {
             try LibraryStore.prefillStatusIfNone(gameID: gameID, status: status, db: db)

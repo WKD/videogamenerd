@@ -23,6 +23,9 @@ final class SettingsModel {
     /// GOG account pane state (PLAN §14.2), injected once the app has built services.
     /// Nil in the test host / DB-failure path (the pane is omitted).
     var gogAccount: GOGAccountModel?
+    /// PlayStation account pane state (PLAN §13), injected once the app has built services.
+    /// Nil in the test host / DB-failure path (the tab is omitted).
+    var psnAccount: PSNAccountModel?
     /// Called after credentials are saved or cleared so the enrichment coordinator
     /// can resume / idle (`coordinator.credentialsDidChange()`).
     var onCredentialsChanged: () -> Void = {}
@@ -130,6 +133,12 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.tab.gog")
                     .tabItem { Label("GOG", systemImage: "bag") }
             }
+            if let psn = model.psnAccount {
+                PSNAccountTab(model: psn)
+                    .settingsPane()
+                    .accessibilityIdentifier("settings.tab.psn")
+                    .tabItem { Label("PlayStation", systemImage: "gamecontroller.fill") }
+            }
             PhotoScanSettingsTab()
                 .settingsPane()
                 .accessibilityIdentifier(A11yID.settingsTabPhotoScan)
@@ -161,6 +170,27 @@ struct GOGAccountTab: View {
                 Text("GOG")
             } footer: {
                 Text("Sign-in happens on GOG's own page; VGN keeps only the tokens, in the macOS Keychain.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(20)
+    }
+}
+
+/// PlayStation gets its own tab (PLAN §13): sign-in (web login or a pasted NPSSO), the
+/// risk note, data sets with force-refresh, and — in DEBUG — the build-steps panel.
+struct PSNAccountTab: View {
+    @Bindable var model: PSNAccountModel
+
+    var body: some View {
+        Form {
+            Section {
+                PSNAccountPane(model: model)
+            } header: {
+                Text("PlayStation")
+            } footer: {
+                Text("Sign-in happens on Sony's own page; VGN keeps only the sign-in tokens, in the macOS Keychain — never your password or NPSSO.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

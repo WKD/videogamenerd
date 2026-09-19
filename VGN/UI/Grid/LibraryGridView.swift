@@ -155,6 +155,12 @@ struct LibraryGridView: View {
             }
         }
         Button("Mark Owned") { act(on: game) { vm.setOwned(true, for: $0) } }
+        // Change the ownership format of the selection's single-copy games (PLAN §13.3).
+        Menu("Change Copy Format") {
+            ForEach(ProductFormat.allCases, id: \.self) { format in
+                Button(format.label) { act(on: game) { vm.changeCopyFormat($0, to: format) } }
+            }
+        }
         Divider()
         // Compilations (PLAN §8).
         if game.isCompilationMember, let productID = game.compilationProductID {

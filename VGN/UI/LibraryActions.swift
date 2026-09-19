@@ -268,6 +268,48 @@ final class LibraryActions {
         }
     }
 
+    // MARK: - Change Copy Format (undoable; PLAN §13.3)
+
+    /// Bulk-set the ownership format of the selection's copies (Physical / Digital / ROM).
+    /// Only a game with exactly one non-subscription single copy is changed; games with
+    /// several copies are skipped and counted in the banner. One transaction, one undo step.
+    func changeCopyFormat(ids: Set<Int64>, to format: ProductFormat) async {
+        guard !ids.isEmpty else { return }
+        do {
+            let result = try await store.changeCopyFormat(gameIDs: Array(ids), to: format)
+            let reapply = result.reverts.map {
+                CopyFormatChange(productID: $0.productID, previousFormat: format)
+            }
+            registerCopyFormatUndo(restore: result.reverts, reapply: reapply)
+            vm?.showBanner(Self.copyFormatBanner(result, format: format), kind: .info)
+        } catch {
+            vm?.showBanner("Couldn't change the copy format.", kind: .error)
+        }
+    }
+
+    /// "12 changed to Digital · 3 skipped (several copies)".
+    nonisolated static func copyFormatBanner(_ result: ChangeCopyFormatResult, format: ProductFormat) -> String {
+        var bits = ["\(result.changed) changed to \(format.label)"]
+        if result.skipped > 0 { bits.append("\(result.skipped) skipped (several copies)") }
+        return bits.joined(separator: " · ")
+    }
+
+    private func registerCopyFormatUndo(restore: [CopyFormatChange], reapply: [CopyFormatChange]) {
+        guard let undo = vm?.undoManager, !restore.isEmpty else { return }
+        undo.registerUndo(withTarget: self) { target in
+            Task { await target.performCopyFormatUndo(restore: restore, reapply: reapply) }
+        }
+        undo.setActionName("Change Copy Format")
+    }
+
+    /// Apply the restore side and register the swapped step (so undo↔redo alternate).
+    /// `internal` so a test can drive the inverse directly (`UndoManager.undo()` deadlocks
+    /// headless).
+    func performCopyFormatUndo(restore: [CopyFormatChange], reapply: [CopyFormatChange]) async {
+        try? await store.restoreCopyFormats(restore)
+        registerCopyFormatUndo(restore: reapply, reapply: restore)
+    }
+
     // MARK: - My playtime (undoable)
 
     func setMyPlaytime(gameID: Int64, seconds: Int?) async {

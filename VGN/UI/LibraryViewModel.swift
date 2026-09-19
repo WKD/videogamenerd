@@ -798,6 +798,20 @@ final class LibraryViewModel {
         onSetPlayed(ids ?? selectedGameIDs, value)
     }
 
+    /// Bulk "Change Copy Format ▸ Physical / Digital / ROM" (PLAN §13.3). Applies to the
+    /// selection's single-copy games; several-copy games are skipped (banner). One undo step.
+    func changeCopyFormat(_ ids: Set<Int64>? = nil, to format: ProductFormat) {
+        let targets = ids ?? selectedGameIDs
+        guard !targets.isEmpty else { return }
+        Task { await actions?.changeCopyFormat(ids: targets, to: format) }
+    }
+
+    /// Whether the "Change Copy Format" commands should be enabled: a non-empty selection
+    /// in a library grid destination.
+    var canChangeSelectionCopyFormat: Bool {
+        !selectedGameIDs.isEmpty && isLibraryGridDestination
+    }
+
     // MARK: Commands
 
     func toggleInspector() { inspectorPresented.toggle() }

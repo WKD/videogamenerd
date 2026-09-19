@@ -59,6 +59,31 @@ extension LibraryStore {
                        arguments: [seconds, Date(), gameID])
     }
 
+    /// Record the earliest / latest known play date on a game (v9, PLAN §13.3). Filled
+    /// only by importers (PSN), never typed. Monotonic and NULL-safe:
+    ///  - `first_played_at` only ever moves **earlier** (the earliest known date wins);
+    ///  - `last_played_at` only ever moves **later** (a re-sync never moves it backwards);
+    ///  - a nil `first` / `last` never overwrites a stored value.
+    ///
+    /// Dates are compared as their GRDB text form (`YYYY-MM-DD HH:MM:SS.SSS`), which sorts
+    /// lexically the same as chronologically. A call with both nil is a no-op.
+    static func setPSNPlayedDates(gameID: Int64, first: Date?, last: Date?, db: Database) throws {
+        guard first != nil || last != nil else { return }
+        try db.execute(sql: """
+            UPDATE games SET
+                first_played_at = CASE
+                    WHEN :f IS NULL THEN first_played_at
+                    WHEN first_played_at IS NULL OR :f < first_played_at THEN :f
+                    ELSE first_played_at END,
+                last_played_at = CASE
+                    WHEN :l IS NULL THEN last_played_at
+                    WHEN last_played_at IS NULL OR :l > last_played_at THEN :l
+                    ELSE last_played_at END,
+                updated_at = :now
+            WHERE id = :id
+            """, arguments: ["f": first, "l": last, "now": Date(), "id": gameID])
+    }
+
     /// Pre-fill a completion status **only when the game has none** (PLAN §13.3 — a 100 %
     /// trophy title). Never overwrites an existing status.
     static func prefillStatusIfNone(gameID: Int64, status: PlayStatus, db: Database) throws {
