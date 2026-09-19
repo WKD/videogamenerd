@@ -28,6 +28,7 @@ struct VGNApp: App {
                 .environment(\.rankingEnvironment, env.ranking)
                 .photoScanPresentation(env.photoScan)
                 .gogImportPresentation(env.gogImport)
+                .psnImportPresentation(env.psnImport)
                 .deliciousImportPresentation(env.deliciousImport)
                 .hltbFetchPresentation(env.hltb)
                 .igdbLinkPresentation(env.igdbLink)
@@ -48,6 +49,7 @@ struct VGNApp: App {
             StatsCommands()
             PhotoScanCommands()
             GOGImportCommands()
+            PSNImportCommands()
             DeliciousImportCommands()
             LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
         }
