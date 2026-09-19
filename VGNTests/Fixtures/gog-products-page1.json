@@ -1,0 +1,24 @@
+{
+  "sortBy": "title",
+  "page": 1,
+  "totalProducts": 10,
+  "totalPages": 3,
+  "productsPerPage": 4,
+  "moviesCount": 0,
+  "products": [
+    { "id": 100001, "title": "Synthetic Quest", "isGame": true, "isHidden": false,
+      "category": "Role-playing", "dlcCount": 2,
+      "worksOn": { "Windows": true, "Mac": true, "Linux": false },
+      "releaseDate": "2018-05-01 00:00:00" },
+    { "id": 100002, "title": "Synthetic Racer", "isGame": true, "isHidden": false,
+      "category": "Racing", "dlcCount": 0,
+      "worksOn": { "Windows": true, "Mac": false, "Linux": false },
+      "releaseDate": 1320969600 },
+    { "id": 100003, "title": "Synthetic Quest Soundtrack", "isGame": true, "isHidden": false,
+      "category": "Soundtrack",
+      "worksOn": { "Windows": true, "Mac": false, "Linux": false } },
+    { "id": 100004, "title": "Synthetic Quest - Expansion Pack", "isGame": true, "isHidden": false,
+      "category": "DLC",
+      "worksOn": { "Windows": true, "Mac": true, "Linux": false } }
+  ]
+}

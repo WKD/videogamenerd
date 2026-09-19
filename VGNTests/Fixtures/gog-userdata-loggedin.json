@@ -1,0 +1,18 @@
+{
+  "country": "FR",
+  "currencies": [],
+  "selectedCurrency": {},
+  "preferredLanguage": {},
+  "ratingBrand": "PEGI",
+  "isLoggedIn": true,
+  "checksum": {},
+  "updates": {},
+  "userId": "synthetic-user-1",
+  "username": "SyntheticPlayer",
+  "galaxyUserId": "synthetic-galaxy-1",
+  "email": "synthetic@example.invalid",
+  "avatar": "//images.gog.com/synthetic_avatar.jpg",
+  "walletBalance": {},
+  "wishlistedItems": 3,
+  "friends": []
+}
