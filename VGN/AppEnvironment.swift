@@ -40,6 +40,11 @@ final class AppEnvironment {
         var path: String
     }
 
+    /// The open database (live / sample / seeded), or nil in the XCTest host or on a
+    /// launch failure. Additive accessor for the Library Stats window (lane w7-d),
+    /// which builds its read-only ``LibraryStatsStore`` from it.
+    var database: AppDatabase? { ranking?.library.database }
+
     private init(
         settings: SettingsModel,
         library: LibraryViewModel?,

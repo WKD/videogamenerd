@@ -47,6 +47,13 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 - Compilation members keep IGDB's order (e.g. Mass Effect 2 · 1 · 3); reorder in the editor. [later: sort by release date on creation]
 - Grid query ≈ 33 ms at 2 000 games (DEBUG), one full re-query per emission, no paging. [watch]
 
+### Library Stats window (wave 7, lane D)
+- **Clicking a chart bar does nothing** in v1. Possible follow-up: click-through from a bar (platform / decade / tier / genre) to the main grid pre-filtered to that slice. [later]
+- **"Hours by platform"** attributes a game's full effective playtime to *every* platform it is associated with (there is no primary-platform column), so per-platform hours can sum to more than the grand total for multi-platform games. Games-per-platform counts each game once per platform the same way. Documented, not a bug. [watch]
+- **Average derived score per platform/decade/genre** includes *unplaced* ranked games at their tier's band midpoint (they carry a tier, so they count as ranked); genres are shown only at n ≥ 3. Scores are recomputed from the ranking snapshot on each report, never stored (PLAN §7). [watch]
+- Report ≈ 17 ms at 2 000 games (DEBUG, `LibraryStatsReportPerfTests`); re-queried in full on each library change (a cheap GRDB change signal drives the reload), no incremental update. [watch]
+- The stats window reuses whichever database `AppEnvironment` opened, so in **sample mode** it shows the sample library and in **seeded** mode the synthetic one — never the real library unless launched live.
+
 ### Ranking
 - The Top: no insertion line while hovering during a reorder drag. **[doing]** Reorder and divider drag are disabled while a filter is active (by design).
 - Divider drag maps a fixed 44 pt to one game. [owner: judge the feel]

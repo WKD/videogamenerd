@@ -38,9 +38,22 @@ struct VGNApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             LibraryCommands()
+            StatsCommands()
             PhotoScanCommands()
             LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
         }
+
+        // Library Stats — a separate window (PLAN §6.4 / §8) so the dashboard stays
+        // out of the main window and other lanes' files. Opened from the sidebar
+        // stats popover's "Show All Stats…" button and Window ▸ Library Stats (⌥⌘S).
+        Window("Library Stats", id: StatsWindowID.id) {
+            if let database = env.database {
+                StatsWindowRoot(store: LibraryStatsStore(database))
+            } else {
+                StatsUnavailableView()
+            }
+        }
+        .defaultSize(width: 980, height: 760)
 
         Settings {
             SettingsView(model: env.settings)
@@ -95,6 +108,18 @@ struct LibraryCommands: Commands {
             Button("Tier Board") { library?.select(.tierBoard) }
             Button("The Top") { library?.select(.theTop) }
             Button("Duel") { library?.select(.duel) }
+        }
+    }
+}
+
+/// Window ▸ Library Stats (⌥⌘S) — opens the stats window (PLAN §6.4 / §8).
+struct StatsCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            Button("Library Stats") { openWindow(id: StatsWindowID.id) }
+                .keyboardShortcut("s", modifiers: [.command, .option])
         }
     }
 }
