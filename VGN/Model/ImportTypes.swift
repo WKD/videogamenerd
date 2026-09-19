@@ -203,13 +203,21 @@ struct ImportStagingRow: Sendable, Hashable, Codable, Identifiable {
     /// Non-nil ⇒ noise, ignored by default with this reason. Transient — the stored
     /// decision is the boolean `import_titles.ignored`.
     var ignoreReason: ImportIgnoreReason?
+    /// Whether the source lists a Mac build (PLAN §14.3). Transient — lets the review
+    /// sheet re-map the platform when the policy switch flips, without re-reading the
+    /// source DTO. GOG sets it from `worksOn.Mac`.
+    var macAvailable: Bool
+    /// A Linux-only title mapped to `pc` (PLAN §14.3 — "Linux-only titles map to pc
+    /// with a note"). Transient; the review sheet shows the note from this flag.
+    var linuxOnly: Bool
 
     var id: String { "\(source):\(externalID)" }
 
     init(source: String, externalID: String, name: String, platform: String? = nil,
          signals: ImportSignals = [.owned], playDurationS: Int? = nil,
          firstPlayedAt: Date? = nil, lastPlayedAt: Date? = nil,
-         releaseYear: Int? = nil, ignoreReason: ImportIgnoreReason? = nil) {
+         releaseYear: Int? = nil, ignoreReason: ImportIgnoreReason? = nil,
+         macAvailable: Bool = false, linuxOnly: Bool = false) {
         self.source = source
         self.externalID = externalID
         self.name = name
@@ -220,6 +228,8 @@ struct ImportStagingRow: Sendable, Hashable, Codable, Identifiable {
         self.lastPlayedAt = lastPlayedAt
         self.releaseYear = releaseYear
         self.ignoreReason = ignoreReason
+        self.macAvailable = macAvailable
+        self.linuxOnly = linuxOnly
     }
 }
 
@@ -281,10 +291,15 @@ struct ImportSyncSummary: Sendable, Hashable, Codable {
     var ignoredCount: Int
     var budgetUsed: Int
     var rejects: [ImportReject]
+    /// Product ids returned on a library page that are **not** in the owned-id list
+    /// (PLAN §14.2 — "a gap is reported, not fatal"). 0 ⇒ fully consistent. Surfaced
+    /// as a note in the review-sheet header.
+    var ownedGap: Int
 
     init(source: String, fromCache: Int = 0, fromNetwork: Int = 0,
          stagedTotal: Int = 0, newCount: Int = 0, alreadyMatchedCount: Int = 0,
-         ignoredCount: Int = 0, budgetUsed: Int = 0, rejects: [ImportReject] = []) {
+         ignoredCount: Int = 0, budgetUsed: Int = 0, rejects: [ImportReject] = [],
+         ownedGap: Int = 0) {
         self.source = source
         self.fromCache = fromCache
         self.fromNetwork = fromNetwork
@@ -294,11 +309,19 @@ struct ImportSyncSummary: Sendable, Hashable, Codable {
         self.ignoredCount = ignoredCount
         self.budgetUsed = budgetUsed
         self.rejects = rejects
+        self.ownedGap = ownedGap
     }
 
     /// "12 from cache · 3 from network".
     var networkSummaryLine: String {
         "\(fromCache) from cache · \(fromNetwork) from network"
+    }
+
+    /// A one-line note when the owned-id list and the library pages disagree
+    /// (PLAN §14.2 — reported, never fatal), else nil.
+    var ownedGapNote: String? {
+        guard ownedGap > 0 else { return nil }
+        return "\(ownedGap) product\(ownedGap == 1 ? "" : "s") not in your owned-games list"
     }
 }
 

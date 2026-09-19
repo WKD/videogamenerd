@@ -5,6 +5,9 @@ import Foundation
 enum SecretKey: String, CaseIterable, Sendable {
     case igdbClientID = "igdb.clientID"
     case igdbClientSecret = "igdb.clientSecret"
+    /// The GOG OAuth access + refresh tokens, stored as ONE JSON blob (PLAN §14.1,
+    /// account `gog.tokens`). Never logged. See ``KeychainGOGTokenStore``.
+    case gogTokens = "gog.tokens"
     // PSN access / refresh tokens are added here when the PSN lane lands.
 }
 

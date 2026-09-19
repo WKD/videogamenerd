@@ -36,7 +36,16 @@ enum GOGMapping {
         return nil
     }
 
-    /// Map one product to a staging row (owned; noise rows carry their reason).
+    /// A title that runs only on Linux (not Windows, not Mac) — it maps to `pc` with a
+    /// note (PLAN §14.3). Surfaced transiently on the staging row for the review sheet.
+    static func isLinuxOnly(_ product: GOGProduct) -> Bool {
+        let w = product.worksOn
+        return w.runsOnLinux && !w.runsOnWindows && !w.runsOnMac
+    }
+
+    /// Map one product to a staging row (owned; noise rows carry their reason). The
+    /// transient `macAvailable` / `linuxOnly` flags let the review sheet re-map the
+    /// platform on the policy switch and show the Linux-only note (PLAN §14.3).
     static func stagingRow(for product: GOGProduct, policy: ImportPlatformPolicy) -> ImportStagingRow {
         ImportStagingRow(
             source: ImportSourceID.gog,
@@ -45,7 +54,9 @@ enum GOGMapping {
             platform: platform(for: product, policy: policy),
             signals: [.owned],
             releaseYear: product.releaseDate?.year,
-            ignoreReason: ignoreReason(for: product))
+            ignoreReason: ignoreReason(for: product),
+            macAvailable: product.worksOn.runsOnMac,
+            linuxOnly: isLinuxOnly(product))
     }
 
     /// Map a page (or a whole library) of products to staging rows, order preserved.

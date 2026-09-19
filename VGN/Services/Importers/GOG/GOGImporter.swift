@@ -101,9 +101,9 @@ struct GOGImporter: LibraryImporter, Sendable {
             try await recordSumReject(seen: products.count, total: total)
         }
 
-        // Owned-ids ↔ pages gap: reported, not fatal (PLAN §14.2). Exercised here so a
-        // future lane can surface it; a gap never stops the sync.
-        _ = GOGResponseValidator.ownedGap(pageIDs: products.map(\.id), ownedIDs: owned)
+        // Owned-ids ↔ pages gap: reported, not fatal (PLAN §14.2). Surfaced in the sync
+        // summary's header note; a gap never stops the sync.
+        let ownedGap = GOGResponseValidator.ownedGap(pageIDs: products.map(\.id), ownedIDs: owned).count
 
         // Manifest for resume + Settings (PLAN §14.2).
         if let pages = totalPages, let total = totalProducts, !endedEarly {
@@ -117,7 +117,8 @@ struct GOGImporter: LibraryImporter, Sendable {
         let rows = GOGMapping.stagingRows(for: products, policy: platformPolicy)
         return ImportFetchResult(
             rows: rows, fromCache: await client.fromCache,
-            fromNetwork: await client.fromNetwork, budgetUsed: await client.budgetUsed)
+            fromNetwork: await client.fromNetwork, budgetUsed: await client.budgetUsed,
+            ownedGap: ownedGap)
     }
 
     static let productsManifestKey = "account/getFilteredProducts:manifest"
