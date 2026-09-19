@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Everything a `CoverProvider` needs to find box art for one game (PLAN §5.2).
 struct CoverQuery: Sendable, Equatable {
@@ -44,6 +45,13 @@ struct CoverCandidate: Sendable, Equatable, Identifiable {
     /// or merely plausible — the chain stops on the first confident/exact hit but
     /// keeps plausible ones browsable.
     var isConfident: Bool
+    /// Region / variant of this candidate when known (e.g. "Europe", "Japan"), for
+    /// the "Choose Cover…" sheet's per-tile label. `nil` when the provider can't
+    /// tell (e.g. the IGDB key-art fallback).
+    var region: String? = nil
+    /// Pixel dimensions of the source image when known ahead of download (the IGDB
+    /// size tokens have fixed dimensions; libretro sizes are unknown until fetched).
+    var pixelSize: CGSize? = nil
 
     var id: String { "\(providerID)|\(remoteURL.absoluteString)" }
 }

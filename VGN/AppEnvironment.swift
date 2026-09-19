@@ -84,8 +84,14 @@ final class AppEnvironment {
             let store = LibraryStore(database)
 
             // Merged services (nil ⇒ degrade gracefully to no covers / offline).
+            // The cover loader is wrapped so the inspector's "Choose Cover…" sheet
+            // (PLAN §5.2 step 4) reaches candidate listing / choosing through the same
+            // `vm.coverLoader`. Candidate listing is offline outside live mode.
             let built = buildServices(mode: mode, database: database, secrets: settings.secretStore)
-            let coverLoader: any CoverLoading = built?.graph.coverStore ?? NoopCoverLoader()
+            let coverLoader: any CoverLoading = built.map {
+                ChooseCoverService(coverStore: $0.graph.coverStore, library: store,
+                                   allowsNetwork: mode == .live)
+            } ?? NoopCoverLoader()
 
             let rankingStore = RankingStore(database)
             let dataSource = GRDBLibraryDataSource(store: store, ranking: rankingStore)

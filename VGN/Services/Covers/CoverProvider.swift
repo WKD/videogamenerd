@@ -7,6 +7,13 @@ protocol CoverProvider: Sendable {
     var id: String { get }
     func candidates(for query: CoverQuery) async -> [CoverCandidate]
 
+    /// **Every** candidate this provider can offer for the "Choose Cover…" sheet
+    /// (PLAN §5.2 step 4) — not just the single best one `candidates(for:)` returns
+    /// for the automatic path. A provider that can enumerate variants (e.g. libretro
+    /// boxarts across every region) overrides this; the default returns whatever
+    /// ``candidates(for:)`` produced.
+    func allCandidates(for query: CoverQuery) async -> [CoverCandidate]
+
     /// Richer variant the chain uses to tell a genuine miss (the source was
     /// reached and had nothing) from a transient failure (the source could not be
     /// reached). Defaults to wrapping ``candidates(for:)`` as `.found`; a provider
@@ -18,6 +25,10 @@ protocol CoverProvider: Sendable {
 extension CoverProvider {
     func probe(for query: CoverQuery) async -> CoverProbe {
         .found(await candidates(for: query))
+    }
+
+    func allCandidates(for query: CoverQuery) async -> [CoverCandidate] {
+        await candidates(for: query)
     }
 }
 
