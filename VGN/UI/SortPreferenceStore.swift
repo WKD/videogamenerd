@@ -20,7 +20,24 @@ struct UserDefaultsSortPreferences: SortPreferenceStoring {
     nonisolated(unsafe) let defaults: UserDefaults
     private let prefix = "VGNSort."
 
-    init(defaults: UserDefaults = AppPreferences.defaults) { self.defaults = defaults }
+    init(defaults: UserDefaults = AppPreferences.defaults) {
+        self.defaults = defaults
+        Self.migrateLegacyKeys(in: defaults, prefix: prefix)
+    }
+
+    /// One-time id renames (PLAN §16 — the sidebar's "ROM Catalogue" row became the Vault's
+    /// "Batocera ROMs" row, id `romCatalogue` → `vault:batocera`). Copies the persisted sort
+    /// under the old id to the new one when the new key is unset, then removes the old key.
+    /// Idempotent.
+    static func migrateLegacyKeys(in defaults: UserDefaults, prefix: String) {
+        let renames = [("romCatalogue", "vault:batocera")]
+        for (old, new) in renames {
+            let oldKey = prefix + old, newKey = prefix + new
+            guard let data = defaults.data(forKey: oldKey) else { continue }
+            if defaults.data(forKey: newKey) == nil { defaults.set(data, forKey: newKey) }
+            defaults.removeObject(forKey: oldKey)
+        }
+    }
 
     func sortSetting(for selectionID: String) -> SortSetting? {
         guard let data = defaults.data(forKey: prefix + selectionID) else { return nil }

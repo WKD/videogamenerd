@@ -239,14 +239,17 @@ struct RomCatalogStore: Sendable {
         }
     }
 
-    /// Present-entry counts per system (PLAN §15 — the browser's per-system totals).
-    func countsPerSystem() async throws -> [String: Int] {
-        try await dbWriter.read { db in
+    /// Present-entry counts per system (PLAN §15/§16 — the browser's per-system totals),
+    /// optionally scoped to one Vault source.
+    func countsPerSystem(source: String? = nil) async throws -> [String: Int] {
+        let args = Self.statementArgs(source.map { [$0] } ?? [])
+        let clause = source == nil ? "" : "AND source = ?"
+        return try await dbWriter.read { db in
             var out: [String: Int] = [:]
             for row in try Row.fetchAll(db, sql: """
-                SELECT system, COUNT(*) AS n FROM rom_catalog WHERE removed_at IS NULL
-                GROUP BY system
-                """) {
+                SELECT system, COUNT(*) AS n FROM rom_catalog
+                WHERE removed_at IS NULL \(clause) GROUP BY system
+                """, arguments: args) {
                 out[row["system"]] = row["n"]
             }
             return out
@@ -350,7 +353,7 @@ struct RomCatalogStore: Sendable {
     /// Build the shared browse SQL (present rows, optional system + filter + FTS search),
     /// returning the SQL body (`FROM … WHERE …`) and its arguments — used by both the paged
     /// read and the count.
-    private static func browseBody(system: String?, filter: BrowseFilter, search: String)
+    private static func browseBody(source: String?, system: String?, filter: BrowseFilter, search: String)
         -> (from: String, args: [DatabaseValueConvertible]) {
         let pattern = FTSPattern.prefixMatch(search)
         var from = "FROM rom_catalog c"
@@ -360,6 +363,7 @@ struct RomCatalogStore: Sendable {
         }
         var where_ = " WHERE c.removed_at IS NULL"
         if !pattern.isEmpty { where_ += " AND rom_catalog_fts MATCH ?"; args.append(pattern) }
+        if let source { where_ += " AND c.source = ?"; args.append(source) }
         if let system { where_ += " AND c.system = ?"; args.append(system) }
         where_ += filter.predicate
         return (from + where_, args)
@@ -367,9 +371,9 @@ struct RomCatalogStore: Sendable {
 
     /// One page of the browser (PLAN §15): present entries on an optional system, filtered
     /// and sorted, with an optional FTS search, never loading the whole catalogue into memory.
-    func browse(system: String?, filter: BrowseFilter, sort: BrowseSort,
+    func browse(source: String? = nil, system: String?, filter: BrowseFilter, sort: BrowseSort,
                 search: String, limit: Int, offset: Int) async throws -> [RomCatalogEntry] {
-        let body = Self.browseBody(system: system, filter: filter, search: search)
+        let body = Self.browseBody(source: source, system: system, filter: filter, search: search)
         let args = Self.statementArgs(body.args + [limit, offset])
         let sql = "SELECT c.* \(body.from) ORDER BY \(sort.orderBy) LIMIT ? OFFSET ?"
         return try await dbWriter.read { db in
@@ -378,8 +382,8 @@ struct RomCatalogStore: Sendable {
     }
 
     /// The total row count for a browse filter (for the paging footer).
-    func browseCount(system: String?, filter: BrowseFilter, search: String) async throws -> Int {
-        let body = Self.browseBody(system: system, filter: filter, search: search)
+    func browseCount(source: String? = nil, system: String?, filter: BrowseFilter, search: String) async throws -> Int {
+        let body = Self.browseBody(source: source, system: system, filter: filter, search: search)
         let sql = "SELECT COUNT(*) \(body.from)"
         let args = Self.statementArgs(body.args)
         return try await dbWriter.read { db in

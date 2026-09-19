@@ -24,11 +24,11 @@ final class LibraryViewModel {
     private(set) var tiers: [TierInfo] = []
     private(set) var genresInUse: [String] = []
     private(set) var decadesInUse: [Int] = []
-    /// Present-entry count of the Batocera ROM catalogue (PLAN §15). A **separate** observation
-    /// from the library counts — a catalogue write never disturbs the library's counts stream,
-    /// and this number never enters `SidebarCounts`. Drives the "Batocera" sidebar section's
-    /// visibility (shown only when > 0) and its badge.
-    private(set) var romCatalogueCount: Int = 0
+    /// Per-source present-entry counts of **The Vault** (PLAN §16). A **separate** observation
+    /// from the library counts — a Vault write never disturbs the library's counts stream, and
+    /// these numbers never enter `SidebarCounts`. Drives the THE VAULT section's two rows
+    /// (Batocera ROMs / PS Plus), each shown only when > 0, and their badges.
+    private(set) var vaultCounts: VaultSourceCounts = VaultSourceCounts()
 
     // MARK: UI state
     private(set) var selection: SidebarSelection
@@ -180,7 +180,7 @@ final class LibraryViewModel {
     private var scoresTask: Task<Void, Never>?
     private var genresTask: Task<Void, Never>?
     private var decadesTask: Task<Void, Never>?
-    private var romCatalogueCountTask: Task<Void, Never>?
+    private var vaultCountsTask: Task<Void, Never>?
     private var bannerDismissTask: Task<Void, Never>?
 
     /// Bumped on every `restartGames` so a stale observation task's emission is
@@ -316,9 +316,9 @@ final class LibraryViewModel {
         decadesTask = Task { [dataSource] in
             for await value in dataSource.decadesInUse() { self.decadesInUse = value }
         }
-        romCatalogueCountTask = Task { [dataSource] in
-            for await value in dataSource.romCatalogueCount() {
-                if value != self.romCatalogueCount { self.romCatalogueCount = value }
+        vaultCountsTask = Task { [dataSource] in
+            for await value in dataSource.vaultSourceCounts() {
+                if value != self.vaultCounts { self.vaultCounts = value }
             }
         }
         scoresTask = Task { [dataSource] in
@@ -341,7 +341,7 @@ final class LibraryViewModel {
         scoresTask?.cancel(); scoresTask = nil
         genresTask?.cancel(); genresTask = nil
         decadesTask?.cancel(); decadesTask = nil
-        romCatalogueCountTask?.cancel(); romCatalogueCountTask = nil
+        vaultCountsTask?.cancel(); vaultCountsTask = nil
     }
 
     /// (Re)subscribe the single sidebar-counts observation with the current pace's
@@ -502,9 +502,15 @@ final class LibraryViewModel {
     /// recommendation view — a placeholder until a later wave, PLAN §7b).
     var isPlayNextSelection: Bool { selection == .playNext }
 
-    /// True when the sidebar has the Batocera ROM Catalogue selected (the grid is replaced by
-    /// the separate catalogue browser, PLAN §15).
-    var isRomCatalogueSelection: Bool { selection == .romCatalogue }
+    /// True when the sidebar has a Vault source selected (the grid is replaced by the separate
+    /// Vault browser, PLAN §16).
+    var isVaultSelection: Bool { if case .vault = selection { return true }; return false }
+
+    /// The selected Vault source, or nil when the selection is not a Vault row.
+    var selectedVaultSource: VaultSource? {
+        if case .vault(let source) = selection { return source }
+        return nil
+    }
 
     // MARK: Filter
 

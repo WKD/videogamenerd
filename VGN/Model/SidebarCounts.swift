@@ -66,7 +66,7 @@ struct SidebarCounts: Hashable, Sendable {
         case .unmeasured: return unmeasured
         // The ROM catalogue is a separate shelf — its count never rides the library counts
         // query (PLAN §15). The sidebar drives its badge from a separate observation.
-        case .romCatalogue: return nil
+        case .vault: return nil
         case .platform(let slug): return perPlatform[slug] ?? 0
         }
     }

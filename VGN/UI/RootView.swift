@@ -90,7 +90,7 @@ struct RootView: View {
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 0) {
-            if !vm.isRankingSelection && !vm.isPlayNextSelection && !vm.isRomCatalogueSelection {
+            if !vm.isRankingSelection && !vm.isPlayNextSelection && !vm.isVaultSelection {
                 FilterChipsBar(vm: vm)
             }
             ZStack(alignment: .bottom) {
@@ -105,8 +105,8 @@ struct RootView: View {
                         .environment(\.rankingActions, RankingViewActions(
                             goToDuel: { vm.select(.duel) },
                             inspect: { id in vm.selectOnly(id); vm.showInspector() }))
-                } else if vm.isRomCatalogueSelection {
-                    RomCatalogueView()
+                } else if vm.isVaultSelection {
+                    RomCatalogueView(source: vm.selectedVaultSource ?? .batocera)
                 } else {
                     LibraryGridView(vm: vm)
                 }

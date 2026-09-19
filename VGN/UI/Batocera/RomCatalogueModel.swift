@@ -22,6 +22,8 @@ struct RomCatalogueSystemCount: Identifiable, Sendable, Equatable {
 @Observable
 final class RomCatalogueModel {
     private let catalog: RomCatalogStore
+    /// The Vault source this browser is scoped to (PLAN §16).
+    let source: VaultSource
     let thumbnails: BatoceraThumbnailLoader?
     let pageSize: Int
 
@@ -45,8 +47,10 @@ final class RomCatalogueModel {
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var loadedOffset = 0
 
-    init(catalog: RomCatalogStore, thumbnails: BatoceraThumbnailLoader? = nil, pageSize: Int = 100) {
+    init(catalog: RomCatalogStore, source: VaultSource = .batocera,
+         thumbnails: BatoceraThumbnailLoader? = nil, pageSize: Int = 100) {
         self.catalog = catalog
+        self.source = source
         self.thumbnails = thumbnails
         self.pageSize = pageSize
     }
@@ -61,7 +65,7 @@ final class RomCatalogueModel {
     }
 
     func loadSystems() async {
-        let perSystem = (try? await catalog.countsPerSystem()) ?? [:]
+        let perSystem = (try? await catalog.countsPerSystem(source: source.storage)) ?? [:]
         systems = perSystem.map { RomCatalogueSystemCount(system: $0.key, count: $0.value) }
             .sorted { $0.count != $1.count ? $0.count > $1.count : $0.system < $1.system }
         totalAll = perSystem.values.reduce(0, +)
@@ -74,10 +78,11 @@ final class RomCatalogueModel {
         loadedOffset = 0
         let (system, filter, sort, search, pageSize) = (selectedSystem, filter, sort, searchText, pageSize)
         let catalog = self.catalog
+        let src = source.storage
         pageTask = Task { [weak self] in
-            let rows = (try? await catalog.browse(system: system, filter: filter, sort: sort,
+            let rows = (try? await catalog.browse(source: src, system: system, filter: filter, sort: sort,
                                                   search: search, limit: pageSize, offset: 0)) ?? []
-            let count = (try? await catalog.browseCount(system: system, filter: filter,
+            let count = (try? await catalog.browseCount(source: src, system: system, filter: filter,
                                                         search: search)) ?? rows.count
             guard let self, !Task.isCancelled else { return }
             self.entries = rows
@@ -96,8 +101,9 @@ final class RomCatalogueModel {
         let (system, filter, sort, search, pageSize, offset) =
             (selectedSystem, filter, sort, searchText, pageSize, loadedOffset)
         let catalog = self.catalog
+        let src = source.storage
         pageTask = Task { [weak self] in
-            let rows = (try? await catalog.browse(system: system, filter: filter, sort: sort,
+            let rows = (try? await catalog.browse(source: src, system: system, filter: filter, sort: sort,
                                                   search: search, limit: pageSize, offset: offset)) ?? []
             guard let self, !Task.isCancelled else { return }
             self.entries.append(contentsOf: rows)
