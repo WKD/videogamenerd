@@ -146,6 +146,7 @@ No official API. Every wrapper scrapes an internal search endpoint whose path/ke
 - **Game list** `…/api/gamelist/v2/users/me/titles` → **play duration**, play count, first/last played. **PS4/PS5 only** — Sony doesn't expose PS3/Vita playtime.
 - **Purchased list** (web GraphQL `getPurchasedGameList`) → *Owned (digital)*, with the PS Plus-claimed vs bought distinction so Plus freebies can be excluded.
 - Risk: unofficial, can break or change; ToS grey zone for personal use. Hence: isolated module, fixtures-based tests, never blocks the rest of the app.
+- **Detailed design, caching rules and the build protocol: §13.**
 
 ### 5.5 Other libraries (later)
 All importers implement one `LibraryImporter` protocol (authenticate → fetch → emit `import_titles` rows → shared review sheet), so adding a source never touches the core.
@@ -189,7 +190,7 @@ Pipeline (`ShelfRecognizer` protocol, two engines):
 5. **Review sheet** (nothing is added blindly): photo on the left, detected list on the right; per row: matched cover, confidence, alternatives menu, include checkbox, played toggle (`space`). Defaults: owned ✓ (it's on my shelf), physical, platform from spine. Duplicates already in the library are greyed out. One "Add 37 games" button → single DB transaction.
 
 ### 6.3 PSN import
-Sync → staging table → review sheet grouped as *New / Already matched / Ignored*. Has trophies ⇒ played (that's all trophies are used for); purchased ⇒ owned digital; game list ⇒ playtime + last played. Matches are remembered, so re-sync only surfaces new titles and refreshes playtime. Noise (apps, demos, betas, PS Plus claims never launched) is one keystroke to ignore, remembered forever.
+*(Detailed plan: §13.)* Sync → staging table → review sheet grouped as *New / Already matched / Ignored*. Has trophies ⇒ played (that's all trophies are used for); purchased ⇒ owned digital; game list ⇒ playtime + last played. Matches are remembered, so re-sync only surfaces new titles and refreshes playtime. Noise (apps, demos, betas, PS Plus claims never launched) is one keystroke to ignore, remembered forever.
 
 ### 6.4 Playtime
 - **Average:** IGDB hastily / normally / completely shown in the inspector ("Main ≈ 32 h · Completionist ≈ 61 h").
@@ -342,7 +343,7 @@ Each ends with a runnable app and a commit/push.
 | 5 | **Playtime** | IGDB time-to-beat, manual playtime + status, me-vs-average UI, (optional HLTB provider) | Inspector shows averages for matched games |
 | 5b | **Play Next + ROM format** | `format = rom` end to end (schema, Quick Add `⌘D`, inspector, badge, filter); `game_traits` + IGDB rating enrichment; `RecommendationEngine` (+ tests on synthetic libraries); Play Next view with brackets, reasons, snooze/never, Start playing; "Ask Claude" second opinion on the shortlist | With ≥ 15 ranked games, each bracket proposes a sensible unfinished game with a reason I agree with |
 | 6 | **Photo scan** | Tiling, Claude recogniser, Vision fallback + serial extraction, matching, review sheet | The 6 sample photos import with ≥ 90 % correct pre-matches |
-| 7 | **PSN import** | Web login, token store, `LibraryImporter` protocol + shared review sheet, played list (from trophies) / game list / purchased, playtime, re-sync | Full PSN history imported; second sync shows only deltas |
+| 7 | **PSN import** (§13) | Web login, token store, `LibraryImporter` protocol + shared review sheet, **validated 30-day response cache**, request budget + rate limit, played list (from trophies) / game list / purchased, playtime, re-sync; built in gated live steps with owner approval on any unexpected response | Full PSN history imported; a second sync within 30 days makes **zero** PSN requests and shows only deltas |
 | 8 | **GOG import** | Second `LibraryImporter`: web login, owned list → review sheet | GOG library imported as owned PC/Mac games |
 | 9 | **Polish** | Liquid Glass touches under `#available(macOS 26)`, stats view, Top export as image, backups, app icon, empty states | — |
 
@@ -374,4 +375,71 @@ Order rationale: 0–4 deliver the whole core loop (add → browse → rank) wit
 | Persistence | GRDB stays even with Xcode available (see §1). |
 | ROMs *(added 2026-09-18)* | Third ownership format next to physical/digital. Manual entry only for now — no romlord/emulator import. |
 | 1–10 scores *(decided 2026-09-18)* | Not an input. Tiers + duels stay the way rankings are entered; a 1–10 score is **derived** from tier band + position, and tier **dividers are draggable** to tune bucket sizes (§7). |
+| PSN sync posture *(decided 2026-09-19)* | Read-only, on demand, serial, rate-limited and budgeted; **every valid response cached 30 days**, bogus ones never cached; during the build the agent **stops and asks** at any step that does not return the proper content (§13). |
 | Recommendations *(added 2026-09-18)* | **Play Next** (§7b): local, explainable, driven by my own rankings + a time bracket; only suggests owned, not-yet-completed games. Built as milestone 5b. **\"Ask Claude\" second opinion: yes** — on-demand re-ranking of the shortlist through the local `claude` CLI, never the default path. |
+
+---
+
+## 13. PSN Sync — detailed plan (milestone 7)
+
+**Goal.** Recover play history and digital ownership from my PlayStation account: which games I *played* (trophy lists — the only source for PS3/Vita), how long and when (PS4/PS5 game list), and what I *own digitally* (purchased list). Everything lands in the existing `import_titles` staging table and goes through a review sheet; nothing is added blindly. No trophy data is stored or shown.
+
+**Non-goals.** Anything that writes to PSN (friends, messages, presence, purchases), background or scheduled syncing, other people's profiles, trophy details.
+
+### 13.1 Risk posture — hard rules
+PSN has no public API; this uses the endpoints the official mobile app and web store use. Personal, read-only, low-volume use has a long public track record (trophy sites, home-automation integrations), but it is outside Sony's terms and my whole digital library hangs on this account. So the client is built to be *boring*:
+1. **Read-only endpoints only** — an allow-list of URL prefixes compiled into the client; any other request is a programming error and traps in DEBUG.
+2. **User-initiated only.** A sync runs when I press Sync. No timers, no launch-time refresh, no retries in the background.
+3. **Serial, slow, budgeted.** One request at a time, ≥ 1.5 s between requests (jittered), and a **hard budget per sync** (default 40 requests; a full first sync of ~800 titles needs ≈ 15). Exceeding the budget aborts the sync with a message — it never "just continues".
+4. **No retry loops.** A failed request is not retried automatically, except a single retry after an explicit `Retry-After` on 429 — and then the sync ends for the day. 401 → one token refresh, once. 403 / captcha / HTML instead of JSON / unknown error envelope → **stop**, surface it, do nothing else.
+5. **Credentials.** VGN never sees my password: login happens on Sony's own page inside a `WKWebView`; VGN reads the `npsso` cookie, exchanges it for an access token (~1 h) and refresh token (~2 months), and stores only those in the Keychain. "Sign out" deletes the tokens and (optionally) the cache. A paste-NPSSO field is the fallback.
+6. **Cache first** (next section): inside the cache window a sync makes **zero** network requests.
+
+### 13.2 Response cache — 30 days, valid responses only
+Every PSN response is validated before anything else happens to it. **Valid ⇒ cached for 30 days. Bogus ⇒ never cached, never overwrites a good entry, and the sync stops.**
+
+- Table (migration v5): `psn_cache(key TEXT PRIMARY KEY, endpoint TEXT, params_json TEXT, fetched_at DATETIME, expires_at DATETIME, status INTEGER, body BLOB, item_count INTEGER, schema_version INTEGER)` and `psn_cache_rejects(id, endpoint, params_json, received_at, status, reason TEXT, body_excerpt TEXT)` (last 50 kept, bodies truncated to 4 KB, tokens and account identifiers redacted) for diagnosis.
+- **Key** = endpoint + canonicalised parameters (incl. page offset/limit and service name). Paged lists are cached **per page** plus a small manifest (total count, page keys) so a partial fetch can resume without re-requesting good pages.
+- **"Not bogus" means all of:** HTTP 200; `Content-Type` JSON; decodes into the expected DTO with every *required* field present; no error envelope (`error`, `errors`, `code` ≠ success); pagination coherent (`totalItemCount` ≥ items seen, offsets contiguous, no duplicate ids across pages); list not *suspiciously empty* (an empty list where the previous valid cache had ≥ 1 item is treated as bogus until I confirm it); ids match their expected patterns (`NPWR…` communication ids, `CUSA/PPSA/…` title ids). Anything else is a **reject**.
+- **Reads:** a sync asks the cache first. Fresh entry (< 30 days) ⇒ use it, no request. Stale or missing ⇒ one request (within the budget), validate, store. The sync summary always states "n responses from cache · m from network".
+- **Force refresh** exists per data set (trophy titles / game list / purchases), behind a confirmation that says how many requests it will cost and when the data was last fetched. No global "refresh everything" shortcut.
+- Tokens are never in this cache (Keychain only). The cache is wiped on Sign out if I tick the box.
+- The 30-day TTL, the inter-request delay and the budget are constants in one file; changing them is a code review, not a setting.
+
+### 13.3 Data sets and mapping
+| Data set | Endpoint (host `m.np.playstation.com` unless noted) | Gives | Becomes |
+|---|---|---|---|
+| Profile | `/api/userProfile/v1/internal/users/me/profiles` (1 request) | account id, online id | sanity check that the token is mine; shown in Settings |
+| Trophy titles PS4/PS5 | `/api/trophy/v1/users/me/trophyTitles?npServiceName=trophy2` (paged, limit 800) | title, platform, earned counts, last update | `import_titles` rows, signal **played** iff ≥ 1 earned trophy; only title, platform, last-activity kept |
+| Trophy titles PS3/Vita | same with `npServiceName=trophy` | same | same — the only PS3/Vita history there is |
+| Game list | `/api/gamelist/v2/users/me/titles` (paged, limit 200) | play duration (ISO-8601), play count, first/last played, concept + title ids — PS4/PS5 only | `play_duration`, first/last played; signal **played** |
+| Purchases | web GraphQL `getPurchasedGameList` on `web.np.playstation.com` (persisted-query hash — **the fragile one**) | entitlements, product name, platform, PS Plus-claimed vs bought | signal **owned** (digital); Plus claims excluded by default |
+
+Normalisation: one `import_titles` row per (source `psn`, stable external id); the three lists are joined on concept/title id where present, else on normalised name + platform (`TitleNormalizer`). Noise filtered by default and remembered: media apps, demos, betas, themes/avatars, PS Plus claims never launched.
+
+Matching to the library reuses the photo-scan ladder (platform-constrained IGDB autocomplete → `FuzzyMatch` buckets → alternatives); confident matches are pre-ticked, the rest wait in the review sheet (*New / Already matched / Ignored*), decisions persist in `import_titles.matched_game_id / ignored`, so a later sync surfaces only new titles and refreshed playtimes. Commit is one transaction: played flags (+ `game_platforms`), digital Products for purchases, `psn_playtime_s` (manual playtime still wins), last played; then `notifyLibraryChanged()`.
+
+### 13.4 Architecture
+`VGN/Services/Importers/` — `LibraryImporter` protocol (authenticate → fetch → emit staging rows → shared review sheet; GOG will be the second implementation), `PSN/PSNAuth` (WebView bridge, token actor with single-flight refresh, Keychain), `PSN/PSNClient` (actor: allow-list, serial queue, delay, budget, validation, cache-first reads through `PSNResponseCache`), `PSN/PSNMapping` (pure: DTO → staging rows, noise rules), `PSNSyncCoordinator` (orchestrates a sync, progress + summary). UI: Settings ▸ Accounts ▸ PlayStation (sign in, status, token expiry, last sync, cache age per data set, Force refresh, Sign out & wipe), the import review sheet (shared component with photo scan where it fits). Everything behind protocols with fakes; **unit tests never touch the network** — they run on recorded, scrubbed fixtures and an injected clock (TTL, delay, budget, reject paths, resume after a partial paged fetch).
+
+### 13.5 Build protocol — gated live steps, stop and ask
+The build talks to the real service as little as possible, in a fixed order, and **halts on anything unexpected**. For the agent doing the work this is binding:
+
+> **At every live step:** make exactly the listed request(s); validate the response with the §13.2 rules. If it is valid → record a scrubbed fixture, cache it, report, move on. If it is **not** the proper content — wrong status, HTML/captcha, error envelope, schema mismatch, suspicious emptiness, rate-limit or auth challenge, anything not foreseen here — then **stop all PSN traffic immediately**, do not retry, do not try a variant, another parameter, another endpoint or another host; write down exactly what was sent and received (tokens and account ids redacted), explain the likely cause and the options, and **wait for the owner's explicit approval** before any further request. Approval covers one next action, not the rest of the build.
+
+| Step | Live requests (budget) | Proper content = | Checkpoint |
+|---|---|---|---|
+| S0 Scaffolding | 0 | — | protocol, DTOs from community documentation, cache + validator + budget limiter + allow-list, all tested on synthetic fixtures |
+| S1 Sign-in | the web login (owner does it) + 2 token calls | access + refresh tokens with expiry | **ask before S2**; owner confirms which account was used |
+| S2 Profile | 1 | my online id / account id | report, continue if valid |
+| S3 Trophy titles page 1 (`trophy2`) | 1 | a page of titles with `totalItemCount` | report counts; **ask before paging** if `totalItemCount` implies > 3 more requests |
+| S4 Remaining trophy pages + `trophy` (PS3/Vita) | ≤ 4 | coherent pages, no duplicates | report |
+| S5 Game list | ≤ 3 | titles with ISO-8601 durations | report |
+| S6 Purchases (GraphQL) | ≤ 4 | entitlement list; **most likely to fail** (persisted-query hash changes) | on failure: stop and ask — owned-digital can ship later without blocking the milestone |
+| S7 Full sync from cache | 0 | — | staging rows, matching, review sheet, commit — all offline |
+| S8 Second sync | 0 (inside the cache window) | — | proves "zero requests, only deltas" |
+
+Total live budget for the whole build ≈ 15–20 requests. Recommended: run S1–S6 with a **secondary PSN account** first (mistakes like a request loop happen while building, not while using), then one real sync with my main account once S8 passes. Fixtures are scrubbed of online id, account id, entitlement ids and avatars before they are committed; the NPSSO/token values never appear in logs, fixtures, prompts or commits.
+
+### 13.6 Done when
+A first sync imports my PSN history through the review sheet with ≤ 20 requests; an immediate second sync makes **0** requests and proposes nothing new; after adding a game on the console and forcing a refresh of one data set, only that data set is re-fetched and only the new title appears; every reject path shows a clear message and leaves the last good cache intact; signing out removes the tokens.
