@@ -48,6 +48,14 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
   it restores at next launch. `AppDatabase.restore` never clobbers from a bad file, but the
   UI should still confirm and ideally snapshot first.
 
+### Hardening (2026-09-19) — quick checks
+- [ ] Activity Monitor: VGN idles at ~0 % CPU on every screen (it used to sit at 100 % — fixed; worth one glance with your real library and real covers).
+- [ ] Right-click a game that is *not* selected → it becomes the selection when you pick an action (not merely on opening the menu); right-click inside a multi-selection → the action applies to all.
+- [ ] File ▸ **Export Library as JSON… / CSV…** writes a file; open the CSV in Numbers.
+- [ ] File ▸ **Restore from Backup…**: pick a snapshot → VGN quits → on reopening, the banner confirms the restore and a fresh pre-restore snapshot exists in Backups. (Try it once *before* you depend on it.)
+- [ ] Inspector ▸ **Remove custom cover** re-fetches a cover right away.
+- [ ] `scripts/snapshots.sh --generate` then open `.build/snapshots/index.html` — the fastest way to look at every screen.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

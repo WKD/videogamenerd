@@ -76,6 +76,7 @@ final class AppEnvironment {
         }
 
         let mode = LaunchMode.current
+        if mode == .live { PendingRestore.applyIfScheduled() }
         do {
             let database = try mode.usesInMemoryDB
                 ? AppDatabase.inMemory()
@@ -101,6 +102,9 @@ final class AppEnvironment {
             )
 
             bootstrap(store: store, database: database, mode: mode)
+            if mode == .live, let outcome = PendingRestore.consumeResult() {
+                vm.showBanner(outcome.message, kind: outcome.failed ? .error : .info)
+            }
 
             // Live: start the enrichment coordinator once the app is up.
             if mode == .live, let graph = built?.graph {
@@ -291,10 +295,12 @@ final class AppEnvironment {
             // "Remove custom cover": clear the file + marker, then let enrichment
             // fetch one again (live mode only — sample never touches the network).
             let coordinator = built?.graph.coordinator
+            let coverStoreForRefetch = built?.graph.coverStore
             vm.onRemoveCover = { [weak vm] gameID in
                 Task {
                     do {
                         try await store.clearUserCover(gameID: gameID)
+                        await coverStoreForRefetch?.clearNegativeCache(gameID: gameID)
                         if mode == .live { await coordinator?.refresh(gameID: gameID) }
                     } catch {
                         vm?.showBanner("Couldn't remove the cover.", kind: .error)

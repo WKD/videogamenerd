@@ -39,6 +39,7 @@ struct VGNApp: App {
         .commands {
             LibraryCommands()
             PhotoScanCommands()
+            LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
         }
 
         Settings {
