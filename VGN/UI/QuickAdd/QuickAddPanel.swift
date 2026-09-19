@@ -146,12 +146,15 @@ final class QuickAddPanelController {
             break
         }
 
-        // ⌘O / ⌘P / ⌘D — owned / played / format
+        // ⌘O / ⌘P — owned / played · ⌘D cycles the copy format · ⌘1 ⌘2 ⌘3 pick it
         if hasCommand, let ch = event.charactersIgnoringModifiers?.lowercased() {
             switch ch {
             case "o": model.toggleOwned(); return true
             case "p": model.togglePlayed(); return true
             case "d": model.cycleFormat(); return true
+            case "1": model.setFormat(.physical); return true
+            case "2": model.setFormat(.digital); return true
+            case "3": model.setFormat(.rom); return true
             default: break
             }
         }

@@ -474,6 +474,14 @@ final class QuickAddModel {
         persistFlags()
     }
 
+    /// Pick the copy format directly (footer picker, ⌘1 / ⌘2 / ⌘3). Choosing a format
+    /// means "I own this copy", so it also switches Owned on. Sticky like the other flags.
+    func setFormat(_ format: ProductFormat) {
+        flags.format = format
+        flags.owned = true
+        persistFlags()
+    }
+
     /// ⌃S…⌃F set the tier (implies played); ⌃0 clears it.
     func setTier(_ letter: String?) {
         tierLetter = letter

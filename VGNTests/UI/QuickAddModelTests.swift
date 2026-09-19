@@ -123,6 +123,25 @@ struct QuickAddModelTests {
         #expect(m2.flags.owned == false)
     }
 
+    @Test func pickingAFormatImpliesOwnedAndIsSticky() {
+        let prefs = InMemoryQuickAddPreferences()
+        let model = makeQuickAddModel(preferences: prefs)
+        if model.flags.owned { model.toggleOwned() }
+        #expect(!model.flags.owned)
+
+        model.setFormat(.rom)
+        #expect(model.flags.owned)
+        #expect(model.flags.format == .rom)
+
+        model.setFormat(.digital)
+        #expect(model.flags.format == .digital)
+
+        // A new palette instance starts from the persisted choice.
+        let next = makeQuickAddModel(preferences: prefs)
+        #expect(next.flags.owned)
+        #expect(next.flags.format == .digital)
+    }
+
     @Test func tierImpliesPlayed() {
         let model = makeQuickAddModel()
         #expect(model.flags.played == false)

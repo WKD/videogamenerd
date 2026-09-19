@@ -120,23 +120,32 @@ struct QuickAddView: View {
                 Divider()
             }
             HStack(spacing: 12) {
-                flagChip(model.flags.owned ? "Owned" : "Not owned",
-                         system: model.flags.owned ? "shippingbox.fill" : "shippingbox",
-                         on: model.flags.owned, help: "⌘O", identifier: A11yID.quickAddOwnedState)
-                if model.flags.owned {
-                    flagChip(model.flags.format.label, system: formatIcon, on: true,
-                             help: "⌘D cycles format", identifier: A11yID.quickAddFormatState)
+                Button { model.toggleOwned() } label: {
+                    flagChip(model.flags.owned ? "Owned" : "Not owned",
+                             system: model.flags.owned ? "shippingbox.fill" : "shippingbox",
+                             on: model.flags.owned, help: "⌘O", identifier: A11yID.quickAddOwnedState)
                 }
-                flagChip(model.flags.played ? "Played" : "Backlog",
-                         system: model.flags.played ? "gamecontroller.fill" : "tray.full",
-                         on: model.flags.played, help: "⌘P", identifier: A11yID.quickAddPlayedState)
+                .buttonStyle(.plain).focusable(false)
+                formatPicker
+                Button { model.togglePlayed() } label: {
+                    flagChip(model.flags.played ? "Played" : "Backlog",
+                             system: model.flags.played ? "gamecontroller.fill" : "tray.full",
+                             on: model.flags.played, help: "⌘P", identifier: A11yID.quickAddPlayedState)
+                }
+                .buttonStyle(.plain).focusable(false)
                 if let tier = model.tierLetter {
                     flagChip("Tier \(tier)", system: "star.fill", on: true, help: "⌃0 clears")
                 }
-                Spacer()
-                Text(shortcutHint).font(.caption2).foregroundStyle(.tertiary)
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14).padding(.vertical, 9)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 14).padding(.top, 9).padding(.bottom, 5)
+            // Shortcut hints on their own line so the chips never get squeezed.
+            Text(shortcutHint)
+                .font(.caption2).foregroundStyle(.tertiary)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14).padding(.bottom, 8)
         }
     }
 
@@ -154,6 +163,8 @@ struct QuickAddView: View {
                           identifier: String? = nil) -> some View {
         Label(text, systemImage: system)
             .font(.caption)
+            .lineLimit(1)
+            .fixedSize()
             .foregroundStyle(on ? Color.primary : Color.secondary)
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 6).fill(on ? Color.accentColor.opacity(0.15) : Color.clear))
@@ -164,8 +175,42 @@ struct QuickAddView: View {
             .accessibilityValue(text)
     }
 
-    private var formatIcon: String {
-        switch model.flags.format {
+    /// Copy format: three always-visible segments (Physical · Digital · ROM). Click one,
+    /// or ⌘1 / ⌘2 / ⌘3, or ⌘D to cycle. Picking a format also switches Owned on; while
+    /// "Not owned" the segments are dimmed because no copy will be created.
+    private var formatPicker: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(ProductFormat.allCases.enumerated()), id: \.element) { index, format in
+                let selected = model.flags.owned && model.flags.format == format
+                Button { model.setFormat(format) } label: {
+                    Label(format.label, systemImage: Self.icon(for: format))
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .foregroundStyle(selected ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(RoundedRectangle(cornerRadius: 6)
+                            .fill(selected ? Color.accentColor.opacity(0.15) : Color.clear))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).focusable(false)
+                .help("\(format.label) copy — ⌘\(index + 1)  (⌘D cycles)")
+                .accessibilityIdentifier("quickadd.format.\(format.rawValue)")
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
+        .opacity(model.flags.owned ? 1 : 0.55)
+        // The current format as one queryable value (UI smoke suite, VoiceOver).
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(A11yID.quickAddFormatState)
+        .accessibilityValue(model.flags.owned ? model.flags.format.label : "None")
+    }
+
+    private static func icon(for format: ProductFormat) -> String {
+        switch format {
         case .physical: return "opticaldisc"
         case .digital: return "arrow.down.circle"
         case .rom: return "memorychip"
@@ -173,7 +218,7 @@ struct QuickAddView: View {
     }
 
     private var shortcutHint: String {
-        "↑↓ select · Tab platform · ↩ add · ⇧↩ add & keep list · ⌘↩ add & open · ⌃S…⌃F tier · esc close"
+        "↑↓ select · Tab platform · ↩ add · ⇧↩ keep list · ⌘↩ open · ⌘1 ⌘2 ⌘3 format · ⌃S…⌃F tier"
     }
 }
 
