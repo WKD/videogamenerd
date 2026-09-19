@@ -21,27 +21,148 @@ import GRDB
         let b = try await store.addGame(GameDraft(title: "Medium One", igdbID: 2, platformIDs: ["pc"],
                                                   owned: true, played: true))
         try await store.setMyPlaytime(gameID: b.gameID, seconds: 20 * h)
-        // Played with manual 80 h → long.
+        // Played with manual 90 h → 80–100 h band.
         let c = try await store.addGame(GameDraft(title: "Long One", igdbID: 3, platformIDs: ["pc"],
                                                   owned: true, played: true))
-        try await store.setMyPlaytime(gameID: c.gameID, seconds: 80 * h)
+        try await store.setMyPlaytime(gameID: c.gameID, seconds: 90 * h)
         // Unplayed, IGDB main = 8 h → short (fallback estimate).
         let d = try await store.addGame(GameDraft(title: "Unplayed Short", igdbID: 4, platformIDs: ["pc"],
                                                   owned: true))
         try await store.updateMetadata(gameID: d.gameID, MetadataPatch(ttbNormallyS: 8 * h))
-        // Unplayed, no estimate → excluded from any bucket.
+        // Played with manual 220 h → over200.
+        let e = try await store.addGame(GameDraft(title: "Marathon", igdbID: 6, platformIDs: ["pc"],
+                                                  owned: true, played: true))
+        try await store.setMyPlaytime(gameID: e.gameID, seconds: 220 * h)
+        // Unplayed, no estimate → excluded from any band.
         _ = try await store.addGame(GameDraft(title: "No Data", igdbID: 5, platformIDs: ["pc"], owned: true))
 
-        func ids(_ buckets: Set<PlaytimeBucket>) async throws -> Set<Int64> {
-            let rows = try await store.gamesOnce(filter: LibraryFilter(playtimes: buckets, scope: .all))
+        func ids(_ filter: LibraryFilter) async throws -> Set<Int64> {
+            let rows = try await store.gamesOnce(filter: filter)
             return Set(rows.map(\.id))
+        }
+        func ids(_ buckets: Set<PlaytimeBucket>) async throws -> Set<Int64> {
+            try await ids(LibraryFilter(playtimes: buckets, scope: .all))
         }
 
         #expect(try await ids([.short]) == [a.gameID, d.gameID])
         #expect(try await ids([.medium]) == [b.gameID])
-        #expect(try await ids([.long]) == [c.gameID])
+        #expect(try await ids([.h80to100]) == [c.gameID])
+        #expect(try await ids([.over200]) == [e.gameID])
+        #expect(try await ids([.h40to60]).isEmpty)
         // OR within the kind.
-        #expect(try await ids([.short, .long]) == [a.gameID, c.gameID, d.gameID])
+        #expect(try await ids([.short, .h80to100]) == [a.gameID, c.gameID, d.gameID])
+    }
+
+    // MARK: - Band bounds through SQL at every edge
+
+    @Test func playtimeBandEdgesThroughSQL() async throws {
+        let store = try await TestDB.makeStore()
+        // Seed one played game per edge value (in minutes, so 39 h 59 m is exact).
+        // (label, seconds, expected band)
+        let cases: [(String, Int, PlaytimeBucket)] = [
+            ("e1", 39 * h + 59 * 60, .medium),     // 39:59 → 10–40
+            ("e2", 40 * h,           .h40to60),    // 40:00 → 40–60
+            ("e3", 79 * h + 59 * 60, .h60to80),    // 79:59 → 60–80
+            ("e4", 80 * h,           .h80to100),   // 80:00 → 80–100
+            ("e5", 99 * h + 59 * 60, .h80to100),   // 99:59 → 80–100
+            ("e6", 100 * h,          .h100to150),  // 100:00 → 100–150
+            ("e7", 199 * h + 59 * 60, .h150to200), // 199:59 → 150–200
+            ("e8", 200 * h,          .over200),    // 200:00 → over200
+        ]
+        var idByLabel: [String: Int64] = [:]
+        for (i, c) in cases.enumerated() {
+            let g = try await store.addGame(GameDraft(title: c.0, igdbID: Int64(100 + i),
+                                                      platformIDs: ["pc"], owned: true, played: true))
+            try await store.setMyPlaytime(gameID: g.gameID, seconds: c.1)
+            idByLabel[c.0] = g.gameID
+        }
+        for c in cases {
+            // Selecting exactly the expected band returns this game and none of the
+            // other edge games (each edge value lands in exactly one band).
+            let rows = try await store.gamesOnce(
+                filter: LibraryFilter(playtimes: [c.2], scope: .all))
+            let got = Set(rows.map(\.id))
+            #expect(got.contains(idByLabel[c.0]!), "\(c.0) (\(c.1)s) should land in \(c.2)")
+            for other in cases where other.0 != c.0 && other.2 != c.2 {
+                #expect(!got.contains(idByLabel[other.0]!),
+                        "\(other.0) must not appear in band \(c.2)")
+            }
+        }
+    }
+
+    // MARK: - "No Estimate" and the normally → hastily → completely fallback
+
+    @Test func noEstimateAndTTBFallbackThroughSQL() async throws {
+        let store = try await TestDB.makeStore()
+        // Only a *completely* estimate (no normally, no playtime): must be banded by it.
+        let onlyCompletely = try await store.addGame(GameDraft(title: "OnlyCompletely", igdbID: 1,
+                                                               platformIDs: ["pc"], owned: true))
+        try await store.updateMetadata(gameID: onlyCompletely.gameID,
+                                       MetadataPatch(ttbCompletelyS: 20 * h))   // → medium
+        // Only a *hastily* estimate: banded by it.
+        let onlyHastily = try await store.addGame(GameDraft(title: "OnlyHastily", igdbID: 2,
+                                                            platformIDs: ["pc"], owned: true))
+        try await store.updateMetadata(gameID: onlyHastily.gameID,
+                                       MetadataPatch(ttbHastilyS: 5 * h))        // → short
+        // A *normally* estimate wins over the others when present.
+        let normally = try await store.addGame(GameDraft(title: "Normally", igdbID: 3,
+                                                         platformIDs: ["pc"], owned: true))
+        try await store.updateMetadata(gameID: normally.gameID,
+                                       MetadataPatch(ttbHastilyS: 5 * h, ttbNormallyS: 20 * h,
+                                                     ttbCompletelyS: 90 * h))    // → medium (normally)
+        // No info at all → No Estimate.
+        let none1 = try await store.addGame(GameDraft(title: "NoneA", igdbID: 4,
+                                                     platformIDs: ["pc"], owned: true))
+        let none2 = try await store.addGame(GameDraft(title: "NoneB", igdbID: 5,
+                                                     platformIDs: ["pc"], owned: true, played: true))
+
+        func ids(_ filter: LibraryFilter) async throws -> Set<Int64> {
+            Set(try await store.gamesOnce(filter: filter).map(\.id))
+        }
+
+        // Fallback: hastily/completely-only games are banded, not dropped.
+        #expect(try await ids(LibraryFilter(playtimes: [.short], scope: .all))
+                == [onlyHastily.gameID])
+        #expect(try await ids(LibraryFilter(playtimes: [.medium], scope: .all))
+                == [onlyCompletely.gameID, normally.gameID])
+
+        // "No Estimate" alone: only the two games with no time info at all.
+        #expect(try await ids(LibraryFilter(includeNoTimeEstimate: true, scope: .all))
+                == [none1.gameID, none2.gameID])
+
+        // Combined with a band (OR within the kind).
+        #expect(try await ids(LibraryFilter(playtimes: [.short], includeNoTimeEstimate: true, scope: .all))
+                == [onlyHastily.gameID, none1.gameID, none2.gameID])
+
+        // Across kinds (AND): No Estimate AND scope Played → only the played none.
+        #expect(try await ids(LibraryFilter(includeNoTimeEstimate: true, scope: .played))
+                == [none2.gameID])
+        // No Estimate AND scope Backlog (owned, not played) → only the unplayed none;
+        // the estimate-bearing backlog games are excluded.
+        #expect(try await ids(LibraryFilter(includeNoTimeEstimate: true, scope: .backlog))
+                == [none1.gameID])
+    }
+
+    // MARK: - In-memory banding (PlaytimeBucket.contains) parity with the SQL
+
+    @Test func bandingParityBetweenContainsAndSQL() async throws {
+        let store = try await TestDB.makeStore()
+        // A spread of effective playtimes (seconds) across every band boundary.
+        let seconds = [1, 5, 10, 39, 40, 55, 60, 79, 80, 95, 100, 149, 150, 199, 200, 350].map { $0 * h }
+        var idBySeconds: [Int: Int64] = [:]
+        for (i, s) in seconds.enumerated() {
+            let g = try await store.addGame(GameDraft(title: "P\(i)", igdbID: Int64(500 + i),
+                                                      platformIDs: ["pc"], owned: true, played: true))
+            try await store.setMyPlaytime(gameID: g.gameID, seconds: s)
+            idBySeconds[s] = g.gameID
+        }
+        // For every band, the SQL result must equal the set the pure `contains` picks.
+        for band in PlaytimeBucket.allCases {
+            let sql = Set(try await store.gamesOnce(
+                filter: LibraryFilter(playtimes: [band], scope: .all)).map(\.id))
+            let expected = Set(seconds.filter { band.contains($0) }.map { idBySeconds[$0]! })
+            #expect(sql == expected, "band \(band): SQL and PlaytimeBucket.contains disagree")
+        }
     }
 
     // MARK: - Playtime sort uses effective, unknowns last both directions

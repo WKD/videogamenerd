@@ -67,10 +67,16 @@ struct LibraryFilter: Hashable, Sendable {
     /// with `formats` within the format facet.
     var includeNotOwned: Bool
 
-    /// Playtime-band facet (< 10 h / 10–40 h / > 40 h). Empty = no constraint. The
-    /// value bucketed is the effective playtime (manual over PSN), falling back to
-    /// the IGDB main estimate for a game I have not played (PLAN §6.4).
+    /// Playtime-band facet (< 10 h … > 200 h). Empty = no constraint. The value
+    /// bucketed is the effective playtime (manual over PSN), falling back to the best
+    /// available IGDB estimate (main → rushed → completionist) for a game I have not
+    /// played (PLAN §6.4/§8).
     var playtimes: Set<PlaytimeBucket>
+    /// Also match games with **no time information at all** — no effective playtime
+    /// AND none of the IGDB estimates (main / rushed / completionist). These are the
+    /// games a fetched completion time is missing for, which impairs Play Next
+    /// (PLAN §5.3). OR-combines with `playtimes` within the playtime facet.
+    var includeNoTimeEstimate: Bool
 
     /// A single explicit platform facet (slug), independent of the scope.
     /// (Legacy single facet; the multi-select facet below is `platforms`.)
@@ -100,6 +106,7 @@ struct LibraryFilter: Hashable, Sendable {
         formats: Set<ProductFormat> = [],
         includeNotOwned: Bool = false,
         playtimes: Set<PlaytimeBucket> = [],
+        includeNoTimeEstimate: Bool = false,
         platform: String? = nil,
         platforms: Set<String> = [],
         scope: SidebarSelection = .all,
@@ -117,6 +124,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.formats = formats
         self.includeNotOwned = includeNotOwned
         self.playtimes = playtimes
+        self.includeNoTimeEstimate = includeNoTimeEstimate
         self.platform = platform
         self.platforms = platforms
         self.scope = scope
@@ -131,6 +139,7 @@ struct LibraryFilter: Hashable, Sendable {
             || !tierIDs.isEmpty || includeUnrated
             || !statuses.isEmpty || includeNotPlayed || includeNoStatus
             || !formats.isEmpty || includeNotOwned
-            || !playtimes.isEmpty || platform != nil || !platforms.isEmpty
+            || !playtimes.isEmpty || includeNoTimeEstimate
+            || platform != nil || !platforms.isEmpty
     }
 }
