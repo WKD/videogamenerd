@@ -137,7 +137,22 @@ struct LibraryGridView: View {
             Divider()
             Button("Clear") { act(on: game) { vm.setTier(nil, for: $0) } }
         }
-        Button("Mark Played") { act(on: game) { vm.setPlayed(true, for: $0) } }
+        // Mark Played As (PLAN §8, owner request). The top-level item repeats the
+        // last-chosen value; ⇧M is shown as a title hint only — NOT a menu key
+        // equivalent, which (shift-only) would steal a capital "M" typed in the
+        // search field / Quick Add. The key itself is handled by the grid router.
+        let lastMark = vm.lastPlayedMark
+        Button("\(lastMark.menuTitle)   ⇧M") { act(on: game) { vm.markPlayed($0, as: lastMark) } }
+        Menu("Mark Played As") {
+            ForEach(PlayedMark.allCases) { mark in
+                Button {
+                    act(on: game) { vm.markPlayed($0, as: mark) }
+                } label: {
+                    if mark == lastMark { Label(mark.label, systemImage: "checkmark") }
+                    else { Text(mark.label) }
+                }
+            }
+        }
         Button("Mark Owned") { act(on: game) { vm.setOwned(true, for: $0) } }
         Divider()
         // Compilations (PLAN §8).

@@ -74,6 +74,13 @@ final class LibraryViewModel {
     let coverLoader: any CoverLoading
     /// Per-sidebar-selection sort persistence (PLAN §8).
     private let sortPreferences: any SortPreferenceStoring
+    /// Persistence for the last "Mark Played As" value (⇧M / menu repeat, PLAN §8).
+    private let playedMarkPreferences: any LastPlayedMarkStoring
+
+    /// The last-chosen "Mark Played As" value, repeated by ⇧M and the top-level
+    /// "Mark as ‹Last›" menu item. Read by the grid context menu and the menu-bar
+    /// commands; written only from an action (never a body/menu builder).
+    private(set) var lastPlayedMark: PlayedMark
 
     /// The write-orchestration object (tier/owned/played/status/playtime/delete,
     /// banners, confirmations, undo). Nil in previews/tests that drive the
@@ -102,6 +109,8 @@ final class LibraryViewModel {
     var onEditCompilation: (Int64) -> Void = { _ in }
     /// "Group as compilation…" from the current selection (wired by the app).
     var onGroupAsCompilation: (Set<Int64>) -> Void = { _ in }
+    /// "Mark Played As" for a set of games (wired by the app to ``LibraryActions``).
+    var onMarkPlayed: (Set<Int64>, PlayedMark) -> Void = { _, _ in }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
@@ -156,6 +165,11 @@ final class LibraryViewModel {
     /// when the same single game stays selected).
     private var observedDetailID: Int64?
 
+    /// After a played-mark that may drop games from the current scope (e.g.
+    /// Backlog), where to move the selection once the grid refreshes without them.
+    /// Consumed by the next ``applyGames`` that actually removes them (PLAN §8).
+    private var pendingReselect: (removed: Set<Int64>, vacatedIndex: Int)?
+
     /// Clock for the type-to-select window (injectable so tests can control it).
     private let now: () -> Date
 
@@ -164,11 +178,14 @@ final class LibraryViewModel {
         coverLoader: any CoverLoading = NoopCoverLoader(),
         selection: SidebarSelection = .all,
         sortPreferences: any SortPreferenceStoring = UserDefaultsSortPreferences(),
+        playedMarkPreferences: any LastPlayedMarkStoring = UserDefaultsLastPlayedMarkPreferences(),
         now: @escaping () -> Date = { Date() }
     ) {
         self.dataSource = dataSource
         self.coverLoader = coverLoader
         self.sortPreferences = sortPreferences
+        self.playedMarkPreferences = playedMarkPreferences
+        self.lastPlayedMark = playedMarkPreferences.lastPlayedMark()
         self.now = now
         self.selection = selection
         let initialSort = sortPreferences.sortSetting(for: selection.id)
@@ -263,6 +280,28 @@ final class LibraryViewModel {
         }
         selectedGameIDs.formIntersection(ids)
         if let anchor = selectionAnchor, !ids.contains(anchor) { selectionAnchor = nil }
+        consumeReselectPlan(newIDs: ids, rows: rows)
+    }
+
+    /// After a played-mark, if the marked games have now left this scope (e.g.
+    /// Backlog), move the selection to whatever occupies the first vacated
+    /// position, resetting the anchor/cursor. If they are all still present (a
+    /// scope like All/Owned that keeps played games), cancel the plan and leave
+    /// the selection be.
+    private func consumeReselectPlan(newIDs: Set<Int64>, rows: [GameSummary]) {
+        guard let plan = pendingReselect else { return }
+        guard plan.removed.isDisjoint(with: newIDs) else {
+            // Not (all) removed yet → this scope keeps them; nothing to reselect.
+            if plan.removed.isSubset(of: newIDs) { pendingReselect = nil }
+            return
+        }
+        pendingReselect = nil
+        guard selectedGameIDs.isEmpty else { return }
+        if rows.isEmpty {
+            clearSelection()
+        } else {
+            selectOnly(rows[min(plan.vacatedIndex, rows.count - 1)].id)
+        }
     }
 
     /// (Re)subscribe the inspector's live detail to the single selected game.
@@ -524,6 +563,8 @@ final class LibraryViewModel {
             toggleOwnedForSelection(); return nil
         case .togglePlayed:
             togglePlayedForSelection(); return nil
+        case .markPlayedAsLast:
+            applyLastPlayedMark(); return nil
         case .typeSelect(let character):
             return isTypeBufferActive() ? appendTypeSelect(character)
                                         : startTypeSelect(character)
@@ -546,6 +587,47 @@ final class LibraryViewModel {
         let sel = selectedGames
         guard !sel.isEmpty else { return }
         onSetPlayed(selectedGameIDs, !sel.allSatisfy(\.played))
+    }
+
+    // MARK: Mark Played As (PLAN §8, owner request 2026-09-19)
+
+    /// True when the current sidebar destination shows the library grid (so the
+    /// menu-bar "Mark Played" commands are enabled). False for the ranking / Play
+    /// Next destinations, which replace the grid.
+    var isLibraryGridDestination: Bool { !isRankingSelection && !isPlayNextSelection }
+
+    /// Apply a played-mark to a set of games: remember it as the new "last" value,
+    /// plan a sensible reselection if this scope will drop the games, then dispatch
+    /// the write (undo + banner live in ``LibraryActions``). Called from the grid
+    /// context menu and the menu bar — never a body/menu *builder*.
+    func markPlayed(_ ids: Set<Int64>, as mark: PlayedMark) {
+        guard !ids.isEmpty else { return }
+        setLastPlayedMark(mark)
+        planReselection(removing: ids)
+        onMarkPlayed(ids, mark)
+    }
+
+    /// ⇧M / menu "Mark as ‹Last›": repeat the last mark on the current selection.
+    /// Suppressed (via ``applyGridAction``) while the search field owns focus.
+    func applyLastPlayedMark() {
+        guard !selectedGameIDs.isEmpty else { return }
+        markPlayed(selectedGameIDs, as: lastPlayedMark)
+    }
+
+    /// Record the chosen mark as the repeat value (persisted). A no-op when it is
+    /// already current (so the top-level repeat item costs no write).
+    func setLastPlayedMark(_ mark: PlayedMark) {
+        guard mark != lastPlayedMark else { return }
+        lastPlayedMark = mark
+        playedMarkPreferences.setLastPlayedMark(mark)
+    }
+
+    /// Snapshot the first vacated position among `ids` in the current ordering, so
+    /// ``consumeReselectPlan`` can move the selection there once the grid refreshes.
+    private func planReselection(removing ids: Set<Int64>) {
+        let indices = ids.compactMap { id in games.firstIndex { $0.id == id } }
+        guard let first = indices.min() else { pendingReselect = nil; return }
+        pendingReselect = (ids, first)
     }
 
     /// Test/inspection: whether a type-to-select buffer is currently active.

@@ -46,6 +46,7 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 - Placeholder covers print a large platform label that the badges can overlap; redundant now that platform pills sit under the title. [later, cosmetic]
 - Compilation members keep IGDB's order (e.g. Mass Effect 2 · 1 · 3); reorder in the editor. [later: sort by release date on creation]
 - Grid query ≈ 33 ms at 2 000 games (DEBUG), one full re-query per emission, no paging. [watch]
+- **Mark Played As** (wave 7, ⇧M / context menu / Game menu): the ⇧M shortcut is displayed as **text only** ("Mark as Finished   ⇧M"), not a SwiftUI menu key equivalent — a shift-only equivalent would register globally and steal a capital "M" typed in the search field / Quick Add. The key itself is handled by the pure `GridKeyRouter`, so it is unit-tested; that the menus *render* the hint and that ⇧M does not leak into text fields is window-only (see `docs/ACCEPTANCE.md`). Selection reselection after a Backlog mark is keyed to the next grid observation emission (fine for a single window; an unrelated emission arriving first would cancel the plan). [watch]
 
 ### Ranking
 - The Top: no insertion line while hovering during a reorder drag. **[doing]** Reorder and divider drag are disabled while a filter is active (by design).

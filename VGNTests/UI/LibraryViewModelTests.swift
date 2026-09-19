@@ -150,8 +150,14 @@ struct GridKeyRouterTests {
         #expect(GridKeyRouter.route(characters: "p", modifiers: .shift) == .togglePlayed)
     }
 
+    @Test func shiftMRepeatsLastMark() {
+        #expect(GridKeyRouter.route(characters: "m", modifiers: .shift) == .markPlayedAsLast)
+        // With ⇧ the character often arrives already uppercased — still the action.
+        #expect(GridKeyRouter.route(characters: "M", modifiers: .shift) == .markPlayedAsLast)
+    }
+
     @Test func shiftNonActionLetterTypeSelects() {
-        #expect(GridKeyRouter.route(characters: "m", modifiers: .shift) == .typeSelect("m"))
+        #expect(GridKeyRouter.route(characters: "k", modifiers: .shift) == .typeSelect("k"))
         #expect(GridKeyRouter.route(characters: "z", modifiers: .shift) == .typeSelect("z"))
     }
 
@@ -288,9 +294,22 @@ struct MultiSelectAndTypeSelectTests {
         var tierCalls = 0
         vm.onSetTier = { _, _ in tierCalls += 1 }
         vm.selectOnly(3)
-        // ⇧M is not an action key → behaves like a plain letter (Mega Man).
-        #expect(press(vm, "m", shift: true) == 1)
+        // ⇧Z is not an action key → behaves like a plain letter (Zelda, id 4).
+        #expect(press(vm, "z", shift: true) == 4)
         #expect(tierCalls == 0)
+    }
+
+    @Test func shiftMAppliesLastPlayedMark() async {
+        let vm = await makeVM(typeSelectGames(), ClockBox())
+        var marks: [(Set<Int64>, PlayedMark)] = []
+        vm.onMarkPlayed = { ids, mark in marks.append((ids, mark)) }
+        vm.setLastPlayedMark(.status(.finished))
+        vm.selectedGameIDs = [1, 2]
+        // ⇧M repeats the last mark on the selection (no jump).
+        #expect(press(vm, "m", shift: true) == nil)
+        #expect(marks.count == 1)
+        #expect(marks.first?.0 == [1, 2])
+        #expect(marks.first?.1 == .status(.finished))
     }
 
     @Test func plainZeroClearsTier() async {
