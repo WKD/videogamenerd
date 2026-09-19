@@ -158,6 +158,103 @@ enum Migrations {
         }
     }
 
+    // MARK: - v5 — shared importer cache + product idempotency (PLAN §14.2 / §14.3)
+
+    /// v5 lays the schema for the shared importer machinery (GOG first, PSN next):
+    ///
+    ///  - `import_cache` — the §14.2 30-day response cache, one implementation for
+    ///    every importer. Composite PK `(source, key)`, index on `(source, expires_at)`
+    ///    for the "what is fresh / what is stale" sweep and for `wipe(source:)`.
+    ///  - `import_cache_rejects` — the last 50 bogus responses per source, kept for
+    ///    diagnostics with 4 KB excerpts (tokens / user ids / e-mail redacted **before**
+    ///    they reach here — see ``ImportRedactor``). Pruned to 50/source by
+    ///    ``ImportResponseCacheStore``, indexed on `(source, received_at)` for the prune.
+    ///  - `products.external_id` + a **partial unique** index `(source, external_id)
+    ///    WHERE external_id IS NOT NULL` — so a committed import Product is idempotent:
+    ///    re-committing the same GOG/PSN product id creates nothing new (§14.3). The
+    ///    `source` CHECK is widened to admit `'gog'` (it already allowed `'psn'`).
+    ///
+    /// Adding `external_id` and widening the CHECK both require rebuilding `products`
+    /// (SQLite cannot ALTER a CHECK), done the standard create-copy-drop-rename way
+    /// with deferred foreign-key checks so `product_games`' ON DELETE CASCADE does not
+    /// fire while the old table is dropped (the v3 pattern).
+    static func registerV5(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v5", foreignKeyChecks: .deferred) { db in
+            // (a) Rebuild products: + external_id, widened source CHECK.
+            try db.execute(sql: """
+                CREATE TABLE products_new (
+                    id              INTEGER PRIMARY KEY,
+                    title           TEXT,
+                    platform_id     TEXT    NOT NULL REFERENCES platforms(id) ON DELETE RESTRICT,
+                    kind            TEXT    NOT NULL CHECK (kind   IN ('single','compilation')),
+                    format          TEXT    NOT NULL CHECK (format IN ('physical','digital','rom')),
+                    edition         TEXT,
+                    region          TEXT,
+                    igdb_id         INTEGER,
+                    cover_file      TEXT,
+                    source          TEXT    NOT NULL CHECK (source IN ('manual','photo','psn','gog')),
+                    psn_entitlement TEXT,
+                    external_id     TEXT,
+                    acquired_at     DATETIME,
+                    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                """)
+            try db.execute(sql: """
+                INSERT INTO products_new
+                    (id, title, platform_id, kind, format, edition, region, igdb_id,
+                     cover_file, source, psn_entitlement, external_id, acquired_at,
+                     created_at, updated_at)
+                SELECT
+                    id, title, platform_id, kind, format, edition, region, igdb_id,
+                    cover_file, source, psn_entitlement, NULL, acquired_at,
+                    created_at, updated_at
+                FROM products;
+                """)
+            try db.execute(sql: "DROP TABLE products;")
+            try db.execute(sql: "ALTER TABLE products_new RENAME TO products;")
+            try db.execute(sql: "CREATE INDEX products_platform_idx ON products(platform_id);")
+            // Idempotent import commits: one Product per (source, external_id).
+            try db.execute(sql: """
+                CREATE UNIQUE INDEX products_source_external_idx
+                    ON products(source, external_id) WHERE external_id IS NOT NULL;
+                """)
+
+            // (b) Shared response cache (PLAN §14.2).
+            try db.execute(sql: """
+                CREATE TABLE import_cache (
+                    source         TEXT     NOT NULL,
+                    key            TEXT     NOT NULL,
+                    endpoint       TEXT     NOT NULL,
+                    params_json    TEXT     NOT NULL DEFAULT '{}',
+                    fetched_at     DATETIME NOT NULL,
+                    expires_at     DATETIME NOT NULL,
+                    status         INTEGER  NOT NULL,
+                    body           BLOB     NOT NULL,
+                    item_count     INTEGER  NOT NULL DEFAULT 0,
+                    schema_version INTEGER  NOT NULL DEFAULT 1,
+                    PRIMARY KEY (source, key)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX import_cache_expiry_idx ON import_cache(source, expires_at);")
+
+            // (c) Reject ring buffer (last 50/source, pruned by the store).
+            try db.execute(sql: """
+                CREATE TABLE import_cache_rejects (
+                    id           INTEGER PRIMARY KEY,
+                    source       TEXT     NOT NULL,
+                    endpoint     TEXT     NOT NULL,
+                    params_json  TEXT     NOT NULL DEFAULT '{}',
+                    received_at  DATETIME NOT NULL,
+                    status       INTEGER,
+                    reason       TEXT     NOT NULL,
+                    body_excerpt TEXT     NOT NULL DEFAULT ''
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX import_cache_rejects_source_idx ON import_cache_rejects(source, received_at);")
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

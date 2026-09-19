@@ -100,7 +100,8 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   `TasteScoring`, `DirectLinks`, `CrowdPrior`, `RecommendationEngine`, `TasteBacktest`.
 - `VGN/Database/` — GRDB. `AppDatabase` (pool/queue factories + migrator),
   `Migrations` (**one closure per version, lane A only** — v1 is the whole PLAN §4
-  schema; v2 FTS/sort rebuild; v3 `rom` format; v4 Play Next tables). `LibraryStore`
+  schema; v2 FTS/sort rebuild; v3 `rom` format; v4 Play Next tables; v5 shared importer
+  cache `import_cache`/`import_cache_rejects` + `products.external_id` idempotency, GOG/PSN §14.2). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`
