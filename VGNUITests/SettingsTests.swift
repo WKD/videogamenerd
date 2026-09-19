@@ -44,6 +44,8 @@ final class SettingsTests: VGNUITestCase {
     private func attachSettingsScreenshot(_ name: String) {
         let settings = app.windows.containing(.button, identifier: A11y.settingsCheck).firstMatch
         let target = settings.exists ? settings : app.windows.firstMatch
+        // Window-only, never app/screen: attach nothing if no window resolves.
+        guard target.exists else { return }
         let attachment = XCTAttachment(screenshot: target.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
