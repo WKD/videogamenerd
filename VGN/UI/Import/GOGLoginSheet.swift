@@ -37,6 +37,20 @@ struct GOGLoginNavigationPolicy: Sendable {
         }
     }
 
+    /// `isMainFrame` — the host allow-list guards what page the *window* is on (the
+    /// anti-phishing rule; the address line shows the main-frame host). Sub-frames
+    /// (GOG's login embeds a captcha iframe from a third-party host, plus `about:blank`
+    /// / `about:srcdoc` frames) cannot take the window anywhere and are allowed, or the
+    /// login could never complete. The redirect parser still runs on every frame.
+    func decide(url: URL, isMainFrame: Bool) -> Decision {
+        let decision = decide(url: url)
+        if case .block = decision {
+            if !isMainFrame { return .allow }
+            if url.scheme == "about" { return .allow }          // about:blank while loading
+        }
+        return decision
+    }
+
     func decide(url: URL) -> Decision {
         // The redirect parser runs first (PLAN §14.1): its success/error host is off the
         // browse allow-list, so it would otherwise be blocked before we read the code.
@@ -171,9 +185,11 @@ private struct GOGLoginWebView: NSViewRepresentable {
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard let url = navigationAction.request.url else { return .allow }
-            switch parent.policy.decide(url: url) {
+            // A nil target frame is a new-window request: treat it as main-frame.
+            let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+            switch parent.policy.decide(url: url, isMainFrame: isMainFrame) {
             case .allow:
-                parent.onHostChange(url.host ?? "")
+                if isMainFrame, let host = url.host { parent.onHostChange(host) }
                 return .allow
             case .block(let host):
                 parent.onBlocked(host)

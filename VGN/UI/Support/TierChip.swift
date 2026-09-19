@@ -40,7 +40,7 @@ struct TierChip: View {
     /// "S — Masterpiece" (label-only), or "S — Masterpiece · 9.4" when a game's
     /// derived score is given ("· ~8.5" for an approximate/unplaced score). Falls
     /// back to just the letter's tier name when no label is known.
-    static func hoverText(
+    nonisolated static func hoverText(
         letter: String, label: String?, labels: [String: String],
         score: DerivedScoreValue? = nil
     ) -> String {

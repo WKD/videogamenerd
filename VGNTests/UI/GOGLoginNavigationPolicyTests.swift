@@ -61,4 +61,24 @@ struct GOGLoginNavigationPolicyTests {
         #expect(!GOGLoginNavigationPolicy.isAllowed(host: "notgog.com", in: ["gog.com"]))
         #expect(!GOGLoginNavigationPolicy.isAllowed(host: "gog.com.evil.com", in: ["gog.com"]))
     }
+
+    // MARK: Frames (captcha iframes must load; the window must never leave GOG)
+
+    @Test func subframesFromOtherHostsAreAllowedButTheMainFrameIsNot() {
+        let policy = GOGLoginNavigationPolicy(parser: GOGAuthRedirectParser(redirectURI: "https://embed.gog.com/on_login_success?origin=client"),
+                                              allowedHosts: ["auth.gog.com", "login.gog.com", "www.gog.com", "gog.com"])
+        let captcha = URL(string: "https://www.recaptcha.net/recaptcha/api2/anchor?k=x")!
+        #expect(policy.decide(url: captcha, isMainFrame: false) == .allow)
+        #expect(policy.decide(url: captcha, isMainFrame: true) == .block(host: "www.recaptcha.net"))
+        #expect(policy.decide(url: URL(string: "about:blank")!, isMainFrame: true) == .allow)
+        #expect(policy.decide(url: URL(string: "about:srcdoc")!, isMainFrame: false) == .allow)
+        #expect(policy.decide(url: URL(string: "https://evil.example/login")!, isMainFrame: true) == .block(host: "evil.example"))
+    }
+
+    @Test func theSuccessRedirectCompletesFromAnyFrame() {
+        let policy = GOGLoginNavigationPolicy(parser: GOGAuthRedirectParser(redirectURI: "https://embed.gog.com/on_login_success?origin=client"),
+                                              allowedHosts: ["auth.gog.com"])
+        let redirect = URL(string: "https://embed.gog.com/on_login_success?origin=client&code=abc123")!
+        #expect(policy.decide(url: redirect, isMainFrame: true) == .completed(code: "abc123"))
+    }
 }
