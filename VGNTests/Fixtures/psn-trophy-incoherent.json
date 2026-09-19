@@ -1,0 +1,9 @@
+{
+  "trophyTitles": [
+    { "npCommunicationId": "NPWR70001_00", "trophyTitleName": "Broken Book", "trophyTitlePlatform": "PS5", "npServiceName": "trophy2", "progress": 20, "earnedTrophies": { "bronze": 5, "silver": 0, "gold": 0, "platinum": 0 }, "lastUpdatedDateTime": "2026-01-01T10:00:00Z", "hiddenFlag": false },
+    { "npCommunicationId": "NPWR70001_00", "trophyTitleName": "Broken Book (dupe)", "trophyTitlePlatform": "PS5", "npServiceName": "trophy2", "progress": 20, "earnedTrophies": { "bronze": 5, "silver": 0, "gold": 0, "platinum": 0 }, "lastUpdatedDateTime": "2026-01-01T10:00:00Z", "hiddenFlag": false }
+  ],
+  "totalItemCount": 1,
+  "nextOffset": null,
+  "previousOffset": null
+}

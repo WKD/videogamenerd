@@ -1,0 +1,11 @@
+{
+  "titles": [
+    { "titleId": "CUSA90001_00", "name": "Synthetic Saga", "localizedName": "Synthetic Saga", "category": "ps5_native_game", "service": "none", "playCount": 42, "firstPlayedDateTime": "2026-01-02T09:00:00Z", "lastPlayedDateTime": "2026-08-01T22:00:00Z", "playDuration": "PT228H56M33S", "concept": { "id": 10090001 } },
+    { "titleId": "CUSA90003_00", "name": "Placeholder Peaks", "localizedName": "Placeholder Peaks", "category": "ps5_native_game", "service": "none", "playCount": 1, "firstPlayedDateTime": "2026-06-01T09:00:00Z", "lastPlayedDateTime": "2026-06-01T10:30:00Z", "playDuration": "PT52M10S", "concept": { "id": 10090003 } },
+    { "titleId": "CUSA90006_00", "name": "Sample Skies", "localizedName": "Sample Skies", "category": "ps4_game", "service": "none", "playCount": 1, "firstPlayedDateTime": "2026-04-10T14:00:00Z", "lastPlayedDateTime": "2026-04-10T14:05:00Z", "playDuration": "PT0S", "concept": { "id": 10090006 } },
+    { "titleId": "PPSA90020_00", "name": "Marathon Maker", "localizedName": "Marathon Maker", "category": "ps5_native_game", "service": "none", "playCount": 3, "firstPlayedDateTime": "2025-12-01T00:00:00Z", "lastPlayedDateTime": "2026-02-01T00:00:00Z", "playDuration": "P1DT2H", "concept": { "id": 10090020 } }
+  ],
+  "totalItemCount": 4,
+  "nextOffset": null,
+  "previousOffset": null
+}

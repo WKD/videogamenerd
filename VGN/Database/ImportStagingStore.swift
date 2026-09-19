@@ -38,10 +38,14 @@ struct ImportCommitItem: Sendable, Equatable {
     var edition: String?
     /// When the copy was acquired, recorded on the committed product. nil for GOG/PSN.
     var acquiredAt: Date?
+    /// **(PSN)** Extra outcomes a PSN row commits beyond a plain owned copy (PLAN §13.3 —
+    /// played-without-a-copy, PSN play time, a status pre-fill, a PS Plus subscription
+    /// flag). nil ⇒ the plain GOG/Delicious path, byte-for-byte unchanged.
+    var psn: PSNCommit?
 
     init(source: String, externalID: String, platformID: String,
          format: ProductFormat = .digital, target: Target,
-         edition: String? = nil, acquiredAt: Date? = nil) {
+         edition: String? = nil, acquiredAt: Date? = nil, psn: PSNCommit? = nil) {
         self.source = source
         self.externalID = externalID
         self.platformID = platformID
@@ -49,7 +53,43 @@ struct ImportCommitItem: Sendable, Equatable {
         self.target = target
         self.edition = edition
         self.acquiredAt = acquiredAt
+        self.psn = psn
     }
+}
+
+/// The PSN-specific outcomes one reviewed row commits (PLAN §13.3). Additive — a nil
+/// ``ImportCommitItem/psn`` keeps the GOG/Delicious commit path exactly as it was.
+struct PSNCommit: Sendable, Equatable {
+    /// Create the owned digital Product (a purchase). false = **played-only**, no copy.
+    var createProduct: Bool
+    /// A PS Plus / raw membership flag on the created product (v8). nil = really owned.
+    var subscription: String?
+    /// Mark the game **played** (+ per-platform played flag) without requiring a copy.
+    var markPlayed: Bool
+    /// PSN play time in seconds → `psn_playtime_s` (never overwrites manual `my_playtime_s`).
+    var playDurationS: Int?
+    /// A completion status to pre-fill **only when the game has none** (100 % title).
+    var statusPrefill: PlayStatus?
+
+    init(createProduct: Bool, subscription: String? = nil, markPlayed: Bool = false,
+         playDurationS: Int? = nil, statusPrefill: PlayStatus? = nil) {
+        self.createProduct = createProduct
+        self.subscription = subscription
+        self.markPlayed = markPlayed
+        self.playDurationS = playDurationS
+        self.statusPrefill = statusPrefill
+    }
+}
+
+/// One PS Plus claim that a committed copy carries but the latest sync no longer lists —
+/// **proposed** for removal in the review sheet, never applied silently (PLAN §13.3).
+struct ImportSubscriptionRemovalProposal: Sendable, Equatable, Identifiable {
+    var productID: Int64
+    var externalID: String
+    var gameID: Int64?
+    var gameTitle: String?
+    var subscription: String
+    var id: Int64 { productID }
 }
 
 /// What a commit changed (PLAN §14.3).
@@ -204,6 +244,12 @@ struct ImportStagingStore: Sendable {
         return try await dbWriter.write { db in
             var result = ImportCommitResult()
             for item in items {
+                // PSN rows take an additive path (played-only, playtime, status, PS Plus,
+                // idempotent updates); everything else is byte-for-byte the old behaviour.
+                if item.psn != nil {
+                    try Self.commitPSNItem(item, db: db, result: &result)
+                    continue
+                }
                 // Idempotency guard: already committed?
                 if try LibraryStore.existingImportProductID(
                     sourceRaw: item.source, externalID: item.externalID, db: db) != nil {
@@ -260,6 +306,80 @@ struct ImportStagingStore: Sendable {
                 }
             }
             return result
+        }
+    }
+
+    // MARK: - PSN commit (additive, PLAN §13.3)
+
+    /// Commit one PSN row: resolve/create the game, optionally attach an owned digital
+    /// Product (with a PS Plus flag), optionally mark it played without a copy, set the
+    /// PSN play time, and pre-fill a status if none — all idempotent. Unlike the plain
+    /// path it does **not** early-skip an already-committed product, so a changed play time
+    /// or a newly-launched title updates on re-sync.
+    private static func commitPSNItem(_ item: ImportCommitItem, db: Database,
+                                      result: inout ImportCommitResult) throws {
+        guard let psn = item.psn else { return }
+
+        // Resolve the game id.
+        let gameID: Int64
+        switch item.target {
+        case .existingGame(let id):
+            gameID = id
+        case .newGame(let spec):
+            let draft = GameDraft(
+                title: spec.title, igdbID: spec.igdbID, year: spec.releaseYear,
+                altTitles: spec.altTitles, platformIDs: [item.platformID],
+                owned: false, played: psn.markPlayed, source: .psn)
+            let outcome = try LibraryStore.insert(draft, db)
+            gameID = outcome.gameID
+            if case .created = outcome { result.gamesCreated += 1 }
+        case .compilation:
+            return   // PSN never commits a compilation.
+        }
+
+        // Owned digital copy (a purchase) — idempotent; carries the PS Plus flag.
+        if psn.createProduct {
+            let (_, created) = try LibraryStore.attachSingleImportProduct(
+                gameID: gameID, platformID: item.platformID, format: item.format,
+                sourceRaw: item.source, externalID: item.externalID,
+                subscription: psn.subscription, db: db)
+            if created { result.productsAdded += 1 }
+        }
+
+        // Played without a copy (a trophy title).
+        if psn.markPlayed {
+            try LibraryStore.markPlayedWithoutCopy(gameID: gameID, platformID: item.platformID, db: db)
+        }
+        // PSN play time (never overwrites a manual value).
+        try LibraryStore.setPSNPlaytime(gameID: gameID, seconds: psn.playDurationS, db: db)
+        // Status pre-fill only when the game has none.
+        if let status = psn.statusPrefill {
+            try LibraryStore.prefillStatusIfNone(gameID: gameID, status: status, db: db)
+        }
+
+        result.affectedGameIDs.append(gameID)
+        try markMatched(source: item.source, externalID: item.externalID, gameID: gameID, db: db)
+    }
+
+    /// Every committed subscription (PS Plus) copy whose claim is **absent** from the
+    /// current sync's external ids — proposed for removal in the review sheet, never
+    /// applied here (PLAN §13.3). `currentExternalIDs` are the external ids the latest
+    /// fetch produced (from ``PSNMapping``).
+    func proposedSubscriptionRemovals(source: String,
+                                      currentExternalIDs: Set<String>) async throws -> [ImportSubscriptionRemovalProposal] {
+        try await dbWriter.read { db in
+            try LibraryStore.committedSubscriptionCopies(sourceRaw: source, db: db).compactMap { copy in
+                guard !currentExternalIDs.contains(copy.externalID) else { return nil }
+                let sub: String = (try String.fetchOne(db, sql: "SELECT subscription FROM products WHERE id = ?",
+                                                        arguments: [copy.productID])) ?? ""
+                let gameRow = try Row.fetchOne(db, sql: """
+                    SELECT g.id AS gid, g.title AS title FROM games g
+                    JOIN product_games pg ON pg.game_id = g.id WHERE pg.product_id = ? LIMIT 1
+                    """, arguments: [copy.productID])
+                return ImportSubscriptionRemovalProposal(
+                    productID: copy.productID, externalID: copy.externalID,
+                    gameID: gameRow?["gid"], gameTitle: gameRow?["title"], subscription: sub)
+            }
         }
     }
 

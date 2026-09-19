@@ -1,0 +1,9 @@
+{
+  "access_token": "SYNTHETIC.ACCESS.TOKEN.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "token_type": "bearer",
+  "expires_in": 3599,
+  "scope": "psn:mobile.v2.core psn:clientapp",
+  "id_token": "SYNTHETIC.ID.TOKEN",
+  "refresh_token": "SYNTHETIC-REFRESH-TOKEN-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "refresh_token_expires_in": 5184000
+}
