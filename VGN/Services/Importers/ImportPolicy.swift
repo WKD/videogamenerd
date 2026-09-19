@@ -18,6 +18,14 @@ enum ImportPolicy {
         var budget: Int
     }
 
+    /// **The Vault's one gate: 10 minutes of play** (PLAN §16, owner 2026-09-20). A source
+    /// entry becomes a library game only when it was played **strictly more than** this many
+    /// seconds (or is a Batocera favourite / a hand promotion). Shared by both importers:
+    /// Batocera's promotion threshold (this *raises* its earlier 5-minute rule) and PSN's PS
+    /// Plus-claim gate (a `PS_PLUS` entitlement played ≤ this goes to the Vault, not the
+    /// library or the Ignored bucket). One place, "a code review, not a setting".
+    static let vaultPlaytimeGateSeconds = 600
+
     /// GOG: ≥ 1 s between requests, budget 15 (PLAN §14.1 rule 2 — a 300-game
     /// library needs 1 + 1 + 3 = 5).
     static let gog = Pacing(minDelay: 1.0, jitter: 0.5, budget: 15)

@@ -58,10 +58,10 @@ struct RomCatalogStoreTests {
         let db = try await BatoceraTestSupport.makeSeededDB()
         let store = RomCatalogStore(db)
         _ = try await store.syncSystem(system: "snes", entries: [
-            entry("a.zip", name: "Played", gametime: 600),          // > 5 min → candidate
+            entry("a.zip", name: "Played", gametime: 900),          // > 10 min → candidate
             entry("b.zip", name: "Favourite", favorite: true),       // favourite → candidate
-            entry("c.zip", name: "Barely", gametime: 200),           // < 5 min, not fav → no
-            entry("d.zip", name: "Exactly300", gametime: 300),       // == 300 not > → no
+            entry("c.zip", name: "Barely", gametime: 200),           // < 10 min, not fav → no
+            entry("d.zip", name: "Exactly600", gametime: 600),       // == 600 not > → no
         ])
         let names = Set(try await store.promotionCandidates().map(\.name))
         #expect(names == ["Played", "Favourite"])

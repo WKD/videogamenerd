@@ -103,9 +103,9 @@ struct BatoceraReaderTests {
         #expect(byName["g299"] == 299)
         #expect(byName["g300"] == 300)
         #expect(byName["g301"] == 301)
-        // 300 is NOT played (> 300 required); 301 is.
-        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 300) == false)
-        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 301) == true)
+        // The Vault's 10-minute gate: 600 is NOT played (> 600 required); 601 is.
+        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 600) == false)
+        #expect(BatoceraPromotion.isPlayed(gameTimeSeconds: 601) == true)
     }
 
     @Test func malformedXMLThrowsTypedError() throws {
