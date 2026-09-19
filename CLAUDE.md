@@ -102,7 +102,9 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   `Migrations` (**one closure per version, lane A only** — v1 is the whole PLAN §4
   schema; v2 FTS/sort rebuild; v3 `rom` format; v4 Play Next tables; v5 shared importer
   cache `import_cache`/`import_cache_rejects` + `products.external_id` idempotency, GOG/PSN §14.2;
-  v6 `games.hltb_id` (HLTB fallback §5.3) + `games.origin`, backfilled from each game's oldest product). `LibraryStore`
+  v6 `games.hltb_id` (HLTB fallback §5.3) + `games.origin`, backfilled from each game's oldest product;
+  v7 drops the `products.source` CHECK — validated in Swift via `ProductSource`, so file/importer sources
+  (Delicious §5.5) add no rebuild). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`

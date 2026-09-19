@@ -6,6 +6,8 @@ import Foundation
 enum ImportSourceID {
     static let gog = "gog"
     static let psn = "psn"
+    /// The first **file-based** importer: an old Delicious Library 2 database (PLAN §5.5).
+    static let delicious = "delicious"
 }
 
 /// What an imported title signals about the library (PLAN §14.3 / §13.3). GOG only
@@ -210,6 +212,16 @@ struct ImportStagingRow: Sendable, Hashable, Codable, Identifiable {
     /// A Linux-only title mapped to `pc` (PLAN §14.3 — "Linux-only titles map to pc
     /// with a note"). Transient; the review sheet shows the note from this flag.
     var linuxOnly: Bool
+    /// The cleaned title to match against IGDB when it differs from the shown `name`
+    /// (PLAN §5.5 — a file importer keeps the noisy original but matches a scrubbed
+    /// form). Transient; nil ⇒ match on `name`. GOG never sets it.
+    var matchTitle: String?
+    /// An edition extracted from the source title / metadata (e.g. "Collector's Edition")
+    /// to land on the committed copy (PLAN §5.5). Transient. GOG never sets it.
+    var edition: String?
+    /// When the copy was acquired (Delicious `ZCREATIONDATE`), stored on the committed
+    /// product (PLAN §5.5). Transient. GOG never sets it.
+    var acquiredAt: Date?
 
     var id: String { "\(source):\(externalID)" }
 
@@ -217,7 +229,8 @@ struct ImportStagingRow: Sendable, Hashable, Codable, Identifiable {
          signals: ImportSignals = [.owned], playDurationS: Int? = nil,
          firstPlayedAt: Date? = nil, lastPlayedAt: Date? = nil,
          releaseYear: Int? = nil, ignoreReason: ImportIgnoreReason? = nil,
-         macAvailable: Bool = false, linuxOnly: Bool = false) {
+         macAvailable: Bool = false, linuxOnly: Bool = false,
+         matchTitle: String? = nil, edition: String? = nil, acquiredAt: Date? = nil) {
         self.source = source
         self.externalID = externalID
         self.name = name
@@ -230,6 +243,9 @@ struct ImportStagingRow: Sendable, Hashable, Codable, Identifiable {
         self.ignoreReason = ignoreReason
         self.macAvailable = macAvailable
         self.linuxOnly = linuxOnly
+        self.matchTitle = matchTitle
+        self.edition = edition
+        self.acquiredAt = acquiredAt
     }
 }
 
@@ -295,11 +311,15 @@ struct ImportSyncSummary: Sendable, Hashable, Codable {
     /// (PLAN §14.2 — "a gap is reported, not fatal"). 0 ⇒ fully consistent. Surfaced
     /// as a note in the review-sheet header.
     var ownedGap: Int
+    /// Count read from a **file** source (Delicious Library, PLAN §5.5). > 0 ⇒ the
+    /// header shows "N games read from …" instead of the cache/network line. 0 for
+    /// network importers (GOG/PSN).
+    var fromFile: Int
 
     init(source: String, fromCache: Int = 0, fromNetwork: Int = 0,
          stagedTotal: Int = 0, newCount: Int = 0, alreadyMatchedCount: Int = 0,
          ignoredCount: Int = 0, budgetUsed: Int = 0, rejects: [ImportReject] = [],
-         ownedGap: Int = 0) {
+         ownedGap: Int = 0, fromFile: Int = 0) {
         self.source = source
         self.fromCache = fromCache
         self.fromNetwork = fromNetwork
@@ -310,11 +330,20 @@ struct ImportSyncSummary: Sendable, Hashable, Codable {
         self.budgetUsed = budgetUsed
         self.rejects = rejects
         self.ownedGap = ownedGap
+        self.fromFile = fromFile
     }
 
     /// "12 from cache · 3 from network".
     var networkSummaryLine: String {
         "\(fromCache) from cache · \(fromNetwork) from network"
+    }
+
+    /// Header summary line: a file source reads "N games read from the file"; a network
+    /// source shows the cache/network split. The source's human label is supplied by the
+    /// review model (this Model type stays label-free).
+    func summaryLine(sourceLabel: String) -> String {
+        guard fromFile > 0 else { return networkSummaryLine }
+        return "\(fromFile) game\(fromFile == 1 ? "" : "s") read from \(sourceLabel)"
     }
 
     /// A one-line note when the owned-id list and the library pages disagree

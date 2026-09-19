@@ -36,6 +36,8 @@ final class AppEnvironment {
     let playNext: PlayNextEnvironment?
     /// Presents the GOG import flow (progress + review sheets, PLAN §14); nil in tests.
     let gogImport: GOGImportPresenter?
+    /// Presents the Delicious Library file-import flow (PLAN §5.5); nil in tests.
+    let deliciousImport: DeliciousImportPresenter?
     /// Presents the HLTB time-estimate fallback (bulk sheet + single-game picker,
     /// PLAN §5.3); nil in tests.
     let hltb: HLTBFetchPresenter?
@@ -63,6 +65,7 @@ final class AppEnvironment {
         photoScan: PhotoScanPresenter? = nil,
         playNext: PlayNextEnvironment? = nil,
         gogImport: GOGImportPresenter? = nil,
+        deliciousImport: DeliciousImportPresenter? = nil,
         hltb: HLTBFetchPresenter? = nil
     ) {
         self.settings = settings
@@ -77,6 +80,7 @@ final class AppEnvironment {
         self.photoScan = photoScan
         self.playNext = playNext
         self.gogImport = gogImport
+        self.deliciousImport = deliciousImport
         self.hltb = hltb
     }
 
@@ -147,6 +151,16 @@ final class AppEnvironment {
                 })
             settings.gogAccount = gogWiring.account
 
+            // Delicious Library file import (PLAN §5.5): available in live AND sample mode
+            // (a file needs no account). A committed import notifies enrichment like GOG.
+            let deliciousImport = DeliciousImportBuilder.build(
+                mode: mode, database: database, secrets: settings.secretStore,
+                graph: built?.graph, platformCatalog: built?.platformCatalog, store: store,
+                onError: { [weak vm] message in vm?.showBanner(message, kind: .error) },
+                onLibraryChanged: {
+                    if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
+                })
+
             // HLTB time-estimate fallback (PLAN §5.3): live builds the real search
             // client; other modes get the inert, no-network search. Reuses the shared
             // importer cache (source = "hltb").
@@ -166,6 +180,7 @@ final class AppEnvironment {
                 playNext: .live(database: database, library: store,
                                 coverLoader: coverLoader, viewModel: vm),
                 gogImport: gogWiring.presenter,
+                deliciousImport: deliciousImport,
                 hltb: hltb
             )
         } catch {

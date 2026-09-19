@@ -124,6 +124,15 @@ The request shape was **verified live 2026-09-19** (wave 10, lane B) and the fix
 - [ ] In `-VGNSampleData` mode the button + sheet still work but make **no network calls** (every game resolves "not found") — the inert search.
 - [ ] Inspector footer shows **"Added <date> · via <origin>"**; the CSV/JSON export carries `origin` (and each copy's `source` / `external_id`).
 
+## Delicious Library import (§5.5)
+- [ ] File ▸ **Import from Delicious Library…** → pick the `.deliciouslibrary2` file **or** the "Delicious Library 2" folder that contains it. It reads (no network) and opens the review sheet titled **Import from Delicious Library** with "103 games read from Delicious Library".
+- [ ] The **platform policy** switch (Mac when available / Always PC) is shown and only re-maps the PC/Mac hybrid discs; console games (PS3, Wii, GameCube…) keep their platform. Each row's platform popup offers **every** VGN platform.
+- [ ] Matched rows show the IGDB title with the original noisy title underneath ("Delicious Library: …"); an extracted **edition** chip appears (e.g. *Special Edition*, *Collector's Edition*). French titles like *Cérébrale Académie* match via alt-names.
+- [ ] A game already on your shelf as the **same physical copy on the same platform** appears under *Already matched* / "Already on your shelf", unticked; committing never adds a second copy. Re-running the import adds nothing.
+- [ ] With **Use my Delicious Library covers…** ticked (default), games imported without a cover show the owner's own box art after commit; a later, better enrichment cover is still allowed to replace it.
+- [ ] Import works the same in `-VGNSampleData YES` mode (no account, no network except IGDB matching — which is inert there).
+- [ ] Confirm the real file's bytes are untouched after an import (it is opened read-only).
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

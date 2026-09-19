@@ -58,8 +58,11 @@ struct ImportSyncCoordinator: Sendable {
             onProgress(ImportProgress(phase: .matching, completed: index, total: toMatch.count,
                                       detail: title.name))
             let row = rowsByExternalID[title.externalID]
+            // A file importer matches a cleaned title (`matchTitle`) while `name` keeps
+            // the noisy original for display (PLAN §5.5); GOG leaves `matchTitle` nil.
             let request = ImportMatchRequest(
-                title: title.name, platformSlug: title.platform, releaseYear: row?.releaseYear)
+                title: row?.matchTitle ?? title.name,
+                platformSlug: title.platform, releaseYear: row?.releaseYear)
             let outcome = try await matcher.match(request)
             matches.append(ImportMatchResult(externalID: title.externalID, name: title.name, outcome: outcome))
         }
@@ -76,7 +79,8 @@ struct ImportSyncCoordinator: Sendable {
             ignoredCount: buckets[.ignored]?.count ?? 0,
             budgetUsed: fetched.budgetUsed,
             rejects: [],
-            ownedGap: fetched.ownedGap)
+            ownedGap: fetched.ownedGap,
+            fromFile: fetched.fromFile)
         onProgress(ImportProgress(phase: .finished))
         return ImportSyncResult(summary: summary, matches: matches, rows: fetched.rows)
     }

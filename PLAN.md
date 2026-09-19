@@ -158,6 +158,7 @@ No official API. Every wrapper scrapes an internal search endpoint whose path/ke
 ### 5.5 Other libraries (later)
 All importers implement one `LibraryImporter` protocol (authenticate → fetch → emit `import_titles` rows → shared review sheet), so adding a source never touches the core.
 - **GOG** (wanted): unofficial but long-stable account API (`embed.gog.com/user/data/games` + `account/gameDetails`), web login like PSN → *Owned (digital)*, PC/Mac. No play time.
+- **Delicious Library 2** (done, the first *file* importer): reads an old `.deliciouslibrary2` Core Data SQLite catalogue **read-only + immutable** (never the store's private movies/books/music), resolving the `Medium` entity by name and reading only `ZTYPE = 'VideoGame'` rows → *Owned (physical)*, one copy each. `authenticate` is a no-op and there is no network/cache/budget; it still runs through the shared coordinator (staging → matching → review → commit). Platform labels map to VGN slugs (Windows→pc, Mac→mac, a PC/Mac hybrid disc follows the same policy switch GOG uses, consoles keep their slug); titles are cleaned for **matching only** (platform/media/edition/bundle noise stripped, the edition extracted onto the copy) while the noisy original is kept and shown; release year is the IGDB tie-breaker; `ZCREATIONDATE` becomes the acquired date and the store's box-art JPEG fills a game left without a cover (not marked user-chosen, so enrichment may still upgrade it). Because the owner catalogued his shelf by photo scan, a row whose match already owns the same physical copy on the same platform is dropped as a duplicate. Re-import is idempotent on `(source='delicious', external_id=ZUUIDSTRING)`.
 - Steam / Xbox / Nintendo: not planned. The protocol leaves the door open.
 
 ### 5.6 Platforms
@@ -365,6 +366,7 @@ Each ends with a runnable app and a commit/push.
 | 7 | **PSN import** (§13) | Web login, token store, `LibraryImporter` protocol + shared review sheet, **validated 30-day response cache**, request budget + rate limit, played list (from trophies) / game list / purchased, playtime, re-sync; built in gated live steps with owner approval on any unexpected response | Full PSN history imported; a second sync within 30 days makes **zero** PSN requests and shows only deltas |
 | 8 | **GOG import** *(built before 7 — §14)* | First `LibraryImporter` + the shared cache / validator / budget / review sheet: web login, owned list → review sheet | GOG library imported as owned PC/Mac games (§14.6) |
 | 9 | **Polish** | Liquid Glass touches under `#available(macOS 26)`, stats view, Top export as image, backups, app icon, empty states | — |
+| 10 | **Delicious Library import** (§5.5) | First file importer: read-only `.deliciouslibrary2` reader, platform + title/edition mapping, shared review sheet with the "discard duplicate copies" rule + own-cover fallback, migration v7 (drop the `products.source` CHECK) | An old Delicious catalogue imports as owned physical games with the right platforms; re-import adds nothing |
 
 Order rationale: 0–4 deliver the whole core loop (add → browse → rank) with manual entry only; 5–8 are independent accelerators and can be reordered freely (e.g. PSN before photos).
 
@@ -398,6 +400,7 @@ Order rationale: 0–4 deliver the whole core loop (add → browse → rank) wit
 | 1–10 scores *(decided 2026-09-18)* | Not an input. Tiers + duels stay the way rankings are entered; a 1–10 score is **derived** from tier band + position, and tier **dividers are draggable** to tune bucket sizes (§7). |
 | PSN sync posture *(decided 2026-09-19)* | Read-only, on demand, serial, rate-limited and budgeted; **every valid response cached 30 days**, bogus ones never cached; during the build the agent **stops and asks** at any step that does not return the proper content (§13). |
 | Recommendations *(added 2026-09-18)* | **Play Next** (§7b): local, explainable, driven by my own rankings + a time bracket; only suggests owned, not-yet-completed games. Built as milestone 5b. **\"Ask Claude\" second opinion: yes** — on-demand re-ranking of the shortlist through the local `claude` CLI, never the default path. |
+| Delicious import *(added 2026-09-19)* | Import an old Delicious Library 2 file (§5.5) as owned **physical** copies: read-only/immutable, VideoGame rows only, title cleaned for matching (original kept), **discard duplicate copies** already owned physically on that platform, own box-art as a cover fallback. Migration **v7 drops the `products.source` CHECK** (validated in Swift via `ProductSource`) so future importers need no table rebuild. |
 
 ---
 

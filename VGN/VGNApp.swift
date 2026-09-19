@@ -28,6 +28,7 @@ struct VGNApp: App {
                 .environment(\.rankingEnvironment, env.ranking)
                 .photoScanPresentation(env.photoScan)
                 .gogImportPresentation(env.gogImport)
+                .deliciousImportPresentation(env.deliciousImport)
                 .hltbFetchPresentation(env.hltb)
                 .environment(\.playNextEnvironment, env.playNext)
             } else if let failure = env.failure {
@@ -44,6 +45,7 @@ struct VGNApp: App {
             StatsCommands()
             PhotoScanCommands()
             GOGImportCommands()
+            DeliciousImportCommands()
             LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
         }
 

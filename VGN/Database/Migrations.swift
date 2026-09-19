@@ -287,6 +287,61 @@ enum Migrations {
         }
     }
 
+    // MARK: - v7 — drop the products.source CHECK (PLAN §5.5)
+
+    /// v7 removes the CHECK constraint on `products.source` so future importers never
+    /// need another table rebuild — the allowed set is validated in Swift by
+    /// ``ProductSource`` instead (Delicious is the first source added this way). The
+    /// table is rebuilt the standard create-copy-drop-rename way with deferred foreign-key
+    /// checks (the v5 pattern): all columns and rows are preserved, the platform index and
+    /// the partial unique `(source, external_id)` index are recreated. `product_games`'
+    /// `ON DELETE CASCADE` is why the FK checks are deferred while the old table is dropped.
+    ///
+    /// NOTE(orchestrator): this is registered after v6 (which landed from the HLTB lane on
+    /// the merge). If v6 had not yet landed it would still be named v7; the orchestrator
+    /// resolves the final numbering at merge.
+    static func registerV7(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v7", foreignKeyChecks: .deferred) { db in
+            try db.execute(sql: """
+                CREATE TABLE products_new (
+                    id              INTEGER PRIMARY KEY,
+                    title           TEXT,
+                    platform_id     TEXT    NOT NULL REFERENCES platforms(id) ON DELETE RESTRICT,
+                    kind            TEXT    NOT NULL CHECK (kind   IN ('single','compilation')),
+                    format          TEXT    NOT NULL CHECK (format IN ('physical','digital','rom')),
+                    edition         TEXT,
+                    region          TEXT,
+                    igdb_id         INTEGER,
+                    cover_file      TEXT,
+                    source          TEXT    NOT NULL,
+                    psn_entitlement TEXT,
+                    external_id     TEXT,
+                    acquired_at     DATETIME,
+                    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                """)
+            try db.execute(sql: """
+                INSERT INTO products_new
+                    (id, title, platform_id, kind, format, edition, region, igdb_id,
+                     cover_file, source, psn_entitlement, external_id, acquired_at,
+                     created_at, updated_at)
+                SELECT
+                    id, title, platform_id, kind, format, edition, region, igdb_id,
+                    cover_file, source, psn_entitlement, external_id, acquired_at,
+                    created_at, updated_at
+                FROM products;
+                """)
+            try db.execute(sql: "DROP TABLE products;")
+            try db.execute(sql: "ALTER TABLE products_new RENAME TO products;")
+            try db.execute(sql: "CREATE INDEX products_platform_idx ON products(platform_id);")
+            try db.execute(sql: """
+                CREATE UNIQUE INDEX products_source_external_idx
+                    ON products(source, external_id) WHERE external_id IS NOT NULL;
+                """)
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

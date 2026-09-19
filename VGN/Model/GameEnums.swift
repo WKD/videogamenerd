@@ -48,6 +48,9 @@ enum ProductSource: String, Hashable, Sendable, Codable, CaseIterable {
     case photo
     case psn
     case gog
+    /// A copy imported from an old Delicious Library 2 catalogue (owned, physical),
+    /// recognised on re-import by `(source, external_id)` (PLAN §5.5).
+    case delicious
 
     /// A short, human-readable label for the inspector / exports.
     var label: String {
@@ -56,6 +59,7 @@ enum ProductSource: String, Hashable, Sendable, Codable, CaseIterable {
         case .photo: return "Photo scan"
         case .psn: return "PSN"
         case .gog: return "GOG"
+        case .delicious: return "Delicious Library"
         }
     }
 }

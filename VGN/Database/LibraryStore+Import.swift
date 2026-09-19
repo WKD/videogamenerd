@@ -19,17 +19,21 @@ extension LibraryStore {
     }
 
     /// Insert one import `products` row (no membership) and return its id. Digital by
-    /// default; `kindRaw` is `'single'` or `'compilation'`.
+    /// default; `kindRaw` is `'single'` or `'compilation'`. `edition` / `acquiredAt` land
+    /// on the copy when a file importer supplies them (Delicious, PLAN §5.5).
     @discardableResult
     static func insertImportProductRow(
         platformID: String, format: ProductFormat, sourceRaw: String, externalID: String,
-        kindRaw: String = "single", title: String? = nil, db: Database
+        kindRaw: String = "single", title: String? = nil,
+        edition: String? = nil, acquiredAt: Date? = nil, db: Database
     ) throws -> Int64 {
         let now = Date()
         try db.execute(sql: """
-            INSERT INTO products (title, platform_id, kind, format, source, external_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, arguments: [title, platformID, kindRaw, format.rawValue, sourceRaw, externalID, now, now])
+            INSERT INTO products
+                (title, platform_id, kind, format, edition, source, external_id, acquired_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, arguments: [title, platformID, kindRaw, format.rawValue, edition,
+                             sourceRaw, externalID, acquiredAt, now, now])
         return db.lastInsertedRowID
     }
 
@@ -37,10 +41,12 @@ extension LibraryStore {
     /// If a Product for `(sourceRaw, externalID)` already exists, nothing is created and
     /// `created` is false. Ensures the `game_platforms` row too. Games are added *owned,
     /// not played* — this only establishes ownership, never a played flag or tier.
+    /// `edition` / `acquiredAt` are recorded on a newly-created copy (Delicious).
     @discardableResult
     static func attachSingleImportProduct(
         gameID: Int64, platformID: String, format: ProductFormat,
-        sourceRaw: String, externalID: String, db: Database
+        sourceRaw: String, externalID: String,
+        edition: String? = nil, acquiredAt: Date? = nil, db: Database
     ) throws -> (productID: Int64, created: Bool) {
         if let existing = try existingImportProductID(sourceRaw: sourceRaw, externalID: externalID, db: db) {
             // Keep the membership consistent (idempotent link) but create nothing new.
@@ -51,7 +57,8 @@ extension LibraryStore {
         }
         try ensureGamePlatform(gameID: gameID, platformID: platformID, played: false, db: db)
         let productID = try insertImportProductRow(
-            platformID: platformID, format: format, sourceRaw: sourceRaw, externalID: externalID, db: db)
+            platformID: platformID, format: format, sourceRaw: sourceRaw, externalID: externalID,
+            edition: edition, acquiredAt: acquiredAt, db: db)
         try ProductGameRecord(productID: productID, gameID: gameID, position: 0).insert(db)
         return (productID, true)
     }
