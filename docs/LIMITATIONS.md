@@ -128,8 +128,30 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   then waits under *New* for manual review. A configured but flaky IGDB lookup can't sink a sync
   (`ResilientImportMatcher` turns a lookup error into "no match").
 
+### HowLongToBeat fallback (wave 9, lane A — PLAN §5.3)
+Fills only the *gaps* IGDB leaves, on demand (inspector ▸ Fetch from HowLongToBeat; Game ▸
+Fetch Missing Time Estimates…). Built and tested **entirely on synthetic fixtures** from the
+reference client's documented shapes — **no `howlongtobeat.com` request was made by this lane**.
+- **The request shape is an assumption.** Ported from `ScrappyCocco/HowLongToBeat-PythonAPI`
+  (master, 2026-09-19) and **isolated in one file** (`VGN/Services/TimeToBeat/HLTB/HLTBEndpoint.swift`),
+  cross-checked with `ckatzorke/howlongtobeat`. The **endpoint discovery** (finding the rotating
+  `/api/<word>/<token>` path by scraping the Next.js app chunk and re-assembling the token from
+  string literals) is the **first thing that will break** and the first to re-verify on the real
+  site. Symptom of a break: a clean `schemaMismatch` / discovery-failure stop, nothing corrupted;
+  the feature degrades to the "Open on HowLongToBeat" link. Fix in that one file, then re-record
+  fixtures with `scripts/record-hltb-fixtures.swift` (≤ 12 requests). See `docs/hltb.md`.
+- **`ttb_source = 'igdb'` on empty games:** the enrichment write no longer tags a game
+  `ttb_source = 'igdb'` when IGDB returned no time (it stays `NULL`, so the value is not
+  mislabelled). **Existing rows were not backfilled** — a library enriched before wave 9 may still
+  carry `ttb_source = 'igdb'` with no times. Harmless: the "no estimate" scope keys on the three
+  value columns, not the source, so the fallback still reaches those games.
+- **v6 migration adds `games.hltb_id` and `games.origin`** (the latter an owner request: the
+  source a game *first* entered by, backfilled from the oldest product, else `manual`). `origin` is
+  surfaced only in the inspector footer + export; it is set once at creation and never changed by a
+  later copy.
+
 ## 5. Out of scope for now [later]
-PSN import (M7, fully planned in PLAN §13) · Polish M9 (Liquid Glass touches, Dark/Tinted icon via Icon Composer — masters in `design/app-icon/`, Top export as image, richer empty states) · HowLongToBeat scraping (the "Open on HowLongToBeat" link exists) · TheGamesDB covers · `ClaudeAPIRecognizer` · editable tier labels/colours (owner: not now) · adjustable snooze.
+PSN import (M7, fully planned in PLAN §13) · Polish M9 (Liquid Glass touches, Dark/Tinted icon via Icon Composer — masters in `design/app-icon/`, Top export as image, richer empty states) · TheGamesDB covers · `ClaudeAPIRecognizer` · editable tier labels/colours (owner: not now) · adjustable snooze.
 
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
