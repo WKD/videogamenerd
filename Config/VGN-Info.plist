@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Extra Info.plist keys merged into the app bundle's generated Info.plist.
+
+  `GENERATE_INFOPLIST_FILE = YES` still supplies CFBundleIdentifier, the display
+  name, version, category etc.; this file only adds keys the generator has no build
+  setting for. It lives OUTSIDE the `VGN/` folder-synchronised group on purpose — a
+  plist dropped under `VGN/` would also be copied as a bundle resource and Xcode
+  would then hit "multiple commands produce Info.plist".
+
+  UTExportedTypeDeclarations declares the private, in-app-only drag type used on the
+  Tier Board / The Top (see `VGN/UI/Ranking/RankingDragItem.swift`,
+  `UTType(exportedAs: "com.videogamenerd.ranking-item")`). Declaring it silences the
+  runtime console note about an undeclared exported type.
+-->
+<plist version="1.0">
+<dict>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.videogamenerd.ranking-item</string>
+			<key>UTTypeDescription</key>
+			<string>VGN ranking item</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
