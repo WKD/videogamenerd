@@ -9,7 +9,13 @@ enum AppPreferences {
     nonisolated(unsafe) static let defaults: UserDefaults = {
         guard NSClassFromString("XCTestCase") != nil
             || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-        else { return .standard }
+        else {
+            // A profile (`-VGNProfile <name>`) keeps its own preferences, so e.g. arming
+            // PSN in a test profile never arms it in the real one.
+            guard let profile = AppProfile.name else { return .standard }
+            let bundleID = Bundle.main.bundleIdentifier ?? "com.pomatelier.VideoGameNerd"
+            return UserDefaults(suiteName: AppProfile.defaultsSuiteName(bundleID: bundleID, profile: profile)) ?? .standard
+        }
         let name = "VGNTests-\(UUID().uuidString)"
         let suite = UserDefaults(suiteName: name) ?? .standard
         suite.removePersistentDomain(forName: name)

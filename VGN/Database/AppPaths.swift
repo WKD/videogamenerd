@@ -3,7 +3,9 @@ import Foundation
 /// Canonical on-disk locations for VGN runtime state, all under
 /// `~/Library/Application Support/VGN/` (PLAN §9, EXECUTION "App support dir").
 enum AppPaths {
-    static let folderName = "VGN"
+    /// `VGN` for the default profile, `VGN-<name>` for `-VGNProfile <name>` (an isolated
+    /// library for risky experiments such as the first live PSN steps).
+    static let folderName = AppProfile.folderName(base: "VGN", profile: AppProfile.name)
 
     /// `~/Library/Application Support/VGN/`, created on demand.
     static func supportDirectory() throws -> URL {

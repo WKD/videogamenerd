@@ -107,7 +107,7 @@ final class AppEnvironment {
 
     /// Build the environment. Never throws — a DB failure becomes `failure`.
     static func launch() -> AppEnvironment {
-        let settings = SettingsModel(secretStore: KeychainStore())
+        let settings = SettingsModel(secretStore: AppEnvironment.makeSecretStore())
 
         // Never open the real database from the unit-test host.
         if VGNApp.isRunningUnitTests {
@@ -502,6 +502,16 @@ final class AppEnvironment {
     /// Off-launch-path work: seed platforms, (sample mode) seed the sample
     /// library through the store, and (live mode) write a rotating launch
     /// snapshot off the main actor. All failures are logged, never fatal.
+    /// The Keychain for the current profile: the default service normally; a profile gets
+    /// its own service, reading the shared IGDB credentials from the default one.
+    static func makeSecretStore() -> any SecretStoring {
+        let base = KeychainStore()
+        guard let profile = AppProfile.name else { return base }
+        return ProfileSecretStore(
+            profile: KeychainStore(service: AppProfile.keychainService(base: base.service, profile: profile)),
+            fallback: base)
+    }
+
     private static func bootstrap(store: LibraryStore, database: AppDatabase, mode: LaunchMode) {
         Task {
             do { _ = try await database.seedPlatformsFromBundle() }

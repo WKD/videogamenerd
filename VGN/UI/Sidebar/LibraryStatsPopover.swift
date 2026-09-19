@@ -23,6 +23,16 @@ struct SidebarStatsBar: View {
                     .task { stats = await vm.libraryStats() }
             }
             Spacer()
+            if let profile = AppProfile.name {
+                // An isolated library (`-VGNProfile <name>`): make it impossible to mistake
+                // for the real one.
+                Text("PROFILE \(profile)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.orange, in: Capsule())
+                    .appKitTooltip("Separate library, preferences and Keychain — not your real data")
+            }
             Text("\(vm.counts.all) games")
                 .font(.caption).foregroundStyle(.secondary)
         }
