@@ -37,6 +37,9 @@ struct LibraryStatsPopover: View {
     let stats: LibraryStats
     var tiers: [TierInfo] = []
 
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
+
     private var hours: Int { stats.totalPlaytimeSeconds / 3600 }
 
     var body: some View {
@@ -81,6 +84,17 @@ struct LibraryStatsPopover: View {
                     }
                 }
             }
+
+            Divider()
+            Button {
+                dismiss()
+                openWindow(id: StatsWindowID.id)
+            } label: {
+                Label("Show All Stats…", systemImage: "chart.bar.xaxis")
+                    .font(.callout)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.borderless)
         }
         .padding(16)
         .frame(width: 240)

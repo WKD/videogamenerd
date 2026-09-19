@@ -72,6 +72,15 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 - [ ] After Start playing, **Edit ▸ Undo "Start Playing"** (⌘Z) does the same. Undo is single-shot (a second ⌘Z does nothing).
 - [ ] Start a suggestion, then **rank it** (open its inspector, set a tier), then Undo → it refuses ("Kept — you've ranked it since starting") and the tier is untouched.
 
+### Library Stats window (wave 7, lane D) — needs owner eyes
+- [ ] Open it three ways and confirm each works: **Window ▸ Library Stats**, the shortcut **⌥⌘S**, and **"Show All Stats…"** at the bottom of the sidebar stats popover (the popover should dismiss and the window come forward). Re-opening focuses the single window, not a second one.
+- [ ] The dashboard reads well in **light and dark**: overview, playtime (total, by platform/decade/tier, most played, me vs. average, backlog to beat), platforms grouped by manufacturer with owned/played, decades & years, tiers (tier colours), scores, genres, status/completion, and the 12-month activity chart. Charts are legible; no clipped labels or white-on-white.
+- [ ] The **All · Owned · Played** scope picker updates every section; switching scope is instant and does not flicker.
+- [ ] Add/rank/mark-played a game in the main window while the stats window is open → the stats **reload automatically** within a moment.
+- [ ] Empty state: launch with `--args -VGNSampleData YES` on a fresh DB (or pick a scope with no games) and confirm the "Add some games first" / "Nothing <scope>" message, not a blank grid.
+- [ ] With the stats window open and idle, VGN still sits at ~0 % CPU (no render loop). *(Verified headless: sample launch idles at 0.0 %; the window itself must be opened by a human to confirm the open state idles — agents cannot drive it.)*
+- [ ] Clicking a bar does nothing yet (by design, v1 — see `docs/LIMITATIONS.md`).
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
