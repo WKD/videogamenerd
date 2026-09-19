@@ -129,6 +129,8 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   (`ResilientImportMatcher` turns a lookup error into "no match").
 
 ## 5. Out of scope for now [later]
+Filed ideas (PLAN §7b "Ideas filed for later", owner 2026-09-19): a **personal pace factor** that inflates advertised completion times from my own finished games (median of mine ÷ advertised), applied to Play Next, the BY LENGTH shelves and the backlog-hours stat; and **"finish what you started"** pools in Play Next (*almost there* — most of the estimate already played; *worth another try* — abandoned early but a strong taste match). Both wait for per-game playtime, i.e. the PSN import.
+
 PSN import (M7, fully planned in PLAN §13) · Polish M9 (Liquid Glass touches, Dark/Tinted icon via Icon Composer — masters in `design/app-icon/`, Top export as image, richer empty states) · HowLongToBeat scraping (the "Open on HowLongToBeat" link exists) · TheGamesDB covers · `ClaudeAPIRecognizer` · editable tier labels/colours (owner: not now) · adjustable snooze.
 
 ## 6. Owner to glance at [owner]
