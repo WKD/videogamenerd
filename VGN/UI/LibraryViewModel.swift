@@ -120,6 +120,10 @@ final class LibraryViewModel {
     var compilationEditor: CompilationEditorModel?
     /// A pending "Group as compilation…" flow (title + platform + format).
     var groupCompilationRequest: GroupCompilationRequest?
+    /// The "Choose Cover…" sheet's model while presented (PLAN §5.2 step 4). Shared
+    /// by the inspector button and the grid context menu; a single `.sheet` in
+    /// `RootView` presents it.
+    var chooseCoverRequest: ChooseCoverModel?
 
     // MARK: Inspector live detail (single selection)
     /// Full detail for the single selected game, kept live by an observation so
@@ -672,6 +676,22 @@ final class LibraryViewModel {
 
     /// Remove a hand-picked cover and let enrichment fetch one again (PLAN §5.2).
     func removeCustomCover(gameID: Int64) { onRemoveCover(gameID) }
+
+    /// True when the cover loader can browse candidates (live/sample services
+    /// present) — gates the "Choose Cover…" entry points.
+    var canChooseCover: Bool { coverLoader is any ChooseCoverProviding }
+
+    /// Present the "Choose Cover…" sheet for one game (inspector button / grid
+    /// context menu, PLAN §5.2 step 4). No-op when the loader can't browse or the
+    /// game isn't loaded. Never called from a view `body`.
+    func requestChooseCover(gameID: Int64) {
+        guard let backend = coverLoader as? (any ChooseCoverProviding),
+              let game = games.first(where: { $0.id == gameID }) else { return }
+        let model = ChooseCoverModel(gameID: gameID, title: game.title,
+                                     currentCoverFile: game.coverFile, backend: backend)
+        model.onFinished = { [weak self] in self?.chooseCoverRequest = nil }
+        chooseCoverRequest = model
+    }
 
     /// Open the compilation editor for a product (PLAN §5.1).
     func editCompilation(productID: Int64) { onEditCompilation(productID) }

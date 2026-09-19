@@ -24,7 +24,11 @@ final class ScriptedPlayNextBackend: PlayNextBackend, @unchecked Sendable {
     private(set) var snoozed: [Int64] = []
     private(set) var nevered: [Int64] = []
     private(set) var startedPlaying: [Int64] = []
+    private(set) var undone: [StartPlayingUndo] = []
     private(set) var backtestCalls = 0
+    /// The outcome `undoStartPlaying` reports (default: a clean restore).
+    var undoOutcome: StartPlayingUndoOutcome = .restored
+    private var nextFeedbackID: Int64 = 1
 
     init(result: PlayNextResult) { self.result = result }
 
@@ -36,7 +40,16 @@ final class ScriptedPlayNextBackend: PlayNextBackend, @unchecked Sendable {
     func backtest() async throws -> TasteBacktestResult { backtestCalls += 1; return backtestResult }
     func snooze(gameID: Int64) async throws { snoozed.append(gameID) }
     func never(gameID: Int64) async throws { nevered.append(gameID) }
-    func startPlaying(gameID: Int64) async throws { startedPlaying.append(gameID) }
+    func startPlaying(gameID: Int64) async throws -> StartPlayingUndo {
+        startedPlaying.append(gameID)
+        defer { nextFeedbackID += 1 }
+        return StartPlayingUndo(gameID: gameID, previousStatus: nil, previousPlayed: false,
+                                previousUpdatedAt: nil, pickedFeedbackID: nextFeedbackID)
+    }
+    func undoStartPlaying(_ undo: StartPlayingUndo) async throws -> StartPlayingUndoOutcome {
+        undone.append(undo)
+        return undoOutcome
+    }
     func secondOpinionRequest(for result: PlayNextResult) async throws -> SecondOpinionRequest {
         secondOpinionRequestValue ?? PlayNextSamples.request(for: result)
     }

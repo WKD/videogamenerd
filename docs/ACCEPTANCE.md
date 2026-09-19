@@ -66,6 +66,12 @@ Logic is exhaustively tested; the *feel* is not. With a few dozen played games:
 - [ ] Sample mode (`--args -VGNSampleData YES`): the sheet opens and offers **Choose File…** but lists no remote candidates (no network in sample mode). This is expected.
 - [ ] After using the sheet, VGN still idles at ~0 % CPU (no render loop from the sheet).
 
+### Choose Cover… grid entry + Play Next Undo (wave 7, lane B, feature 2) — needs owner eyes
+- [ ] Right-click a single game in the grid → **Choose Cover…** appears and opens the same sheet as the inspector button. Right-click inside a multi-selection → the item is hidden (cover is per-game). Confirm no CPU spike when the context menu is built over a large grid.
+- [ ] Play Next ▸ **Start playing** a suggestion → an inline "Started *Title* — **Undo**" toast appears. Clicking **Undo** puts the game back in the list with its old status; the toast fades after ~10 s or when you take another action / leave the screen.
+- [ ] After Start playing, **Edit ▸ Undo "Start Playing"** (⌘Z) does the same. Undo is single-shot (a second ⌘Z does nothing).
+- [ ] Start a suggestion, then **rank it** (open its inspector, set a tier), then Undo → it refuses ("Kept — you've ranked it since starting") and the tier is untouched.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

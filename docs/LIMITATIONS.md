@@ -18,7 +18,7 @@ Legend: **[doing]** being built now · **[later]** deliberately postponed · **[
 | Signing | Stay "Sign to Run Locally" (ad-hoc) for now. Consequence: macOS may re-ask for Keychain access after rebuilds; hardened runtime effectively relaxed. |
 | Photo-scan tile size | **Measured 2026-09-19, no change.** IMG_3683 with 1100 × 2400 px tiles (rows kept whole; 16 calls instead of 8): recall 57/59 (97 %), precision 100 % — the same recall as the shipping 1850 × 2400 tiles for twice the calls, time (141 s) and notional cost ($6.76). The two misses (*The Last of Us Part I*, *Final Fantasy XIII-2*) are hard spines, not a resolution problem. Tiles under ~1 570 px high would cut each shelf row — and its spine titles — in two (20–24 calls); not tried. Re-run any geometry with `VGN_SCAN_TILE=WxH[xOverlap] scripts/scan-accuracy.sh IMG_3683` (`VGN_SCAN_DRYRUN=1` counts tiles for free). |
 | Data folder | Stays `~/Library/Application Support/VGN/` although the app is now "Video Game Nerd" (`com.pomatelier.VideoGameNerd`). |
-| Build now | "Choose cover…" sheet · Undo for Play Next "Start playing" · Library stats view · cleanup batch · insertion line for The Top's reorder drag. **[doing]** |
+| Build now | Library stats view · cleanup batch · insertion line for The Top's reorder drag. ("Choose cover…" sheet + grid entry and Undo for Play Next "Start playing" are **done**, wave 7 lane B.) **[doing]** |
 | Next milestone | **GOG import (M8)** — to be planned with the same cache-first / stop-and-ask posture as PSN (PLAN §13) before any live request. PSN (M7) and Polish (M9) after. |
 
 ## 2. The big caveat: the GUI has barely been driven
@@ -55,7 +55,7 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
 
 ### Play Next
 - A shortlist-ranker by design: < 15 ranked games ⇒ "not enough data", match strength always weak; weights and the backtest threshold (ρ ≥ 0.45 = good) are **not yet tuned on the real library**. [owner: revisit once ~25 games are ranked]
-- "Start playing" has no Undo. **[doing]**
+- "Start playing" is undoable (wave 7, lane B): an inline "Started … — Undo" toast (~10 s, or until the next action / leaving the screen) plus Edit ▸ Undo "Start Playing" (⌘Z). It restores the game's exact prior status / played flag / `updated_at` and removes only the `picked` row that start inserted, in one transaction; the game becomes a candidate again. Residual limits: **undo is single-shot (no redo)**; it **refuses** (leaving everything intact, with a toast) when you've *ranked* the game since starting (un-playing would strip a valid tier) or when un-playing would orphan a no-longer-owned game.
 - IGDB traits are uneven (*Bloodborne* has no franchise/series; keywords capped at 12). "Ask Claude": ~10–20 s, non-deterministic, first call in an hour ≈ $0.70 notional (the CLI caches its own system prompt), sends only the tier list + shortlist.
 
 ### Photo scan

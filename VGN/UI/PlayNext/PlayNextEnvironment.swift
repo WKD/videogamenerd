@@ -94,7 +94,10 @@ protocol PlayNextBackend: Sendable {
     func backtest() async throws -> TasteBacktestResult
     func snooze(gameID: Int64) async throws
     func never(gameID: Int64) async throws
-    func startPlaying(gameID: Int64) async throws
+    /// Marks the game playing and returns a token to undo exactly that (PLAN §7b).
+    func startPlaying(gameID: Int64) async throws -> StartPlayingUndo
+    /// Reverses a previous ``startPlaying(gameID:)`` (may refuse — see the outcome).
+    func undoStartPlaying(_ undo: StartPlayingUndo) async throws -> StartPlayingUndoOutcome
     func secondOpinionRequest(for result: PlayNextResult) async throws -> SecondOpinionRequest
     /// Title + tier for each cited exemplar id, for the reason sentences.
     func exemplarInfo(ids: [Int64]) async throws -> [Int64: ExemplarInfo]
@@ -116,7 +119,12 @@ struct LivePlayNextBackend: PlayNextBackend {
     func backtest() async throws -> TasteBacktestResult { try await recommendation.backtest() }
     func snooze(gameID: Int64) async throws { try await recommendation.snooze(gameID: gameID) }
     func never(gameID: Int64) async throws { try await recommendation.never(gameID: gameID) }
-    func startPlaying(gameID: Int64) async throws { try await recommendation.startPlaying(gameID: gameID) }
+    func startPlaying(gameID: Int64) async throws -> StartPlayingUndo {
+        try await recommendation.startPlayingCapturingUndo(gameID: gameID)
+    }
+    func undoStartPlaying(_ undo: StartPlayingUndo) async throws -> StartPlayingUndoOutcome {
+        try await recommendation.undoStartPlaying(undo)
+    }
     func secondOpinionRequest(for result: PlayNextResult) async throws -> SecondOpinionRequest {
         try await recommendation.secondOpinionRequest(for: result)
     }

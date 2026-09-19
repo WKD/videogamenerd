@@ -2,9 +2,12 @@ import Observation
 import SwiftUI
 
 /// A transient toast after a Play Next action (start playing / snooze / never).
+/// When `undoable`, the view shows an inline "Undo" affordance backed by
+/// ``PlayNextModel/pendingStartUndo``.
 struct PlayNextToast: Equatable, Identifiable {
     let id = UUID()
     var text: String
+    var undoable = false
 }
 
 /// The "Ask Claude" state machine (PLAN §7b): idle → asking (cancellable, elapsed
@@ -55,6 +58,13 @@ final class PlayNextModel {
     private(set) var rankedCount = 0
     private(set) var toast: PlayNextToast?
 
+    /// The window's undo manager (set by the view). Reversible "Start playing"
+    /// registers its inverse here so Edit ▸ Undo "Start Playing" / ⌘Z work.
+    var undoManager: UndoManager?
+    /// The token to undo the most recent "Start playing", or nil. Drives the toast's
+    /// inline "Undo" and is single-shot (cleared once used or superseded).
+    private(set) var pendingStartUndo: StartPlayingUndo?
+
     // MARK: - Second opinion
 
     private(set) var secondOpinionState: SecondOpinionState = .idle
@@ -68,6 +78,10 @@ final class PlayNextModel {
     private let secondOpinion: any SecondOpinionProviding
     private let defaults: UserDefaults
     private let recomputeDebounce: Duration
+    /// How long a plain toast lingers, and (longer) an undoable "Started …" toast.
+    /// Injected so tests never assert on wall-clock time.
+    private let toastDuration: Duration
+    private let undoToastDuration: Duration
 
     private var seed: UInt64 = 0
     private var recomputeTask: Task<Void, Never>?
@@ -82,12 +96,16 @@ final class PlayNextModel {
         backend: any PlayNextBackend,
         secondOpinion: any SecondOpinionProviding,
         defaults: UserDefaults = AppPreferences.defaults,
-        recomputeDebounce: Duration = .milliseconds(250)
+        recomputeDebounce: Duration = .milliseconds(250),
+        toastDuration: Duration = .seconds(4),
+        undoToastDuration: Duration = .seconds(10)
     ) {
         self.backend = backend
         self.secondOpinion = secondOpinion
         self.defaults = defaults
         self.recomputeDebounce = recomputeDebounce
+        self.toastDuration = toastDuration
+        self.undoToastDuration = undoToastDuration
 
         let store = Prefs(defaults: defaults)
         self.bracketPreset = store.preset
@@ -136,6 +154,9 @@ final class PlayNextModel {
         askTask?.cancel()
         elapsedTask?.cancel()
         toastTask?.cancel()
+        // Navigating away drops the "Start playing" undo affordance (PLAN §7b:
+        // "until the next action/navigation").
+        clearPendingStartUndo()
     }
 
     private func subscribeLive() {
@@ -259,9 +280,12 @@ final class PlayNextModel {
     // MARK: - Actions
 
     func startPlaying(_ suggestion: PlayNextSuggestion) async {
+        clearPendingStartUndo()
         do {
-            try await backend.startPlaying(gameID: suggestion.id)
-            setToast("Started playing \(suggestion.title)")
+            let token = try await backend.startPlaying(gameID: suggestion.id)
+            pendingStartUndo = token
+            registerStartUndo()
+            setToast("Started \(suggestion.title)", undoable: true)
         } catch {
             setToast("Couldn't start \(suggestion.title)")
         }
@@ -269,15 +293,63 @@ final class PlayNextModel {
     }
 
     func notThisOne(_ suggestion: PlayNextSuggestion) async {
+        clearPendingStartUndo()
         try? await backend.snooze(gameID: suggestion.id)
         setToast("Snoozed \(suggestion.title)")
         recompute(debounce: false)
     }
 
     func never(_ suggestion: PlayNextSuggestion) async {
+        clearPendingStartUndo()
         try? await backend.never(gameID: suggestion.id)
         setToast("Removed \(suggestion.title) from Play Next")
         recompute(debounce: false)
+    }
+
+    // MARK: - Undo "Start playing" (PLAN §7b)
+
+    /// The inline toast affordance calls this. Undoes the most recent start.
+    func undoLastStartPlaying() async {
+        guard let token = pendingStartUndo else { return }
+        await performUndoStartPlaying(token)
+    }
+
+    /// Reverse a "Start playing". Single-shot: a stale token (already undone, or a
+    /// later action) is ignored, so the toast button and ⌘Z can't double-apply.
+    /// `internal` so a test drives the inverse directly (UndoManager.undo() hangs
+    /// headless).
+    func performUndoStartPlaying(_ token: StartPlayingUndo) async {
+        guard pendingStartUndo == token else { return }
+        pendingStartUndo = nil
+        do {
+            switch try await backend.undoStartPlaying(token) {
+            case .restored:          setToast("Put it back in Play Next")
+            case .refusedRanked:     setToast("Kept — you've ranked it since starting")
+            case .refusedWouldOrphan: setToast("Can't undo — it's no longer owned")
+            case .gameGone:          break
+            }
+        } catch {
+            setToast("Couldn't undo")
+        }
+        recompute(debounce: false)
+    }
+
+    private func registerStartUndo() {
+        guard let undo = undoManager, let token = pendingStartUndo else { return }
+        undo.registerUndo(withTarget: self) { model in
+            Task { await model.performUndoStartPlaying(token) }
+        }
+        undo.setActionName("Start Playing")
+    }
+
+    /// Drop a pending "Start playing" undo (a newer action supersedes it). Clears the
+    /// registered UndoManager action too, so ⌘Z after another action doesn't pop a
+    /// stale start. Not called from inside an undo (that would mutate the stack
+    /// mid-undo).
+    private func clearPendingStartUndo() {
+        guard pendingStartUndo != nil else { return }
+        pendingStartUndo = nil
+        undoManager?.removeAllActions(withTarget: self)
     }
 
     // MARK: - Second opinion
@@ -372,11 +444,12 @@ final class PlayNextModel {
 
     // MARK: - Toast
 
-    private func setToast(_ text: String) {
-        toast = PlayNextToast(text: text)
+    private func setToast(_ text: String, undoable: Bool = false) {
+        toast = PlayNextToast(text: text, undoable: undoable)
         toastTask?.cancel()
+        let duration = undoable ? undoToastDuration : toastDuration
         toastTask = Task {
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: duration)
             if !Task.isCancelled { self.toast = nil }
         }
     }

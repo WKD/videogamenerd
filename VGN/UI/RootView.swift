@@ -53,6 +53,11 @@ struct RootView: View {
                 CompilationEditorView(model: editor, loader: vm.coverLoader)
             }
         }
+        // "Choose Cover…" (PLAN §5.2 step 4) — shared by the inspector button and the
+        // grid context menu via `vm.chooseCoverRequest`.
+        .sheet(item: $vm.chooseCoverRequest) { model in
+            ChooseCoverSheet(model: model, loader: vm.coverLoader)
+        }
         .alert(
             vm.pendingConfirmation?.title ?? "",
             isPresented: confirmationPresented,

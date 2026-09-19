@@ -48,6 +48,7 @@ struct PlayNextBody: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.rankingActions) private var rankingActions
+    @Environment(\.undoManager) private var undoManager
     @State private var selectedIndex = 0
     @FocusState private var focused: Bool
 
@@ -72,6 +73,8 @@ struct PlayNextBody: View {
         .onKeyPress { handleCharacter($0) }
         .overlay(alignment: .bottom) { toast }
         .task { await model.start(); focused = true }
+        .onAppear { model.undoManager = undoManager }
+        .onChange(of: undoManager) { _, new in model.undoManager = new }
         .onDisappear { model.stop() }
         .onChange(of: model.result?.hero?.id) { selectedIndex = 0 }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18),
@@ -267,14 +270,22 @@ struct PlayNextBody: View {
     @ViewBuilder
     private var toast: some View {
         if let toast = model.toast {
-            Text(toast.text)
-                .font(.callout)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
-                .padding(.bottom, 16)
-                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-                .onTapGesture { model.clearToast() }
+            HStack(spacing: 12) {
+                Text(toast.text).font(.callout)
+                if toast.undoable, model.pendingStartUndo != nil {
+                    Button("Undo") { act { await model.undoLastStartPlaying() } }
+                        .buttonStyle(.borderless)
+                        .font(.callout.weight(.semibold))
+                        .accessibilityIdentifier("playnext.undoStart")
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
+            .padding(.bottom, 16)
+            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            // Tap the text (not the Undo button) to dismiss.
+            .onTapGesture { model.clearToast() }
         }
     }
 

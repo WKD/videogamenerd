@@ -60,11 +60,64 @@ struct RecommendationStore: Sendable {
     /// "Start playing" (PLAN §7b action): status = playing (implies played) and log
     /// a `picked` rotation memory, in one transaction.
     func startPlaying(gameID: Int64) async throws {
+        _ = try await startPlayingCapturingUndo(gameID: gameID)
+    }
+
+    /// Like ``startPlaying(gameID:)`` but captures the game's exact prior state (and
+    /// the id of the inserted `picked` row) **in the same transaction**, so the
+    /// action can be undone precisely (PLAN §7b). Returns a token for
+    /// ``undoStartPlaying(_:)``.
+    func startPlayingCapturingUndo(gameID: Int64) async throws -> StartPlayingUndo {
         try await dbWriter.write { db in
+            guard let prior = try Row.fetchOne(
+                db, sql: "SELECT status, played, updated_at FROM games WHERE id = ?",
+                arguments: [gameID])
+            else { throw StartPlayingError.gameNotFound }
+            let undo = StartPlayingUndo(
+                gameID: gameID,
+                previousStatus: prior["status"],
+                previousPlayed: (prior["played"] as Int64) == 1,
+                previousUpdatedAt: prior["updated_at"],
+                pickedFeedbackID: 0)   // filled below
             try db.execute(sql: "UPDATE games SET status = 'playing', played = 1, updated_at = ? WHERE id = ?",
                            arguments: [Date(), gameID])
             try db.execute(sql: "INSERT INTO rec_feedback (game_id, action, created_at) VALUES (?, 'picked', ?)",
                            arguments: [gameID, Date()])
+            return undo.withPickedFeedbackID(db.lastInsertedRowID)
+        }
+    }
+
+    /// Reverse a ``startPlayingCapturingUndo(gameID:)`` exactly (PLAN §7b): restore
+    /// the prior status / played / updated_at and delete the `picked` row this
+    /// action inserted — all in one transaction. It **refuses** rather than damage
+    /// data the user changed since:
+    ///  - `.refusedRanked` — the game was given a tier after it started playing;
+    ///    un-playing it would strip a valid ranking, so undo leaves everything intact.
+    ///  - `.refusedWouldOrphan` — restoring `played = 0` would leave a game that is
+    ///    neither played nor owned (guarded even though Play Next candidates are
+    ///    owned by construction).
+    ///  - `.gameGone` — the game no longer exists (its feedback cascaded away).
+    func undoStartPlaying(_ undo: StartPlayingUndo) async throws -> StartPlayingUndoOutcome {
+        try await dbWriter.write { db in
+            guard let current = try Row.fetchOne(
+                db, sql: "SELECT tier_id FROM games WHERE id = ?", arguments: [undo.gameID])
+            else { return .gameGone }
+
+            // Only relevant when the game was unplayed before starting: restoring
+            // played = 0 must not violate the tier/rank or played-or-owned invariants.
+            if !undo.previousPlayed {
+                if (current["tier_id"] as Int64?) != nil { return .refusedRanked }
+                let owned = try Int.fetchOne(
+                    db, sql: "SELECT COUNT(*) FROM product_games WHERE game_id = ?",
+                    arguments: [undo.gameID]) ?? 0
+                if owned == 0 { return .refusedWouldOrphan }
+            }
+
+            try db.execute(sql: "UPDATE games SET status = ?, played = ?, updated_at = ? WHERE id = ?",
+                           arguments: [undo.previousStatus, undo.previousPlayed ? 1 : 0,
+                                       undo.previousUpdatedAt, undo.gameID])
+            try db.execute(sql: "DELETE FROM rec_feedback WHERE id = ?", arguments: [undo.pickedFeedbackID])
+            return .restored
         }
     }
 
@@ -105,6 +158,33 @@ struct RecommendationStore: Sendable {
         }
     }
 }
+
+/// The exact prior state captured when "Start playing" runs, so it can be undone
+/// precisely (PLAN §7b). All fields are the DB's own values (played as a flag, the
+/// `updated_at` text verbatim), plus the id of the `picked` feedback row inserted.
+struct StartPlayingUndo: Sendable, Equatable {
+    var gameID: Int64
+    var previousStatus: String?
+    var previousPlayed: Bool
+    var previousUpdatedAt: String?
+    var pickedFeedbackID: Int64
+
+    func withPickedFeedbackID(_ id: Int64) -> StartPlayingUndo {
+        var copy = self
+        copy.pickedFeedbackID = id
+        return copy
+    }
+}
+
+/// Result of ``RecommendationStore/undoStartPlaying(_:)``.
+enum StartPlayingUndoOutcome: Sendable, Equatable {
+    case restored
+    case refusedRanked
+    case refusedWouldOrphan
+    case gameGone
+}
+
+enum StartPlayingError: Error, Sendable { case gameNotFound }
 
 /// A cheap fingerprint of the recommendation inputs — the observation emits a new
 /// value whenever any of these change, prompting a refresh.
