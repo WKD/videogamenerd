@@ -63,7 +63,13 @@ actor PSNClient {
     private var hasRefreshedToken = false
     private var hasWaited429 = false
 
-    private static let profileURL = URL(string: "https://m.np.playstation.com/api/userProfile/v1/internal/users/me/profiles")!
+    /// The signed-in account's own profile. The modern endpoint
+    /// (`m.np.playstation.com/api/userProfile/v1/internal/users/{accountId}/profiles`) does
+    /// NOT accept `me` — Sony answered S2 with `400 Bad Request (path: accountId)` on
+    /// 2026-09-19. psn-api resolves "me" through the legacy profile endpoint instead
+    /// (`USER_LEGACY_BASE_URL/:userName/profile2`), which also returns the account id and
+    /// the PS Plus flag. Minimal field list on purpose.
+    private static let profileURL = URL(string: "https://us-prof.np.community.playstation.net/userProfile/v1/users/me/profile2?fields=onlineId,accountId,plus")!
     private static let trophyBase = "https://m.np.playstation.com/api/trophy/v1/users/me/trophyTitles"
     private static let gameListBase = "https://m.np.playstation.com/api/gamelist/v2/users/me/titles"
     private static let graphQLBase = "https://web.np.playstation.com/api/graphql/v1/op"

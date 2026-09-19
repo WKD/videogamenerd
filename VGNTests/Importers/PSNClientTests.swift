@@ -116,7 +116,7 @@ import Testing
         _ = try await client.profile()
         #expect(await client.fromNetwork == 1)
         #expect(await client.fromCache == 1)
-        let profileRequests = transport.requests.filter { ($0.url?.absoluteString ?? "").contains("me/profiles") }
+        let profileRequests = transport.requests.filter { ($0.url?.absoluteString ?? "").contains("me/profile2") }
         #expect(profileRequests.count == 1)
     }
 
@@ -160,7 +160,7 @@ final class First401Transport: HTTPTransport, @unchecked Sendable {
             lock.withLock { tokenCalls += 1 }
             return (tokenBody, resp(200))
         }
-        if url.contains("me/profiles") {
+        if url.contains("me/profile2") {
             let first = lock.withLock { () -> Bool in profileCalls += 1; return profileCalls == 1 }
             return (profileBody, resp(first ? 401 : 200))
         }
