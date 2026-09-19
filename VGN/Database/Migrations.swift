@@ -255,6 +255,38 @@ enum Migrations {
         }
     }
 
+    // MARK: - v6 — HLTB fallback id + per-game origin (PLAN §5.3, owner request)
+
+    /// v6 adds two nullable `games` columns (pure `ALTER TABLE ADD COLUMN`, so no
+    /// table rebuild and no deferred foreign-key checks):
+    ///
+    ///  - `hltb_id` — the HowLongToBeat game id kept when the HLTB fallback fills a
+    ///    time estimate (PLAN §5.3), so "Open on HowLongToBeat" goes straight to the
+    ///    exact page rather than a search.
+    ///  - `origin` — how the *game* first entered the library, for debugging (owner
+    ///    request). No CHECK constraint (a future importer adds a value without a
+    ///    rebuild); validated in Swift by ``GameOrigin``. Backfilled from the source
+    ///    of each game's **oldest** product (lowest product id via `product_games`),
+    ///    falling back to `'manual'` for games with no product at all (played-only).
+    static func registerV6(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v6") { db in
+            try db.execute(sql: "ALTER TABLE games ADD COLUMN hltb_id INTEGER;")
+            try db.execute(sql: "ALTER TABLE games ADD COLUMN origin TEXT;")
+
+            // Backfill origin from the oldest product's source; else 'manual'.
+            try db.execute(sql: """
+                UPDATE games SET origin = COALESCE(
+                    (SELECT p.source
+                       FROM products p
+                       JOIN product_games pg ON pg.product_id = p.id
+                      WHERE pg.game_id = games.id
+                      ORDER BY p.id ASC
+                      LIMIT 1),
+                    'manual');
+                """)
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {
