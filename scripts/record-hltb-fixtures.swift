@@ -38,6 +38,8 @@ func get(_ urlString: String) async throws -> (Int, Data, [AnyHashable: Any]) {
     req.httpMethod = "GET"
     req.setValue(ua, forHTTPHeaderField: "User-Agent")
     req.setValue(base, forHTTPHeaderField: "Referer")
+    req.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+    req.setValue("en-GB,en;q=0.9", forHTTPHeaderField: "Accept-Language")
     let (data, resp) = try await session.data(for: req)
     let http = resp as! HTTPURLResponse
     return (http.statusCode, data, http.allHeaderFields)
@@ -49,6 +51,7 @@ func postSearch(path: String, title: String) async throws -> (Int, Data, String?
     req.httpMethod = "POST"
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     req.setValue("*/*", forHTTPHeaderField: "Accept")
+    req.setValue("en-GB,en;q=0.9", forHTTPHeaderField: "Accept-Language")
     req.setValue(ua, forHTTPHeaderField: "User-Agent")
     req.setValue(base, forHTTPHeaderField: "Referer")
     req.setValue("https://howlongtobeat.com", forHTTPHeaderField: "Origin")

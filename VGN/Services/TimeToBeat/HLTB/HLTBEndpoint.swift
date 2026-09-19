@@ -134,6 +134,7 @@ enum HLTBEndpoint {
         [
             "Content-Type": "application/json",
             "Accept": "*/*",
+            "Accept-Language": "en-GB,en;q=0.9",
             "User-Agent": userAgent,
             "Referer": referer,
             "Origin": origin,
@@ -190,6 +191,9 @@ enum HLTBEndpoint {
         request.httpMethod = "GET"
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(referer, forHTTPHeaderField: "Referer")
+        // Browser-like Accept headers: the CDN answers 403 to bare clients.
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        request.setValue("en-GB,en;q=0.9", forHTTPHeaderField: "Accept-Language")
         return request
     }
 
@@ -199,6 +203,9 @@ enum HLTBEndpoint {
         request.httpMethod = "GET"
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue(referer, forHTTPHeaderField: "Referer")
+        // Browser-like Accept headers: the CDN answers 403 to bare clients.
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        request.setValue("en-GB,en;q=0.9", forHTTPHeaderField: "Accept-Language")
         return request
     }
 

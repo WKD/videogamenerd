@@ -109,10 +109,14 @@ final class AppEnvironment {
 
             let rankingStore = RankingStore(database)
             let dataSource = GRDBLibraryDataSource(store: store, ranking: rankingStore)
-            let vm = LibraryViewModel(
-                dataSource: dataSource, coverLoader: coverLoader,
-                selection: initialSelection()
-            )
+            // Sample / seeded runs never touch the owner's real preferences.
+            let vm = mode == .live
+                ? LibraryViewModel(dataSource: dataSource, coverLoader: coverLoader,
+                                   selection: initialSelection())
+                : LibraryViewModel(dataSource: dataSource, coverLoader: coverLoader,
+                                   selection: initialSelection(),
+                                   playedMarkPreferences: InMemoryLastPlayedMarkPreferences(),
+                                   playPacePreferences: InMemoryPlayPacePreferences())
             let actions = LibraryActions(store: store, vm: vm)
             actions.install()
 
