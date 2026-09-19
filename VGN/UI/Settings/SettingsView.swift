@@ -105,28 +105,71 @@ final class SettingsModel {
     }
 }
 
-/// The Settings scene: Accounts (IGDB, Keychain-backed), Photo Scan (`PhotoScanSettingsTab`)
-/// and General (a placeholder for a later milestone).
+/// The Settings scene: General first, then ONE tab per account type (IGDB, GOG — PSN
+/// later) so no pane needs scrolling, then Photo Scan. Every tab sizes itself to its
+/// content (`settingsPane()`), and the window follows the selected tab — tall enough for
+/// the tallest pane, never scrolling (owner request 2026-09-19).
 struct SettingsView: View {
     @Bindable var model: SettingsModel
 
+    static let paneWidth: CGFloat = 540
+
     var body: some View {
         TabView {
-            AccountsTab(model: model)
-                .accessibilityIdentifier(A11yID.settingsTabAccounts)
-                .tabItem { Label("Accounts", systemImage: "person.crop.circle") }
-            PhotoScanSettingsTab()
-                .accessibilityIdentifier(A11yID.settingsTabPhotoScan)
-                .tabItem { Label("Photo Scan", systemImage: "camera") }
             GeneralTab()
+                .settingsPane()
                 .accessibilityIdentifier(A11yID.settingsTabGeneral)
                 .tabItem { Label("General", systemImage: "gearshape") }
+            IGDBAccountTab(model: model)
+                .settingsPane()
+                .accessibilityIdentifier(A11yID.settingsTabAccounts)
+                .tabItem { Label("IGDB", systemImage: "gamecontroller") }
+            if let gog = model.gogAccount {
+                GOGAccountTab(model: gog)
+                    .settingsPane()
+                    .accessibilityIdentifier("settings.tab.gog")
+                    .tabItem { Label("GOG", systemImage: "bag") }
+            }
+            PhotoScanSettingsTab()
+                .settingsPane()
+                .accessibilityIdentifier(A11yID.settingsTabPhotoScan)
+                .tabItem { Label("Photo Scan", systemImage: "camera") }
         }
-        .frame(width: 500, height: 380)
+        .frame(width: Self.paneWidth)
     }
 }
 
-private struct AccountsTab: View {
+extension View {
+    /// A Settings pane that is exactly as tall as its content: the grouped `Form` does
+    /// not scroll, and takes its ideal height, so the Settings window resizes per tab.
+    func settingsPane() -> some View {
+        scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// GOG gets its own tab (its signed-in pane with data sets, force-refresh and the
+/// error surface is the tallest account pane).
+struct GOGAccountTab: View {
+    @Bindable var model: GOGAccountModel
+
+    var body: some View {
+        Form {
+            Section {
+                GOGAccountPane(model: model)
+            } header: {
+                Text("GOG")
+            } footer: {
+                Text("Sign-in happens on GOG's own page; VGN keeps only the tokens, in the macOS Keychain.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(20)
+    }
+}
+
+struct IGDBAccountTab: View {
     @Bindable var model: SettingsModel
 
     var body: some View {
@@ -146,14 +189,6 @@ private struct AccountsTab: View {
                 HStack {
                     savedIndicator("Client ID", saved: model.clientIDSaved)
                     savedIndicator("Client Secret", saved: model.secretSaved)
-                }
-            }
-
-            if let gog = model.gogAccount {
-                Section {
-                    GOGAccountPane(model: gog)
-                } header: {
-                    Text("GOG")
                 }
             }
 
@@ -194,7 +229,7 @@ private struct AccountsTab: View {
     }
 }
 
-private struct GeneralTab: View {
+struct GeneralTab: View {
     /// The same weekly-play-pace store the sidebar "By Length" header edits, so both
     /// stay in sync (PLAN §8). Reloads on appear to pick up a change made there.
     @State private var pace = PlayPaceModel(store: UserDefaultsPlayPacePreferences())
