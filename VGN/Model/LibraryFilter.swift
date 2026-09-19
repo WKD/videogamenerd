@@ -6,7 +6,8 @@ enum LibrarySort: String, Hashable, Sendable, Codable, CaseIterable, Identifiabl
     case year
     case dateAdded
     case tierRank    // tier.sort, then rank_key
-    case playtime
+    case playtime    // effective playtime (my/PSN), most-played first
+    case length      // time-to-beat *estimate* (how long the game is), NULLs last
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum LibrarySort: String, Hashable, Sendable, Codable, CaseIterable, Identifiabl
         case .dateAdded: return "Date Added"
         case .tierRank: return "Tier & Rank"
         case .playtime: return "Playtime"
+        case .length: return "Length"
         }
     }
 
@@ -28,6 +30,7 @@ enum LibrarySort: String, Hashable, Sendable, Codable, CaseIterable, Identifiabl
         case .dateAdded: return false   // newest first
         case .tierRank: return true     // best first
         case .playtime: return false    // most-played first
+        case .length: return true       // shortest first (the "By Length" default)
         }
     }
 }
@@ -67,6 +70,11 @@ struct LibraryFilter: Hashable, Sendable {
     /// with `formats` within the format facet.
     var includeNotOwned: Bool
 
+    /// Its own facet (owner request 2026-09-19): match only games I own in **more
+    /// than one copy or format** — ≥ 2 owned products (e.g. physical + digital, or
+    /// two physical copies). ANDs across kinds like any other facet.
+    var multipleCopies: Bool
+
     /// Playtime-band facet (< 10 h … > 200 h). Empty = no constraint. The value
     /// bucketed is the effective playtime (manual over PSN), falling back to the best
     /// available IGDB estimate (main → rushed → completionist) for a game I have not
@@ -91,6 +99,14 @@ struct LibraryFilter: Hashable, Sendable {
     /// The smart-list / platform scope selected in the sidebar.
     var scope: SidebarSelection
 
+    /// The owner's weekly play pace, which sets the hour edges of the "By Length"
+    /// scopes (``SidebarSelection/length(_:)`` / ``SidebarSelection/unmeasured``).
+    /// Carried on the filter so the grid query can resolve a length scope's bounds
+    /// from the *same* value the counts use, and so a pace change re-runs the grid
+    /// like any other filter change. Not a facet — it never appears in
+    /// ``hasActiveFacets`` and only constrains a length scope.
+    var playPace: PlayPace
+
     var sort: LibrarySort
     var ascending: Bool
 
@@ -105,11 +121,13 @@ struct LibraryFilter: Hashable, Sendable {
         includeNoStatus: Bool = false,
         formats: Set<ProductFormat> = [],
         includeNotOwned: Bool = false,
+        multipleCopies: Bool = false,
         playtimes: Set<PlaytimeBucket> = [],
         includeNoTimeEstimate: Bool = false,
         platform: String? = nil,
         platforms: Set<String> = [],
         scope: SidebarSelection = .all,
+        playPace: PlayPace = .default,
         sort: LibrarySort = .title,
         ascending: Bool = true
     ) {
@@ -123,11 +141,13 @@ struct LibraryFilter: Hashable, Sendable {
         self.includeNoStatus = includeNoStatus
         self.formats = formats
         self.includeNotOwned = includeNotOwned
+        self.multipleCopies = multipleCopies
         self.playtimes = playtimes
         self.includeNoTimeEstimate = includeNoTimeEstimate
         self.platform = platform
         self.platforms = platforms
         self.scope = scope
+        self.playPace = playPace
         self.sort = sort
         self.ascending = ascending
     }
@@ -138,7 +158,7 @@ struct LibraryFilter: Hashable, Sendable {
         !searchText.isEmpty || !genres.isEmpty || !decades.isEmpty
             || !tierIDs.isEmpty || includeUnrated
             || !statuses.isEmpty || includeNotPlayed || includeNoStatus
-            || !formats.isEmpty || includeNotOwned
+            || !formats.isEmpty || includeNotOwned || multipleCopies
             || !playtimes.isEmpty || includeNoTimeEstimate
             || platform != nil || !platforms.isEmpty
     }

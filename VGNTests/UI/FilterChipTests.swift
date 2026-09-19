@@ -120,14 +120,14 @@ struct FilterChipTests {
 
     @Test func playtimeBandAndNoEstimateChips() {
         var f = LibraryFilter(scope: .all)
-        f.playtimes = [.over200, .short, .h80to100]
+        f.playtimes = [.over200, .under4, .h80to100]
         f.includeNoTimeEstimate = true
         let chips = LibraryFilterChips.chips(for: f, tiers: tiers)
         // Band chips in canonical (ascending) order, then the standalone No Estimate.
         #expect(chips.map(\.kind) == [.playtime, .playtime, .playtime, .noEstimate])
         #expect(chips.filter { $0.kind == .playtime }.map(\.valueLabel)
-                == ["< 10 h", "80–100 h", "> 200 h"])
-        #expect(chips.first?.text == "Playtime: < 10 h")
+                == ["< 4 h", "80–100 h", "> 200 h"])
+        #expect(chips.first?.text == "Playtime: < 4 h")
         #expect(chips.dropFirst().first?.text == "or 80–100 h")
 
         let noEstimate = try! #require(chips.first { $0.kind == .noEstimate })
@@ -135,27 +135,50 @@ struct FilterChipTests {
         #expect(noEstimate.fullLabel == "No Estimate")
 
         // Removing a band chip leaves the rest and the flag.
-        let short = try! #require(chips.first { $0.kind == .playtime && $0.value == "short" })
-        let afterShort = LibraryFilterChips.removing(short, from: f)
-        #expect(afterShort.playtimes == [.over200, .h80to100])
-        #expect(afterShort.includeNoTimeEstimate == true)
+        let under4 = try! #require(chips.first { $0.kind == .playtime && $0.value == "under4" })
+        let afterUnder4 = LibraryFilterChips.removing(under4, from: f)
+        #expect(afterUnder4.playtimes == [.over200, .h80to100])
+        #expect(afterUnder4.includeNoTimeEstimate == true)
 
         // Removing the No Estimate chip clears only the flag.
         let afterNoEst = LibraryFilterChips.removing(noEstimate, from: f)
         #expect(afterNoEst.includeNoTimeEstimate == false)
-        #expect(afterNoEst.playtimes == [.over200, .short, .h80to100])
+        #expect(afterNoEst.playtimes == [.over200, .under4, .h80to100])
         #expect(Set(chips.map(\.id)).count == chips.count)
     }
 
     @Test func noEstimateCountsAsActiveAndClearsWithAll() {
         #expect(LibraryFilter(includeNoTimeEstimate: true, scope: .all).hasActiveFacets)
         var f = LibraryFilter(scope: .all)
-        f.playtimes = [.medium]
+        f.playtimes = [.h10to40]
         f.includeNoTimeEstimate = true
         let cleared = LibraryFilterChips.cleared(f)
         #expect(cleared.playtimes.isEmpty)
         #expect(cleared.includeNoTimeEstimate == false)
         #expect(!cleared.hasActiveFacets)
+    }
+
+    @Test func multipleCopiesChipIsStandaloneAndRemovable() {
+        var f = LibraryFilter(scope: .all)
+        f.multipleCopies = true
+        #expect(f.hasActiveFacets)
+        let chips = LibraryFilterChips.chips(for: f, tiers: tiers)
+        let chip = try! #require(chips.first { $0.kind == .multipleCopies })
+        #expect(chip.text == "Multiple Copies")       // standalone facet
+        #expect(chip.fullLabel == "Multiple Copies")
+        let removed = LibraryFilterChips.removing(chip, from: f)
+        #expect(removed.multipleCopies == false)
+        #expect(!removed.hasActiveFacets)
+    }
+
+    @Test func clearAllDropsMultipleCopiesButKeepsPace() {
+        var f = LibraryFilter(scope: .all, playPace: PlayPace(hoursPerWeek: 3))
+        f.multipleCopies = true
+        f.formats = [.physical]
+        let cleared = LibraryFilterChips.cleared(f)
+        #expect(cleared.multipleCopies == false)
+        #expect(!cleared.hasActiveFacets)
+        #expect(cleared.playPace == PlayPace(hoursPerWeek: 3))   // pace is not a facet
     }
 
     @Test func playedNoStatusChipLabel() {

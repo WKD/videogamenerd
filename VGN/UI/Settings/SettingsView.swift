@@ -195,8 +195,21 @@ private struct AccountsTab: View {
 }
 
 private struct GeneralTab: View {
+    /// The same weekly-play-pace store the sidebar "By Length" header edits, so both
+    /// stay in sync (PLAN §8). Reloads on appear to pick up a change made there.
+    @State private var pace = PlayPaceModel(store: UserDefaultsPlayPacePreferences())
+
     var body: some View {
         Form {
+            Section {
+                PaceEditor(model: pace, title: "")
+            } header: {
+                Text("Weekly play time")
+            } footer: {
+                Text("Sets the hour ranges of the sidebar’s “By Length” shelves — the same control lives in the sidebar’s BY LENGTH header. A short game is one you can finish in an evening at this pace.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section {
                 LabeledContent("Default grid size", value: "Medium")
             } footer: {

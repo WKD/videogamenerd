@@ -76,6 +76,13 @@ final class LibraryViewModel {
     private let sortPreferences: any SortPreferenceStoring
     /// Persistence for the last "Mark Played As" value (⇧M / menu repeat, PLAN §8).
     private let playedMarkPreferences: any LastPlayedMarkStoring
+    /// Persistence for the owner's weekly play pace (drives the "By Length" shelves).
+    private let playPacePreferences: any PlayPacePreferenceStoring
+
+    /// The shared weekly-play-pace controller (owner request 2026-09-19). Behind the
+    /// sidebar "By Length" header popover; Settings ▸ General edits the same store.
+    /// A commit re-runs the grid + counts through ``applyPace(_:)``.
+    let paceModel: PlayPaceModel
 
     /// The last-chosen "Mark Played As" value, repeated by ⇧M and the top-level
     /// "Mark as ‹Last›" menu item. Read by the grid context menu and the menu-bar
@@ -185,20 +192,26 @@ final class LibraryViewModel {
         selection: SidebarSelection = .all,
         sortPreferences: any SortPreferenceStoring = UserDefaultsSortPreferences(),
         playedMarkPreferences: any LastPlayedMarkStoring = UserDefaultsLastPlayedMarkPreferences(),
+        playPacePreferences: any PlayPacePreferenceStoring = UserDefaultsPlayPacePreferences(),
         now: @escaping () -> Date = { Date() }
     ) {
         self.dataSource = dataSource
         self.coverLoader = coverLoader
         self.sortPreferences = sortPreferences
         self.playedMarkPreferences = playedMarkPreferences
+        self.playPacePreferences = playPacePreferences
+        let paceModel = PlayPaceModel(store: playPacePreferences)
+        self.paceModel = paceModel
         self.lastPlayedMark = playedMarkPreferences.lastPlayedMark()
         self.now = now
         self.selection = selection
         let initialSort = sortPreferences.sortSetting(for: selection.id)
+        let fallbackSort = Self.defaultSort(for: selection)
         self.filter = LibraryFilter(
             scope: selection,
-            sort: initialSort?.sort ?? .title,
-            ascending: initialSort?.ascending ?? LibrarySort.title.defaultAscending
+            playPace: paceModel.pace,
+            sort: initialSort?.sort ?? fallbackSort,
+            ascending: initialSort?.ascending ?? (initialSort?.sort ?? fallbackSort).defaultAscending
         )
         // Default intent hooks log so the keyboard/context-menu wiring is
         // observable in DEBUG without any DB. Replaced by the app next wave.
@@ -213,6 +226,36 @@ final class LibraryViewModel {
         }
         self.onShowInspector = {}
         self.onQuickAdd = { print("[VGN stub] Quick Add requested (⌘N)") }
+        // Committing a pace (from the sidebar popover or Settings) re-runs the grid +
+        // counts. Weak self so the model never keeps the view model alive.
+        self.paceModel.onCommit = { [weak self] pace in self?.applyPace(pace) }
+    }
+
+    /// The default sort for a freshly-selected scope with no persisted choice: the
+    /// "By Length" scopes default to Length (shortest first — PLAN §8); Title else.
+    static func defaultSort(for selection: SidebarSelection) -> LibrarySort {
+        switch selection {
+        case .length, .unmeasured: return .length
+        default: return .title
+        }
+    }
+
+    /// The owner's weekly play pace, exposed as plain API for a later Play Next
+    /// alignment (PLAN §7b — the recommendation engine could weight time-fit to this).
+    var playPace: PlayPace { paceModel.pace }
+    /// Whether the owner has set a pace at least once (drives the first-use CTA).
+    var hasChosenPace: Bool { paceModel.hasChosen }
+
+    /// Adopt a new weekly play pace: update the filter (so the grid re-runs for a "By
+    /// Length" scope) and re-subscribe the counts observation with the new shelf
+    /// bounds. Treated like a filter change — one grid restart, one counts
+    /// re-subscribe, no loop. Selection is preserved (``applyGames`` intersects).
+    func applyPace(_ pace: PlayPace) {
+        guard pace != filter.playPace else { return }
+        var f = filter
+        f.playPace = pace
+        setFilter(f)       // one grid restart (the filter changed)
+        restartCounts()    // re-subscribe the single counts observation with new bounds
     }
 
     // MARK: Lifecycle
@@ -221,9 +264,7 @@ final class LibraryViewModel {
     /// from `.task`.
     func start() {
         guard countsTask == nil else { return }
-        countsTask = Task { [dataSource] in
-            for await value in dataSource.sidebarCounts() { self.counts = value }
-        }
+        restartCounts()
         platformsTask = Task { [dataSource] in
             for await value in dataSource.platformsInUse() { self.platforms = value }
         }
@@ -256,6 +297,16 @@ final class LibraryViewModel {
         scoresTask?.cancel(); scoresTask = nil
         genresTask?.cancel(); genresTask = nil
         decadesTask?.cancel(); decadesTask = nil
+    }
+
+    /// (Re)subscribe the single sidebar-counts observation with the current pace's
+    /// shelf bounds. One observation — never a second (PLAN §8). Re-run on pace change.
+    private func restartCounts() {
+        countsTask?.cancel()
+        let pace = paceModel.pace
+        countsTask = Task { [dataSource] in
+            for await value in dataSource.sidebarCounts(pace: pace) { self.counts = value }
+        }
     }
 
     private func restartGames() {
@@ -376,10 +427,12 @@ final class LibraryViewModel {
         var f = filter
         f.scope = newValue
         // Restore this selection's persisted sort (PLAN §8: "sort … persisted per
-        // sidebar selection"); fall back to title / its default direction.
+        // sidebar selection"); fall back to this scope's default sort + direction
+        // (the "By Length" scopes default to Length ascending).
         let setting = sortPreferences.sortSetting(for: newValue.id)
-        f.sort = setting?.sort ?? .title
-        f.ascending = setting?.ascending ?? (setting?.sort ?? .title).defaultAscending
+        let fallback = Self.defaultSort(for: newValue)
+        f.sort = setting?.sort ?? fallback
+        f.ascending = setting?.ascending ?? (setting?.sort ?? fallback).defaultAscending
         filter = f
         selectedGameIDs.removeAll()
         selectionAnchor = nil

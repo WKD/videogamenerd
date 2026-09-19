@@ -64,7 +64,8 @@ enum LibraryQuery {
     static func gamesSQL(_ filter: LibraryFilter) -> (sql: String, arguments: StatementArguments) {
         var wheres: [String] = []
         var args: [DatabaseValueConvertible] = []
-        appendScope(filter.scope, into: &wheres, args: &args)
+        appendScope(filter.scope, bounds: LengthShelf.bounds(for: filter.playPace),
+                    into: &wheres, args: &args)
         appendFacets(filter, into: &wheres, args: &args)
 
         var sql = selectClause
@@ -88,7 +89,7 @@ enum LibraryQuery {
     // MARK: - Scope
 
     private static func appendScope(
-        _ scope: SidebarSelection,
+        _ scope: SidebarSelection, bounds: LengthBounds,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         switch scope {
@@ -106,9 +107,26 @@ enum LibraryQuery {
             wheres.append("g.played = 1 AND g.tier_id IS NULL")
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
+        case let .length(shelf):
+            appendLengthScope(shelf, bounds: bounds, into: &wheres, args: &args)
+        case .unmeasured:
+            wheres.append("\(lengthEstimateExpr) IS NULL")
         case let .platform(slug):
             appendPlatformMembership(slug, into: &wheres, args: &args)
         }
+    }
+
+    /// WHERE clause for one "By Length" shelf: the estimate must exist and fall in
+    /// the shelf's `[lower, upper)` seconds window (bounds derived from the pace).
+    private static func appendLengthScope(
+        _ shelf: LengthShelf, bounds: LengthBounds,
+        into wheres: inout [String], args: inout [DatabaseValueConvertible]
+    ) {
+        let range = shelf.secondsRange(in: bounds)
+        var conds = ["\(lengthEstimateExpr) IS NOT NULL"]
+        if let lower = range.lower { conds.append("\(lengthEstimateExpr) >= ?"); args.append(lower) }
+        if let upper = range.upper { conds.append("\(lengthEstimateExpr) < ?");  args.append(upper) }
+        wheres.append(conds.count == 1 ? conds[0] : "(" + conds.joined(separator: " AND ") + ")")
     }
 
     private static func appendPlatformMembership(
@@ -189,6 +207,11 @@ enum LibraryQuery {
             formatOrs.append("NOT EXISTS(SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)")
         }
         appendOR(formatOrs, into: &wheres)
+        // "Owns multiple copies" — ≥ 2 owned products for the game (its own facet,
+        // ANDed across kinds; owner request 2026-09-19).
+        if filter.multipleCopies {
+            wheres.append("(SELECT COUNT(*) FROM product_games pg5 WHERE pg5.game_id = g.id) >= 2")
+        }
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
             wheres.append("""
@@ -221,6 +244,46 @@ enum LibraryQuery {
     /// "No Estimate" (this expression `IS NULL`) means exactly "no time info to fetch".
     static let playtimeBucketExpr =
         "COALESCE(g.my_playtime_s, g.psn_playtime_s, g.ttb_normally_s, g.ttb_hastily_s, g.ttb_completely_s)"
+
+    /// The time-to-beat **estimate** a game's *length* is measured by (PLAN §8 "By
+    /// Length" shelves): the best available IGDB estimate, `normally → hastily →
+    /// completely`. Deliberately **excludes** the owner's own/PSN playtime — unlike
+    /// ``playtimeBucketExpr`` — so a 100-hour RPG dropped after 2 h is still an epic.
+    static let lengthEstimateExpr = "COALESCE(g.ttb_normally_s, g.ttb_hastily_s, g.ttb_completely_s)"
+
+    /// One grouped pass computing the five "By Length" shelf counts plus the
+    /// "Unmeasured" (no-estimate) count for the sidebar (PLAN §8). The pace-derived
+    /// bounds are passed as **arguments** (seconds), never literals, so changing the
+    /// pace only re-runs this query. Estimate only — see ``lengthEstimateExpr``.
+    static func lengthShelfCountsSQL(bounds: LengthBounds) -> (sql: String, arguments: StatementArguments) {
+        var cols: [String] = []
+        var args: [DatabaseValueConvertible] = []
+        for shelf in LengthShelf.allCases {
+            let range = shelf.secondsRange(in: bounds)
+            var conds = ["est IS NOT NULL"]
+            if let lower = range.lower { conds.append("est >= ?"); args.append(lower) }
+            if let upper = range.upper { conds.append("est < ?");  args.append(upper) }
+            cols.append("COALESCE(SUM(\(conds.joined(separator: " AND "))), 0) AS \(shelf.rawValue)")
+        }
+        cols.append("COALESCE(SUM(est IS NULL), 0) AS unmeasured")
+        let sql = """
+            SELECT \(cols.joined(separator: ",\n                   "))
+            FROM (SELECT \(lengthEstimateExpr) AS est FROM games g)
+            """
+        return (sql, StatementArguments(args))
+    }
+
+    /// Fetch the per-shelf + "Unmeasured" counts. Composed into the single sidebar
+    /// observation alongside the scalar/per-platform counts (never a second one).
+    static func fetchLengthShelfCounts(
+        _ db: Database, bounds: LengthBounds
+    ) throws -> (shelves: [LengthShelf: Int], unmeasured: Int) {
+        let (sql, arguments) = lengthShelfCountsSQL(bounds: bounds)
+        let row = try Row.fetchOne(db, sql: sql, arguments: arguments)!
+        var shelves: [LengthShelf: Int] = [:]
+        for shelf in LengthShelf.allCases { shelves[shelf] = row[shelf.rawValue] }
+        return (shelves, row["unmeasured"])
+    }
 
     /// OR-within-kind playtime filter: a game matches if its bucket value falls in
     /// any selected band, OR (when `includeNoEstimate`) it has no bucket value at all
@@ -264,6 +327,9 @@ enum LibraryQuery {
         case .playtime:
             terms = ["(COALESCE(g.my_playtime_s, g.psn_playtime_s) IS NULL)",
                      "COALESCE(g.my_playtime_s, g.psn_playtime_s) \(dir)"]
+        case .length:
+            // By the time-to-beat estimate (how long the game is), NULLs always last.
+            terms = ["(\(lengthEstimateExpr) IS NULL)", "\(lengthEstimateExpr) \(dir)"]
         }
         return "ORDER BY " + (terms + ["g.sort_title ASC", "g.id ASC"]).joined(separator: ", ")
     }
