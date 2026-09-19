@@ -20,6 +20,19 @@ struct ImportAllowList: Sendable {
         "https://embed.gog.com/account/getFilteredProducts",
     ])
 
+    /// PSN's read-only endpoints (PLAN §13.3, exact URL prefixes only): the OAuth
+    /// authorize + token calls, the profile, the trophy-titles list, the game list, and
+    /// the GraphQL purchases op. Any other host/path is a programming error and traps in
+    /// DEBUG (PLAN §13.1 rule 1). Nothing that writes to PSN is here.
+    static let psn = ImportAllowList([
+        "https://ca.account.sony.com/api/authz/v3/oauth/authorize",
+        "https://ca.account.sony.com/api/authz/v3/oauth/token",
+        "https://m.np.playstation.com/api/userProfile/v1/internal/users/me/profiles",
+        "https://m.np.playstation.com/api/trophy/v1/users/me/trophyTitles",
+        "https://m.np.playstation.com/api/gamelist/v2/users/me/titles",
+        "https://web.np.playstation.com/api/graphql/v1/op",
+    ])
+
     func allows(_ url: URL) -> Bool {
         let s = url.absoluteString
         return prefixes.contains { s.hasPrefix($0) }

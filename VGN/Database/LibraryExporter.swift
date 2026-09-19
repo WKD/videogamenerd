@@ -127,6 +127,9 @@ struct LibraryExporter: Sendable {
         /// The importer's external id for this owned copy (idempotency key, v5).
         var externalID: String?
         var psnEntitlement: String?
+        /// Subscription licence for this copy, or nil = really owned (v8, PLAN §13.3).
+        /// `'ps_plus'` for a PS Plus claim — carried so a round-trip keeps the flag.
+        var subscription: String?
         var acquiredAt: Date?
         var members: [Member]
     }
@@ -199,7 +202,7 @@ struct LibraryExporter: Sendable {
 
         let products = try Row.fetchAll(db, sql: """
             SELECT id, title, platform_id, kind, format, edition, region, igdb_id,
-                   cover_file, source, external_id, psn_entitlement, acquired_at
+                   cover_file, source, external_id, psn_entitlement, subscription, acquired_at
             FROM products ORDER BY id
             """).map { r -> Product in
             let id: Int64 = r["id"]
@@ -207,7 +210,7 @@ struct LibraryExporter: Sendable {
                 id: id, title: r["title"], platformID: r["platform_id"], kind: r["kind"],
                 format: r["format"], edition: r["edition"], region: r["region"], igdbID: r["igdb_id"],
                 coverFile: r["cover_file"], source: r["source"], externalID: r["external_id"],
-                psnEntitlement: r["psn_entitlement"],
+                psnEntitlement: r["psn_entitlement"], subscription: r["subscription"],
                 acquiredAt: r["acquired_at"], members: membersByProduct[id] ?? [])
         }
 

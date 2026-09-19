@@ -126,6 +126,32 @@ The request shape was **verified live 2026-09-19** (wave 10, lane B) and the fix
 - [ ] In `-VGNSampleData` mode the button + sheet still work but make **no network calls** (every game resolves "not found") — the inert search.
 - [ ] Inspector footer shows **"Added <date> · via <origin>"**; the CSV/JSON export carries `origin` (and each copy's `source` / `external_id`).
 
+## PSN import (§13) — S0 built offline; live steps S1–S8 are gated (owner + orchestrator)
+S0 (scaffolding) is done and unit-tested on synthetic fixtures — **no PSN request has been
+made**. The runbook, the exact tiny probe per step, and the stop-and-ask rules are in
+`docs/psn-import.md`. The checks below are **live** and run one probe at a time, test account
+first, then the real account; **stop and report on anything unexpected** before continuing.
+- [ ] **S1 sign-in (test account):** the owner logs in on Sony's page in the WKWebView; VGN reads
+  the `npsso` cookie (or pasted NPSSO), exchanges it for tokens, stores only tokens in the
+  Keychain (`psn.tokens`). The NPSSO/code/tokens appear in **no** log, fixture, dev-cache index or
+  error. Confirm which account was used.
+- [ ] **S2 profile:** shows the test online id. **S3a** trophy probe (`trophy2`, `limit=10`) returns
+  ≤10 titles + a `totalItemCount` (empty is valid for a fresh account); **S3b** full page is
+  coherent. **S4** `npServiceName=trophy` returns PS3/Vita titles.
+- [ ] **S5 game list** returns ISO-8601 `playDuration`s that parse to sensible hours. **S6 purchases**
+  (GraphQL, test account first) returns entitlements incl. `membership` (test's free games → `NONE`);
+  if the persisted-query hash has moved, read the current one from `library.playstation.com`'s
+  network tab (stop-and-ask, not a retry).
+- [ ] **S5b real account:** re-probe each data set with ONE tiny request before its full fetch;
+  first sight of `PS_PLUS`. **S7** full sync imports through the review sheet in ≤ 20 requests; **S8**
+  an immediate second sync makes **0** requests and proposes nothing new.
+- [ ] A game owned **only** through PS Plus shows the yellow-circle "+" badge and appears under
+  Format ▸ **PS Plus**; a game also on disc shows no badge. A lapsed Plus claim is **proposed** for
+  removal in the review sheet, never removed silently.
+- [ ] Every reject path (login page, error envelope, rate limit, schema mismatch) shows a clear
+  message, leaves the last good cache intact, and stops. Sign out removes the tokens; the dev cache
+  (`~/Library/Application Support/VGN/dev-import-cache/`) is deleted at milestone end.
+
 ## Delicious Library import (§5.5)
 - [ ] File ▸ **Import from Delicious Library…** → pick the `.deliciouslibrary2` file **or** the "Delicious Library 2" folder that contains it. It reads (no network) and opens the review sheet titled **Import from Delicious Library** with "103 games read from Delicious Library".
 - [ ] The **platform policy** switch (Mac when available / Always PC) is shown and only re-maps the PC/Mac hybrid discs; console games (PS3, Wii, GameCube…) keep their platform. Each row's platform popup offers **every** VGN platform.

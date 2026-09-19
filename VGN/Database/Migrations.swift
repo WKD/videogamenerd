@@ -342,6 +342,29 @@ enum Migrations {
         }
     }
 
+    // MARK: - v8 — PS Plus / subscription copies (PLAN §13.3)
+
+    /// v8 adds `products.subscription TEXT` (PLAN §13.3 "PS Plus copies"): `NULL` = a copy
+    /// I really own; `'ps_plus'` = a PlayStation Plus claim, a licence that **expires with
+    /// the subscription**. The column is free text (validated in Swift by
+    /// ``ProductSubscription``, which tolerates an unknown membership string) so another
+    /// service's subscription tier needs no rebuild. A partial index over the non-NULL
+    /// values backs the Format ▸ "PS Plus" facet ("games whose only owned copies are
+    /// subscription copies") without scanning every product.
+    ///
+    /// Pure `ALTER TABLE ADD COLUMN` + `CREATE INDEX`, so no table rebuild and no deferred
+    /// foreign-key checks (the v4/v6 pattern). Existing rows get `subscription = NULL`
+    /// (really owned), which is exactly right for every copy imported before PSN.
+    static func registerV8(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v8") { db in
+            try db.execute(sql: "ALTER TABLE products ADD COLUMN subscription TEXT;")
+            try db.execute(sql: """
+                CREATE INDEX products_subscription_idx
+                    ON products(subscription) WHERE subscription IS NOT NULL;
+                """)
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

@@ -145,6 +145,40 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   then waits under *New* for manual review. A configured but flaky IGDB lookup can't sink a sync
   (`ResilientImportMatcher` turns a lookup error into "no match").
 
+### PSN import (S0 scaffolding — wave 11, lane A)
+The PSN vertical (auth, client, DTOs, validator, mapping, importer, commit), the development
+response cache, and schema **v8** (`products.subscription`) are built and tested on **synthetic
+fixtures only** — **not one request** has been made to any `playstation.com`/`sony.com` host
+(PLAN §13.5 step S0). Full assumption checklist + the S1–S8 runbook: `docs/psn-import.md`.
+- **Every PSN response shape and the mobile-app OAuth values are assumptions.** Ported from
+  `achievements-app/psn-api` @ `1e9d9a80…`, cross-checked against `psnawp` /
+  `andshrew/PlayStation-Trophies`; all marked `// ASSUMPTION(S0):`. The GraphQL **persisted-query
+  hash** for purchases is the fragile one (**most likely to fail at S6**); build with
+  `PSNImporter(includePurchases: false)` to ship owned-digital later without blocking. **[S1–S8, with owner]**
+- **`games` has no `last_played` column** (PLAN §4). The commit writes `psn_playtime_s` only
+  (manual `my_playtime_s` always wins); the trophy/game-list **first/last-played dates are
+  carried on the staging row but not stored on the game**. If the owner wants last-played on the
+  game, a future migration adds the column — out of scope for v8 (which the brief scoped to
+  `products.subscription` only). **[owner decision]**
+- **External-id stability edge**: a merged PSN row's external id prefers concept → title →
+  `NPWR…` → entitlement → name+platform. A trophy-**only** game (played, never purchased) keyed
+  on its `NPWR…` id would switch to a concept/title id if later *purchased*, so its owned copy is
+  a new product rather than an update. Rare; the review sheet's `matched_game_id` still dedupes
+  the game itself. **[watch at S7/S8]**
+- **Probe-before-full guard** records its marker in the runtime `import_cache` (via a manifest
+  row) keyed by `(dataSet, accountLabel)`. A full fetch throws `PSNClient.ClientError.probeRequired`
+  until a probe has run for that data set — so "full run before a probe" is impossible by
+  construction. `accountLabel` (`test`/`real`) also scopes the DEBUG dev-cache folder.
+- **Transient PSN row fields** were added to the shared `ImportStagingRow` (`subscription`,
+  `launchedNotPlayed`, `reviewNote`, `statusPrefill`) and four PSN cases to `ImportIgnoreReason`
+  (`betaOrTrial`, `themeOrAvatar`, `preOrder`, `inactiveEntitlement`, `mediaApp`). Additive —
+  recomputed each sync, never persisted; GOG/Delicious set none of them and stay green.
+- **UI is the next lane**: Settings ▸ PlayStation pane, the login WKWebView, the review-sheet
+  groups (New / Already matched / Ignored, plus "Launched 0 %" / "Played — no purchase found"),
+  the yellow-circle **"+" badge** (`#FFC300` circle, `#0070D1` "+"), Format ▸ **PS Plus** menu
+  entry (model+SQL are done — `LibraryFilter.includeSubscriptionOnly`), the Play Next
+  "leaves with PS Plus" option, and the bulk **Change Copy Format** action are all next-lane.
+
 ### HowLongToBeat fallback (wave 9 lane A; **verified live wave 10 lane B** — PLAN §5.3)
 Fills only the *gaps* IGDB leaves, on demand (inspector ▸ Fetch from HowLongToBeat; Game ▸
 Fetch Missing Time Estimates…). **Verified against the live site 2026-09-19** (wave 10): the

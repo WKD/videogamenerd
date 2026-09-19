@@ -1,0 +1,13 @@
+{
+  "data": {
+    "purchasedTitlesRetrieve": {
+      "games": [
+        { "name": "Synthetic Saga", "platform": "PS5", "membership": "NONE", "isActive": true, "isDownloadable": true, "isPreOrder": false, "entitlementId": "FAKE-ENT-0001", "productId": "FAKEPROD0001-00", "titleId": "CUSA90001_00", "conceptId": "10090001", "image": { "url": "https://example.invalid/fake1.png" } },
+        { "name": "Fake Fantasy X1", "platform": "PS4", "membership": "PS_PLUS", "isActive": true, "isDownloadable": true, "isPreOrder": false, "entitlementId": "FAKE-ENT-0002", "productId": "FAKEPROD0002-00", "titleId": "CUSA90002_00", "conceptId": "10090002", "image": { "url": "https://example.invalid/fake2.png" } },
+        { "name": "Preorder Prospect", "platform": "PS5", "membership": "NONE", "isActive": true, "isDownloadable": false, "isPreOrder": true, "entitlementId": "FAKE-ENT-0003", "productId": "FAKEPROD0003-00", "titleId": "PPSA90030_00", "conceptId": "10090030", "image": { "url": "https://example.invalid/fake3.png" } },
+        { "name": "Lapsed Licence", "platform": "PS4", "membership": "PS_PLUS", "isActive": false, "isDownloadable": false, "isPreOrder": false, "entitlementId": "FAKE-ENT-0004", "productId": "FAKEPROD0004-00", "titleId": "CUSA90040_00", "conceptId": "10090040", "image": { "url": "https://example.invalid/fake4.png" } },
+        { "name": "Freebie Frenzy", "platform": "PS5", "membership": "UNKNOWN_TIER_2099", "isActive": true, "isDownloadable": true, "isPreOrder": false, "entitlementId": "FAKE-ENT-0005", "productId": "FAKEPROD0005-00", "titleId": "PPSA90050_00", "conceptId": "10090050", "image": { "url": "https://example.invalid/fake5.png" } }
+      ]
+    }
+  }
+}

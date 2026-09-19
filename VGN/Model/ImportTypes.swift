@@ -174,6 +174,12 @@ enum ImportIgnoreReason: String, Sendable, Hashable, Codable, CaseIterable {
     case soundtrackOrGoodies
     case demoOrPrologue
     case hidden
+    // PSN noise reasons (PLAN §13.3). Additive — GOG/Delicious never produce these.
+    case betaOrTrial
+    case themeOrAvatar
+    case preOrder
+    case inactiveEntitlement
+    case mediaApp
 
     var label: String {
         switch self {
@@ -182,6 +188,11 @@ enum ImportIgnoreReason: String, Sendable, Hashable, Codable, CaseIterable {
         case .soundtrackOrGoodies: return "Soundtrack / goodies"
         case .demoOrPrologue: return "Demo / prologue"
         case .hidden: return "Hidden on GOG"
+        case .betaOrTrial: return "Beta / trial"
+        case .themeOrAvatar: return "Theme / avatar"
+        case .preOrder: return "Pre-order"
+        case .inactiveEntitlement: return "Inactive entitlement"
+        case .mediaApp: return "Media app"
         }
     }
 }
@@ -223,6 +234,23 @@ struct ImportStagingRow: Sendable, Hashable, Codable, Identifiable {
     /// product (PLAN §5.5). Transient. GOG never sets it.
     var acquiredAt: Date?
 
+    /// **(PSN)** The subscription licence on the owned copy — ``ProductSubscription/psPlus``
+    /// or a raw membership string (PLAN §13.3). Transient (recomputed each sync from the
+    /// purchases list); committed onto the product's `subscription` column. nil for
+    /// GOG/Delicious and for a really-owned PSN copy.
+    var subscription: ProductSubscription?
+    /// **(PSN)** A trophy title at 0 % progress — merely *launched*, not played (PLAN §13.3).
+    /// Its own review group, **not** ticked by default. Transient. false for GOG/Delicious.
+    var launchedNotPlayed: Bool
+    /// **(PSN)** A short review-sheet note the copy-format rules produce ("Played — no
+    /// purchase found", "Launched, 0 %", "PS Plus", a combined-platform note). Transient.
+    /// nil for GOG/Delicious.
+    var reviewNote: String?
+    /// **(PSN)** A completion status to pre-fill when the game has none — `100 %`
+    /// (`.completed`) for a trophy title at 100 % progress (PLAN §13.3). Transient; the
+    /// commit only applies it when the game has no status. nil for GOG/Delicious.
+    var statusPrefill: PlayStatus?
+
     var id: String { "\(source):\(externalID)" }
 
     init(source: String, externalID: String, name: String, platform: String? = nil,
@@ -230,7 +258,9 @@ struct ImportStagingRow: Sendable, Hashable, Codable, Identifiable {
          firstPlayedAt: Date? = nil, lastPlayedAt: Date? = nil,
          releaseYear: Int? = nil, ignoreReason: ImportIgnoreReason? = nil,
          macAvailable: Bool = false, linuxOnly: Bool = false,
-         matchTitle: String? = nil, edition: String? = nil, acquiredAt: Date? = nil) {
+         matchTitle: String? = nil, edition: String? = nil, acquiredAt: Date? = nil,
+         subscription: ProductSubscription? = nil, launchedNotPlayed: Bool = false,
+         reviewNote: String? = nil, statusPrefill: PlayStatus? = nil) {
         self.source = source
         self.externalID = externalID
         self.name = name
@@ -246,6 +276,10 @@ struct ImportStagingRow: Sendable, Hashable, Codable, Identifiable {
         self.matchTitle = matchTitle
         self.edition = edition
         self.acquiredAt = acquiredAt
+        self.subscription = subscription
+        self.launchedNotPlayed = launchedNotPlayed
+        self.reviewNote = reviewNote
+        self.statusPrefill = statusPrefill
     }
 }
 

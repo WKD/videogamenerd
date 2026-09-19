@@ -75,6 +75,13 @@ struct LibraryFilter: Hashable, Sendable {
     /// two physical copies). ANDs across kinds like any other facet.
     var multipleCopies: Bool
 
+    /// Format ▸ "PS Plus" facet (PLAN §13.3): match only games whose **only** owned copies
+    /// are subscription copies (`products.subscription IS NOT NULL`) — the games I own only
+    /// through PS Plus, at risk when the subscription lapses. A game also owned on disc is
+    /// excluded. Its own facet, ANDed across kinds (like ``multipleCopies``); with Status ▸
+    /// Not Played it is the "finish before unsubscribing" list. Wired to the menu by the UI lane.
+    var includeSubscriptionOnly: Bool
+
     /// Playtime-band facet (< 10 h … > 200 h). Empty = no constraint. The value
     /// bucketed is the effective playtime (manual over PSN), falling back to the best
     /// available IGDB estimate (main → rushed → completionist) for a game I have not
@@ -134,6 +141,7 @@ struct LibraryFilter: Hashable, Sendable {
         formats: Set<ProductFormat> = [],
         includeNotOwned: Bool = false,
         multipleCopies: Bool = false,
+        includeSubscriptionOnly: Bool = false,
         playtimes: Set<PlaytimeBucket> = [],
         includeNoTimeEstimate: Bool = false,
         platform: String? = nil,
@@ -155,6 +163,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.formats = formats
         self.includeNotOwned = includeNotOwned
         self.multipleCopies = multipleCopies
+        self.includeSubscriptionOnly = includeSubscriptionOnly
         self.playtimes = playtimes
         self.includeNoTimeEstimate = includeNoTimeEstimate
         self.platform = platform
@@ -172,7 +181,7 @@ struct LibraryFilter: Hashable, Sendable {
         !searchText.isEmpty || !genres.isEmpty || !decades.isEmpty
             || !tierIDs.isEmpty || includeUnrated
             || !statuses.isEmpty || includeNotPlayed || includeNoStatus
-            || !formats.isEmpty || includeNotOwned || multipleCopies
+            || !formats.isEmpty || includeNotOwned || multipleCopies || includeSubscriptionOnly
             || !playtimes.isEmpty || includeNoTimeEstimate
             || platform != nil || !platforms.isEmpty
     }

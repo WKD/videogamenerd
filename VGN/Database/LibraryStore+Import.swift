@@ -20,21 +20,51 @@ extension LibraryStore {
 
     /// Insert one import `products` row (no membership) and return its id. Digital by
     /// default; `kindRaw` is `'single'` or `'compilation'`. `edition` / `acquiredAt` land
-    /// on the copy when a file importer supplies them (Delicious, PLAN §5.5).
+    /// on the copy when a file importer supplies them (Delicious, PLAN §5.5). `subscription`
+    /// records a PS Plus / raw membership claim on the copy (PSN, v8/§13.3).
     @discardableResult
     static func insertImportProductRow(
         platformID: String, format: ProductFormat, sourceRaw: String, externalID: String,
         kindRaw: String = "single", title: String? = nil,
-        edition: String? = nil, acquiredAt: Date? = nil, db: Database
+        edition: String? = nil, acquiredAt: Date? = nil, subscription: String? = nil, db: Database
     ) throws -> Int64 {
         let now = Date()
         try db.execute(sql: """
             INSERT INTO products
-                (title, platform_id, kind, format, edition, source, external_id, acquired_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (title, platform_id, kind, format, edition, source, external_id, subscription,
+                 acquired_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, arguments: [title, platformID, kindRaw, format.rawValue, edition,
-                             sourceRaw, externalID, acquiredAt, now, now])
+                             sourceRaw, externalID, subscription, acquiredAt, now, now])
         return db.lastInsertedRowID
+    }
+
+    /// Mark a game **played without creating any copy** (PLAN §13.3 — a trophy title that
+    /// is "played, not owned"). Sets `games.played = 1` and the per-platform played flag,
+    /// never touching ownership, tier or rank. Idempotent.
+    static func markPlayedWithoutCopy(gameID: Int64, platformID: String?, db: Database) throws {
+        try db.execute(sql: "UPDATE games SET played = 1, updated_at = ? WHERE id = ?",
+                       arguments: [Date(), gameID])
+        if let platformID {
+            try ensureGamePlatform(gameID: gameID, platformID: platformID, played: true, db: db)
+        }
+    }
+
+    /// Set the **PSN-sourced** play time (PLAN §6.4). Only ever writes `psn_playtime_s`, so
+    /// a manual `my_playtime_s` is never overwritten (the manual value wins at read time).
+    /// A nil value is ignored. Idempotent; a changed value updates.
+    static func setPSNPlaytime(gameID: Int64, seconds: Int?, db: Database) throws {
+        guard let seconds else { return }
+        try db.execute(sql: "UPDATE games SET psn_playtime_s = ?, updated_at = ? WHERE id = ?",
+                       arguments: [seconds, Date(), gameID])
+    }
+
+    /// Pre-fill a completion status **only when the game has none** (PLAN §13.3 — a 100 %
+    /// trophy title). Never overwrites an existing status.
+    static func prefillStatusIfNone(gameID: Int64, status: PlayStatus, db: Database) throws {
+        try db.execute(sql: """
+            UPDATE games SET status = ?, updated_at = ? WHERE id = ? AND status IS NULL
+            """, arguments: [status.rawValue, Date(), gameID])
     }
 
     /// Idempotently attach a **single-game** import Product for `gameID` (PLAN §14.3).
@@ -46,7 +76,7 @@ extension LibraryStore {
     static func attachSingleImportProduct(
         gameID: Int64, platformID: String, format: ProductFormat,
         sourceRaw: String, externalID: String,
-        edition: String? = nil, acquiredAt: Date? = nil, db: Database
+        edition: String? = nil, acquiredAt: Date? = nil, subscription: String? = nil, db: Database
     ) throws -> (productID: Int64, created: Bool) {
         if let existing = try existingImportProductID(sourceRaw: sourceRaw, externalID: externalID, db: db) {
             // Keep the membership consistent (idempotent link) but create nothing new.
@@ -58,8 +88,18 @@ extension LibraryStore {
         try ensureGamePlatform(gameID: gameID, platformID: platformID, played: false, db: db)
         let productID = try insertImportProductRow(
             platformID: platformID, format: format, sourceRaw: sourceRaw, externalID: externalID,
-            edition: edition, acquiredAt: acquiredAt, db: db)
+            edition: edition, acquiredAt: acquiredAt, subscription: subscription, db: db)
         try ProductGameRecord(productID: productID, gameID: gameID, position: 0).insert(db)
         return (productID, true)
+    }
+
+    /// The `(externalID, productID)` of every currently-committed **subscription** copy for
+    /// a source (PSN, PLAN §13.3) — the baseline for detecting a Plus claim that has
+    /// disappeared on re-sync (proposed for removal, never applied silently).
+    static func committedSubscriptionCopies(sourceRaw: String, db: Database) throws -> [(externalID: String, productID: Int64)] {
+        try Row.fetchAll(db, sql: """
+            SELECT external_id AS eid, id AS pid FROM products
+            WHERE source = ? AND subscription IS NOT NULL AND external_id IS NOT NULL
+            """, arguments: [sourceRaw]).map { (externalID: $0["eid"], productID: $0["pid"]) }
     }
 }

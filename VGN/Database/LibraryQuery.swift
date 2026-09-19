@@ -24,6 +24,7 @@ enum LibraryQuery {
                    1                                AS owned,
                    MAX(p.kind = 'compilation')      AS is_comp,
                    MAX(p.format = 'rom')            AS has_rom,
+                   MIN(p.subscription IS NOT NULL)  AS sub_only,
                    MAX(CASE WHEN p.kind = 'compilation' THEN p.id END)    AS comp_id,
                    MAX(CASE WHEN p.kind = 'compilation' THEN p.title END) AS comp_title
             FROM product_games pg JOIN products p ON p.id = pg.product_id
@@ -51,6 +52,7 @@ enum LibraryQuery {
             COALESCE(own.owned, 0)                           AS owned,
             COALESCE(own.is_comp, 0)                         AS is_comp,
             COALESCE(own.has_rom, 0)                         AS has_rom,
+            COALESCE(own.sub_only, 0)                        AS sub_only,
             own.comp_id                                      AS comp_id,
             own.comp_title                                   AS comp_title,
             plat.ids                                         AS platform_ids
@@ -213,6 +215,17 @@ enum LibraryQuery {
         // ANDed across kinds; owner request 2026-09-19).
         if filter.multipleCopies {
             wheres.append("(SELECT COUNT(*) FROM product_games pg5 WHERE pg5.game_id = g.id) >= 2")
+        }
+        // Format ▸ "PS Plus" — games whose **only** owned copies are subscription copies
+        // (PLAN §13.3). Its own facet, ANDed across kinds (like Multiple Copies): the game
+        // must be owned AND have no owned copy that is really owned (subscription IS NULL).
+        // With Status ▸ Not Played this is the "finish before unsubscribing" list.
+        if filter.includeSubscriptionOnly {
+            wheres.append("""
+                (EXISTS(SELECT 1 FROM product_games pg6 WHERE pg6.game_id = g.id)
+                 AND NOT EXISTS(SELECT 1 FROM product_games pg7 JOIN products p7 ON p7.id = pg7.product_id
+                                WHERE pg7.game_id = g.id AND p7.subscription IS NULL))
+                """)
         }
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
@@ -421,7 +434,8 @@ enum LibraryQuery {
             compilationProductID: row["comp_id"],
             platformIDs: platformIDs,
             status: statusRaw.flatMap(PlayStatus.init(rawValue:)),
-            hasROM: row["has_rom"]
+            hasROM: row["has_rom"],
+            ownedOnlyViaSubscription: row["sub_only"]
         )
     }
 }

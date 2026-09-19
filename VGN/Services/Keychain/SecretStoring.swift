@@ -8,7 +8,10 @@ enum SecretKey: String, CaseIterable, Sendable {
     /// The GOG OAuth access + refresh tokens, stored as ONE JSON blob (PLAN §14.1,
     /// account `gog.tokens`). Never logged. See ``KeychainGOGTokenStore``.
     case gogTokens = "gog.tokens"
-    // PSN access / refresh tokens are added here when the PSN lane lands.
+    /// The PSN OAuth access + refresh tokens, stored as ONE JSON blob (PLAN §13.1,
+    /// account `psn.tokens`). Never logged; the NPSSO is never stored. See
+    /// ``KeychainPSNTokenStore``.
+    case psnTokens = "psn.tokens"
 }
 
 /// A small, `Sendable` abstraction over secret storage so the UI, Settings and

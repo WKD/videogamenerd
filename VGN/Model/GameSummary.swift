@@ -36,6 +36,11 @@ struct GameSummary: Hashable, Sendable, Identifiable {
     /// True when this game is owned as a ROM on ≥ 1 platform (PLAN §4 — ROM badge).
     var hasROM: Bool
 
+    /// True when the game is owned but **every** owned copy is a subscription copy
+    /// (PLAN §13.3 — "a game I own only through PS Plus"). Drives the grid cell's yellow
+    /// "+" badge and the Format ▸ "PS Plus" facet. A copy also owned on disc ⇒ false.
+    var ownedOnlyViaSubscription: Bool
+
     init(
         id: Int64,
         title: String,
@@ -52,7 +57,8 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         compilationProductID: Int64? = nil,
         platformIDs: [String] = [],
         status: PlayStatus? = nil,
-        hasROM: Bool = false
+        hasROM: Bool = false,
+        ownedOnlyViaSubscription: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -70,6 +76,7 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         self.platformIDs = platformIDs
         self.status = status
         self.hasROM = hasROM
+        self.ownedOnlyViaSubscription = ownedOnlyViaSubscription
     }
 
     /// Derived Backlog membership (PLAN §4 invariant 2): owned but not played.

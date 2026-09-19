@@ -1,0 +1,9 @@
+{
+  "trophyTitles": [
+    { "npCommunicationId": "NPWR90011_00", "trophyTitleName": "Second Page Sagas", "trophyTitlePlatform": "PS5", "npServiceName": "trophy2", "progress": 61, "earnedTrophies": { "bronze": 15, "silver": 4, "gold": 1, "platinum": 0 }, "lastUpdatedDateTime": "2025-11-01T10:00:00Z", "hiddenFlag": false },
+    { "npCommunicationId": "NPWR90012_00", "trophyTitleName": "Overflow Odyssey", "trophyTitlePlatform": "PS4", "npServiceName": "trophy2", "progress": 0, "earnedTrophies": { "bronze": 0, "silver": 0, "gold": 0, "platinum": 0 }, "lastUpdatedDateTime": "2025-10-01T10:00:00Z", "hiddenFlag": false }
+  ],
+  "totalItemCount": 12,
+  "nextOffset": null,
+  "previousOffset": 0
+}

@@ -109,7 +109,7 @@ extension LibraryStore {
 
         let copyRows = try Row.fetchAll(db, sql: """
             SELECT p.id AS product_id, p.platform_id, p.format, p.kind, p.title,
-                   p.edition, p.region, p.source, pg.position,
+                   p.edition, p.region, p.source, p.subscription, pg.position,
                    (SELECT COUNT(*) FROM product_games x WHERE x.product_id = p.id) AS member_count
             FROM product_games pg JOIN products p ON p.id = pg.product_id
             WHERE pg.game_id = ? ORDER BY p.id
@@ -135,6 +135,7 @@ extension LibraryStore {
                 edition: r["edition"],
                 region: r["region"],
                 source: ProductSource(rawValue: r["source"]) ?? .manual,
+                subscription: ProductSubscription(storage: r["subscription"]),
                 position: r["position"],
                 memberCount: memberCount,
                 memberTitles: memberTitles,
