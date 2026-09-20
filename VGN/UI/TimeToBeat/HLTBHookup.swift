@@ -23,9 +23,33 @@ final class HLTBFetchPresenter {
     var picker: HLTBPickerRequest?
     private(set) var isFetchingOne = false
 
+    /// The game ids the owner dismissed as "Estimate Looks Right" (PLAN §5.3). Cached
+    /// here so the inspector's ⚠︎ updates immediately on a toggle; the grid / shelves read
+    /// `app_state` directly in SQL. Loaded once, then kept in sync on each toggle.
+    private(set) var dismissedEstimateIDs: Set<Int64> = []
+
     init(store: LibraryStore, makeSearch: @escaping @Sendable () -> any HLTBSearching) {
         self.store = store
         self.makeSearch = makeSearch
+        Task { [weak self] in await self?.reloadDismissedEstimates() }
+    }
+
+    func reloadDismissedEstimates() async {
+        dismissedEstimateIDs = (try? await store.dismissedEstimateIDs()) ?? []
+    }
+
+    /// Whether a game's suspicious estimate was dismissed ("looks right").
+    func isEstimateDismissed(_ gameID: Int64) -> Bool { dismissedEstimateIDs.contains(gameID) }
+
+    /// Toggle "Estimate Looks Right" / "Flag again" for one game (PLAN §5.3, inspector).
+    func setEstimateLooksRight(gameID: Int64, dismissed: Bool) {
+        // Optimistic: update the cache now so the ⚠︎ flips at once; persist in the background.
+        if dismissed { dismissedEstimateIDs.insert(gameID) } else { dismissedEstimateIDs.remove(gameID) }
+        let store = self.store
+        Task { [weak self] in
+            try? await store.setEstimateLooksRight(gameID: gameID, dismissed: dismissed)
+            await self?.reloadDismissedEstimates()
+        }
     }
 
     // MARK: - Bulk (Game ▸ Fetch Missing Time Estimates…)
@@ -35,7 +59,7 @@ final class HLTBFetchPresenter {
     func presentBulk() {
         guard bulk == nil, let library, canRunBulk else { return }
         let selection = library.selectedGameIDs
-        let model = HLTBBulkFetchModel(store: store, makeSearch: makeSearch)
+        let model = HLTBBulkFetchModel(store: store, makeSearch: makeSearch, mode: .fillGaps)
         bulk = model
         let store = self.store
         Task {
@@ -53,11 +77,57 @@ final class HLTBFetchPresenter {
         }
     }
 
+    // MARK: - Bulk replace (Game / context ▸ Refresh Time Estimates from HowLongToBeat…)
+
+    /// Present the **replace** bulk sheet for the selection, or — when nothing is
+    /// selected — every currently-flagged game ("typically the filtered suspicious ones",
+    /// PLAN §5.3). The sheet confirms the count before any request; one Undo restores the
+    /// whole batch.
+    func presentRefresh() {
+        guard bulk == nil, let library, canRunBulk else { return }
+        let selection = library.selectedGameIDs
+        let model = HLTBBulkFetchModel(store: store, makeSearch: makeSearch, mode: .replace)
+        model.onReplaceFinished = { [weak self] snapshots in
+            self?.finishReplaceBatch(snapshots)
+        }
+        bulk = model
+        let store = self.store
+        Task {
+            let scope: [Int64]
+            if selection.isEmpty {
+                scope = (try? await store.suspiciousEstimateGameIDs()) ?? []
+            } else {
+                scope = Array(selection).sorted()
+            }
+            model.start(gameIDs: scope)
+        }
+    }
+
+    /// Register one Undo step for a finished replace batch and reload the dismissed cache
+    /// (a replaced game's source becomes `hltb`, so it also leaves the flag) — PLAN §5.3.
+    private func finishReplaceBatch(_ snapshots: [Int64: HLTBTimeSnapshot]) {
+        Task { [weak self] in await self?.reloadDismissedEstimates() }
+        guard let library, !snapshots.isEmpty else { return }
+        let store = self.store
+        library.undoManager?.registerUndo(withTarget: library) { _ in
+            Task { try? await store.restoreTimeToBeatBatch(snapshots) }
+        }
+        library.undoManager?.setActionName("Refresh Time Estimates")
+        let n = snapshots.count
+        library.showBanner("Replaced times for \(n) game\(n == 1 ? "" : "s") from HowLongToBeat. Press ⌘Z to undo.", kind: .info)
+    }
+
     func dismissBulk() { bulk?.cancel(); bulk = nil }
 
     // MARK: - Single game (inspector ▸ Fetch from HowLongToBeat)
 
-    func fetchOne(gameID: Int64) {
+    func fetchOne(gameID: Int64) { fetchOne(gameID: gameID, mode: .fillGaps) }
+
+    /// Refresh one game from the inspector's ⚠︎ warning — **replaces** the three times
+    /// when HLTB has the game, leaves it flagged otherwise (PLAN §5.3, D3).
+    func refreshOne(gameID: Int64) { fetchOne(gameID: gameID, mode: .replace) }
+
+    private func fetchOne(gameID: Int64, mode: HLTBWriteMode) {
         guard !isFetchingOne, let library else { return }
         isFetchingOne = true
         let search = makeSearch()
@@ -69,10 +139,10 @@ final class HLTBFetchPresenter {
                 let candidates = try await search.search(title: facts.title)
                 switch HLTBMatcher.match(title: facts.title, year: facts.year, candidates: candidates) {
                 case .confident(let candidate):
-                    await self?.applyConfident(gameID: gameID, candidate: candidate)
+                    await self?.applyConfident(gameID: gameID, candidate: candidate, mode: mode)
                 case .ambiguous(let list):
                     self?.picker = HLTBPickerRequest(
-                        gameID: gameID, title: facts.title, year: facts.year, candidates: list)
+                        gameID: gameID, title: facts.title, year: facts.year, candidates: list, mode: mode)
                 case .notFound:
                     library.showBanner("No HowLongToBeat match for “\(facts.title)”.", kind: .info)
                 }
@@ -88,29 +158,37 @@ final class HLTBFetchPresenter {
     func pickForSingle(_ candidate: HLTBCandidate) {
         guard let request = picker else { return }
         picker = nil
-        Task { await applyConfident(gameID: request.gameID, candidate: candidate) }
+        Task { await applyConfident(gameID: request.gameID, candidate: candidate, mode: request.mode) }
     }
 
     func dismissPicker() { picker = nil }
 
-    private func applyConfident(gameID: Int64, candidate: HLTBCandidate) async {
-        guard let library,
-              let result = try? await store.applyHLTBTimes(gameID: gameID, candidate: candidate)
-        else { return }
+    private func applyConfident(gameID: Int64, candidate: HLTBCandidate, mode: HLTBWriteMode) async {
+        guard let library else { return }
+        let result: HLTBFillResult?
+        switch mode {
+        case .fillGaps: result = try? await store.applyHLTBTimes(gameID: gameID, candidate: candidate)
+        case .replace:  result = try? await store.replaceHLTBTimes(gameID: gameID, candidate: candidate)
+        }
+        guard let result else { return }
         if result.didWrite {
-            registerUndo(gameID: gameID, snapshot: result.previous, library: library)
-            library.showBanner("Filled times from HowLongToBeat. Press ⌘Z to undo.", kind: .info)
+            registerUndo(gameID: gameID, snapshot: result.previous, mode: mode, library: library)
+            await reloadDismissedEstimates()
+            let verb = mode == .replace ? "Replaced" : "Filled"
+            library.showBanner("\(verb) times from HowLongToBeat. Press ⌘Z to undo.", kind: .info)
+        } else if mode == .replace {
+            library.showBanner("HowLongToBeat doesn't have “\(candidate.name)”; the estimate stays flagged.", kind: .info)
         } else {
             library.showBanner("HowLongToBeat had no new times to add.", kind: .info)
         }
     }
 
-    private func registerUndo(gameID: Int64, snapshot: HLTBTimeSnapshot, library: LibraryViewModel) {
+    private func registerUndo(gameID: Int64, snapshot: HLTBTimeSnapshot, mode: HLTBWriteMode, library: LibraryViewModel) {
         let store = self.store
         library.undoManager?.registerUndo(withTarget: library) { _ in
             Task { try? await store.restoreTimeToBeat(gameID: gameID, snapshot) }
         }
-        library.undoManager?.setActionName("Fetch Time Estimate")
+        library.undoManager?.setActionName(mode == .replace ? "Refresh Time Estimate" : "Fetch Time Estimate")
     }
 
     static func stopMessage(_ error: ImportError) -> String {

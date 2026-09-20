@@ -63,6 +63,12 @@ struct PlayedMarkCommands: Commands {
                 .disabled(!(hltb?.canRunBulk ?? false))
                 .help("Fill missing time-to-beat estimates from HowLongToBeat for the "
                       + "current selection, or every game with no estimate.")
+            // HowLongToBeat replace (PLAN §5.3): overwrite the three estimates for the
+            // selection (typically the filtered suspicious ones), or every flagged game.
+            Button("Refresh Time Estimates from HowLongToBeat…") { hltb?.presentRefresh() }
+                .disabled(!(hltb?.canRunBulk ?? false))
+                .help("Replace the rushed / main / completionist estimates from HowLongToBeat for "
+                      + "the current selection, or every game with a suspicious estimate. Values are overwritten.")
         }
     }
 }
