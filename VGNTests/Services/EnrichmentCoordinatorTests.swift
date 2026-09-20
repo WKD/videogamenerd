@@ -162,7 +162,9 @@ struct EnrichmentCoordinatorTests {
         defer { harness.cleanup() }
         let id = try await harness.addGames(1, firstIGDBID: 2000)[0]
 
-        let json = try JSONSerialization.data(withJSONObject: ScriptedIGDBTransport.syntheticGame(id: 2000))
+        // Tag the blob with the metadata shape it satisfies, so the read-through serves it
+        // (an untagged/older blob is a miss and would refetch).
+        let json = CatalogCacheShapeJSON.tagged(ScriptedIGDBTransport.syntheticGame(id: 2000), shapes: [.search, .metadata])
         await harness.catalogCache.store(CatalogCacheEntry(igdbID: 2000, json: json, fetchedAt: harness.date.now))
         _ = try await harness.jobStore.enqueue(kind: .metadata, gameID: id)
 
@@ -178,7 +180,7 @@ struct EnrichmentCoordinatorTests {
         let id = try await harness.addGames(1, firstIGDBID: 3000)[0]
 
         let stale = harness.date.now.addingTimeInterval(-40 * 24 * 60 * 60)
-        let json = try JSONSerialization.data(withJSONObject: ScriptedIGDBTransport.syntheticGame(id: 3000))
+        let json = CatalogCacheShapeJSON.tagged(ScriptedIGDBTransport.syntheticGame(id: 3000), shapes: [.search, .metadata])
         await harness.catalogCache.store(CatalogCacheEntry(igdbID: 3000, json: json, fetchedAt: stale))
         _ = try await harness.jobStore.enqueue(kind: .metadata, gameID: id)
 
