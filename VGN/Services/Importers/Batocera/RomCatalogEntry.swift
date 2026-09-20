@@ -37,18 +37,89 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
     var dismissedAt: Date?
     var notInterested: Bool
 
-    /// The `<system>/<relativePath>` external id used when this ROM is promoted (PLAN §15).
-    var externalID: String { "\(system)/\(relativePath)" }
+    // MARK: The Vault — PS Plus fields (PLAN §16, migration v11)
+
+    /// The PSN external id (mirrors ``relativePath`` for a PS Plus row); nil for Batocera.
+    var externalIDColumn: String?
+    /// A remote cover URL (PS Store), loaded through the cover cache — never copied into the
+    /// app's cover folder. nil for Batocera, which reads ``imagePath`` off the share.
+    var coverURL: String?
+    /// The PSN membership marker (`ps_plus`); nil for Batocera.
+    var membership: String?
+    /// A human note for the browser (e.g. "PS4 & PS5 versions"); nil when there is none.
+    var crossGenNote: String?
+    /// The matched IGDB id (nil until the trait pass runs).
+    var igdbID: Int64?
+    /// IGDB time-to-beat "main" seconds, for the "From the vault" time-fit term (nil for a ROM
+    /// or an unmatched entry).
+    var lengthMainSeconds: Int?
+    /// IGDB time-to-beat "completionist" seconds (nil for a ROM or an unmatched entry).
+    var lengthCompleteSeconds: Int?
+    /// A JSON array of the entry's IGDB traits (genres/themes/keywords/franchise/developer),
+    /// so a matched PS Plus row is taste-scorable offline. nil until matched.
+    var traitsJSON: String?
+    /// The IGDB crowd rating (0…100), for the crowd prior. nil until matched.
+    var igdbRating: Double?
+    /// The trait pass's outcome for this row (nil = never attempted), so a matched **or**
+    /// no-matched entry is never re-queried (PLAN §16).
+    var matchState: VaultMatchState?
+    /// When the trait pass last touched the row.
+    var matchedAt: Date?
+
+    /// The `rom_catalog.source` as a typed value (nil for an unknown source string).
+    var vaultSource: VaultSource? { VaultSource(storage: source) }
+
+    /// The `<system>/<relativePath>` external id used when this ROM is promoted (PLAN §15). A
+    /// PS Plus row carries its PSN external id in ``externalIDColumn`` (also == `relativePath`).
+    var externalID: String { externalIDColumn ?? "\(system)/\(relativePath)" }
 
     /// Whether this entry is a promotion candidate (played > 5 min or favourite).
     var isPromotionCandidate: Bool {
         BatoceraPromotion.isCandidate(gameTimeSeconds: gameTimeSeconds, isFavorite: isFavorite)
     }
 
-    /// Taste features for the recommendation engine (offline, from gamelist metadata).
+    /// Taste features for the recommendation engine. A matched PS Plus entry carries persisted
+    /// IGDB traits (``traitsJSON``); everything else derives them offline from gamelist
+    /// metadata (PLAN §15/§16). A `decade` trait is always added from ``releaseYear`` so the
+    /// two paths line up.
     var traits: [GameTrait] {
-        RomCatalogTraits.traits(genre: genre, family: family, developer: developer,
-                                releaseYear: releaseYear)
+        if let json = traitsJSON, let decoded = Self.decodeTraits(json) {
+            return decoded
+        }
+        return RomCatalogTraits.traits(genre: genre, family: family, developer: developer,
+                                       releaseYear: releaseYear)
+    }
+
+    /// Whether this entry has enough to be taste-scored and suggested in "From the vault"
+    /// (PLAN §16): a Batocera ROM always is (offline gamelist traits); a PS Plus entry only
+    /// once matched to IGDB (unmatched entries are browsable but never suggested).
+    var isSuggestable: Bool {
+        if vaultSource == .psn { return matchState == .matched }
+        return true
+    }
+
+    /// Crowd rating on a 0…100 scale for the recommendation crowd prior: IGDB (already 0…100)
+    /// for a matched PS Plus entry, ScreenScraper (0…1 → ×100) for a Batocera ROM.
+    var crowdRating0to100: Double? {
+        if vaultSource == .psn { return igdbRating }
+        return rating.map { $0 * 100 }
+    }
+
+    /// The owner's **personal length** for a play style (PLAN §8), from the IGDB time-to-beat
+    /// on a matched PS Plus entry. A Batocera ROM has no length ⇒ nil (time fit stays neutral).
+    func personalLength(style: PlayStyle) -> PersonalLength? {
+        PersonalLength.compute(normallyS: lengthMainSeconds, completelyS: lengthCompleteSeconds,
+                               style: style)
+    }
+
+    static func decodeTraits(_ json: String) -> [GameTrait]? {
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode([GameTrait].self, from: data)
+    }
+
+    static func encodeTraits(_ traits: [GameTrait]) -> String? {
+        guard let data = try? JSONEncoder().encode(traits) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     init(id: Int64 = 0, source: String = "batocera", system: String, platformID: String?,
@@ -60,7 +131,11 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
          gameTimeSeconds: Int = 0, lastPlayedAt: Date? = nil, isFavorite: Bool = false,
          imagePath: String? = nil, thumbnailPath: String? = nil, firstSeenAt: Date? = nil,
          lastSeenAt: Date? = nil, removedAt: Date? = nil, promotedGameID: Int64? = nil,
-         dismissedAt: Date? = nil, notInterested: Bool = false) {
+         dismissedAt: Date? = nil, notInterested: Bool = false,
+         externalIDColumn: String? = nil, coverURL: String? = nil, membership: String? = nil,
+         crossGenNote: String? = nil, igdbID: Int64? = nil, lengthMainSeconds: Int? = nil,
+         lengthCompleteSeconds: Int? = nil, traitsJSON: String? = nil, igdbRating: Double? = nil,
+         matchState: VaultMatchState? = nil, matchedAt: Date? = nil) {
         self.id = id
         self.source = source
         self.system = system
@@ -93,6 +168,17 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
         self.promotedGameID = promotedGameID
         self.dismissedAt = dismissedAt
         self.notInterested = notInterested
+        self.externalIDColumn = externalIDColumn
+        self.coverURL = coverURL
+        self.membership = membership
+        self.crossGenNote = crossGenNote
+        self.igdbID = igdbID
+        self.lengthMainSeconds = lengthMainSeconds
+        self.lengthCompleteSeconds = lengthCompleteSeconds
+        self.traitsJSON = traitsJSON
+        self.igdbRating = igdbRating
+        self.matchState = matchState
+        self.matchedAt = matchedAt
     }
 
     /// Build a fresh catalogue entry from a folded gamelist representative (PLAN §15). The
@@ -127,6 +213,33 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
             imagePath: game.imageRelativePath,
             thumbnailPath: game.thumbnailRelativePath)
     }
+
+    /// Build a PS Plus Vault entry from a staged PSN row (PLAN §16). Its identity keeps the
+    /// `UNIQUE(source, system, relative_path)` contract by using `system = <platform slug>`
+    /// and `relative_path = <PSN external id>`; the external id is also kept in its own column.
+    static func makePSNVault(externalID: String, platform: String, name: String,
+                             coverURL: String?, membership: String?,
+                             crossGenNote: String? = nil) -> RomCatalogEntry {
+        RomCatalogEntry(
+            source: VaultSource.psn.storage,
+            system: platform,
+            platformID: platform,
+            relativePath: externalID,
+            name: name,
+            sortTitle: SortTitle.make(from: name),
+            normalisedTitle: TitleNormalizer.normalize(name, level: .articleless),
+            externalIDColumn: externalID,
+            coverURL: coverURL,
+            membership: membership,
+            crossGenNote: crossGenNote)
+    }
+}
+
+/// The IGDB trait-matching outcome for a PS Plus Vault entry (PLAN §16). Set once so an entry
+/// is never re-queried, matched or not.
+enum VaultMatchState: String, Hashable, Sendable {
+    case matched
+    case noMatch = "no_match"
 }
 
 /// Per-system change-detection state (PLAN §15 — mtime/size compared against the share).

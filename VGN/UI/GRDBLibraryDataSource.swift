@@ -87,11 +87,11 @@ struct GRDBLibraryDataSource: LibraryDataSource {
         (try? await store.libraryStats()) ?? .empty
     }
 
-    func romCatalogueCount() -> AsyncStream<Int> {
-        // A SEPARATE observation over `rom_catalog` (same AppDatabase), so a catalogue sync
-        // never re-runs the library counts stream (PLAN §15 — the catalogue is invisible to
-        // the library).
-        Self.bridge(RomCatalogStore(store.database).countObservation())
+    func vaultSourceCounts() -> AsyncStream<VaultSourceCounts> {
+        // A SEPARATE observation over `rom_catalog` (same AppDatabase), so a Vault sync never
+        // re-runs the library counts stream (PLAN §16 — the Vault is invisible to the library).
+        // One observation carries both sources' counts.
+        Self.bridge(RomCatalogStore(store.database).sourceCountsObservation())
     }
 
     /// Republish a GRDB `ValueObservation` async sequence (itself `Sendable`) as

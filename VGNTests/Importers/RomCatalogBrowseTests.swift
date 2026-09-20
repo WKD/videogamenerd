@@ -124,7 +124,7 @@ struct RomCatalogBrowseTests {
 
         let after = try await libraryCounts()
         #expect(after.0 == before.0)   // every library count is unchanged
-        // And the catalogue's own count is never part of SidebarCounts.
-        #expect(before.0.count(for: .romCatalogue) == nil)
+        // And the Vault's own count is never part of SidebarCounts.
+        #expect(before.0.count(for: .vault(.batocera)) == nil)
     }
 }

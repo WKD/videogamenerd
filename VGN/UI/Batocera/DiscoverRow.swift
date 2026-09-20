@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// The "Discover on your Batocera" row shown in Play Next below the regular picks (PLAN §15).
-/// Never-played catalogue games scored by the owner's taste (``DiscoverScorer``), rotated
-/// weekly. Reads the injected ``BatoceraEnvironment``; renders nothing when the catalogue is
-/// empty or Play Next has "not enough data" (no ranked games).
+/// The "From the vault" row shown in Play Next below the regular picks (PLAN §16, replacing
+/// the Batocera-only Discover row). Never-played Batocera ROMs and matched PS Plus entries,
+/// scored by the owner's taste (``DiscoverScorer``), rotated weekly. Reads the injected
+/// ``BatoceraEnvironment``; renders nothing when the vault is empty or Play Next has "not
+/// enough data" (no ranked games).
 struct DiscoverRowView: View {
     @Environment(\.batoceraEnvironment) private var env
     @State private var model: DiscoverModel?
@@ -26,9 +27,9 @@ struct DiscoverRowView: View {
     private func content(_ model: DiscoverModel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Label("Discover on your Batocera", systemImage: "sparkles.rectangle.stack")
+                Label("From the vault", systemImage: "sparkles.rectangle.stack")
                     .font(.headline)
-                Text("never played · your taste").font(.caption).foregroundStyle(.secondary)
+                Text("within reach · your taste").font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button {
                     model.shuffle()
@@ -77,10 +78,16 @@ struct DiscoverCardView: View {
                             .font(.caption2)
                             .padding(.horizontal, 5).padding(.vertical, 1)
                             .background(.tint.opacity(0.2), in: Capsule())
+                        if entry.vaultSource == .psn {
+                            Text("+ PS Plus")
+                                .font(.caption2).bold()
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(.blue.opacity(0.2), in: Capsule())
+                        }
                         if let year = entry.releaseYear { Text(String(year)).font(.caption2).foregroundStyle(.secondary) }
                     }
-                    if let rating = entry.rating {
-                        Label(String(format: "%.0f", rating * 100), systemImage: "star.fill")
+                    if let rating = entry.crowdRating0to100 {
+                        Label(String(format: "%.0f", rating), systemImage: "star.fill")
                             .font(.caption2).foregroundStyle(.yellow).labelStyle(.titleAndIcon)
                     }
                 }
@@ -98,7 +105,7 @@ struct DiscoverCardView: View {
                     .accessibilityIdentifier("discover.add")
                 Menu {
                     Button("Not Interested") { onNotInterested() }
-                    Button("Show in Catalogue") { onShowInCatalogue() }
+                    Button("Show in the Vault") { onShowInCatalogue() }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -112,6 +119,8 @@ struct DiscoverCardView: View {
     }
 
     private var systemLabel: String {
+        // A PS Plus entry's `system` is already a VGN platform slug (PLAN §16).
+        if entry.vaultSource == .psn { return PlatformLabels.short(entry.system) }
         if let slug = BatoceraSystems.platformSlug(for: entry.system) { return PlatformLabels.short(slug) }
         return entry.system
     }

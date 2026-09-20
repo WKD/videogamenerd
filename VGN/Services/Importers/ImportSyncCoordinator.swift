@@ -15,11 +15,19 @@ struct ImportSyncResult: Sendable, Equatable {
     var summary: ImportSyncSummary
     var matches: [ImportMatchResult]
     var rows: [ImportStagingRow]
+    /// **(The Vault, PLAN §16)** PS Plus claims the PSN fetch vaulted, carried through so the
+    /// presenter upserts them into `rom_catalog`. Empty for every other source.
+    var vaultEntries: [RomCatalogEntry]
+    /// Every external id currently vaulted (for removing claims that vanished / crossed the gate).
+    var vaultPresentIDs: Set<String>
 
-    init(summary: ImportSyncSummary, matches: [ImportMatchResult], rows: [ImportStagingRow] = []) {
+    init(summary: ImportSyncSummary, matches: [ImportMatchResult], rows: [ImportStagingRow] = [],
+         vaultEntries: [RomCatalogEntry] = [], vaultPresentIDs: Set<String> = []) {
         self.summary = summary
         self.matches = matches
         self.rows = rows
+        self.vaultEntries = vaultEntries
+        self.vaultPresentIDs = vaultPresentIDs
     }
 }
 
@@ -82,7 +90,9 @@ struct ImportSyncCoordinator: Sendable {
             ownedGap: fetched.ownedGap,
             fromFile: fetched.fromFile)
         onProgress(ImportProgress(phase: .finished))
-        return ImportSyncResult(summary: summary, matches: matches, rows: fetched.rows)
+        return ImportSyncResult(summary: summary, matches: matches, rows: fetched.rows,
+                                vaultEntries: fetched.vaultEntries,
+                                vaultPresentIDs: fetched.vaultPresentIDs)
     }
 
     /// The same sync as an `AsyncStream` of progress values; the final ``ImportSyncResult``
