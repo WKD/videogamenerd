@@ -101,6 +101,23 @@ extension LibraryStore {
         }
     }
 
+    /// Set (or clear) a game's stored HowLongToBeat id **without touching its times**
+    /// (PLAN §5.3, D5 — "Link Only" and "Unlink"). Returns the previous id so the caller
+    /// can register a one-step Undo (headless-safe: Undo just calls this with the old value).
+    /// One transaction; throws ``LibraryError/notFound`` for an unknown game.
+    @discardableResult
+    func setHLTBLink(gameID: Int64, hltbID: Int64?) async throws -> Int64? {
+        try await dbWriter.write { db in
+            guard let row = try Row.fetchOne(
+                db, sql: "SELECT hltb_id FROM games WHERE id = ?", arguments: [gameID])
+            else { throw LibraryError.notFound }
+            let previous: Int64? = row["hltb_id"]
+            try db.execute(sql: "UPDATE games SET hltb_id = ?, updated_at = ? WHERE id = ?",
+                           arguments: [hltbID, Date(), gameID])
+            return previous
+        }
+    }
+
     /// The ids of every game with **no time estimate at all** — all three
     /// `ttb_*_s` columns NULL (PLAN §5.3 bulk scope / §8 "No Estimate"). Ordered by
     /// sort title for a stable bulk run.

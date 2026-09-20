@@ -488,8 +488,23 @@ private struct SingleGameInspector: View {
                 .disabled(hltbFetch.isFetchingOne)
                 .appKitTooltip("Fetch this game from HowLongToBeat and replace its completion times.")
                 .accessibilityIdentifier("inspector.refreshHLTB")
+
+                Button {
+                    hltbFetch.findOne(gameID: detail.id)
+                } label: {
+                    Label("Find on HowLongToBeat…", systemImage: "magnifyingglass")
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .appKitTooltip("Search HowLongToBeat by title and link this game — useful for long or edition-heavy names.")
+                .accessibilityIdentifier("inspector.findHLTB")
             }
             hltbLink
+        }
+        if detail.hltbID != nil {
+            Text("Linked to HowLongToBeat").font(.caption2).foregroundStyle(.secondary)
         }
     }
 
