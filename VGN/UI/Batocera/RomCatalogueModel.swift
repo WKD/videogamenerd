@@ -1,16 +1,23 @@
 import Foundation
 
-/// One system row in the catalogue's system picker (folder name + present-entry count).
+/// One system row in the catalogue's system picker (folder / platform + present-entry count).
 struct RomCatalogueSystemCount: Identifiable, Sendable, Equatable {
     var system: String
     var count: Int
+    /// A friendly label, precomputed per source (PLAN §16): a PS Plus row's `system` is already a
+    /// VGN platform slug; a Batocera row's is a folder name mapped through ``BatoceraSystems``.
+    var label: String
     var id: String { system }
-    /// A friendly label: the VGN platform's short name when the system maps, else the folder.
-    var label: String {
-        if let slug = BatoceraSystems.platformSlug(for: system) {
-            return PlatformLabels.short(slug)
+
+    init(system: String, count: Int, source: VaultSource) {
+        self.system = system
+        self.count = count
+        switch source {
+        case .psn:
+            self.label = PlatformLabels.short(system)
+        case .batocera:
+            self.label = BatoceraSystems.platformSlug(for: system).map(PlatformLabels.short) ?? system
         }
-        return system
     }
 }
 
@@ -42,6 +49,8 @@ final class RomCatalogueModel {
     private(set) var hasLoaded = false
     /// Multi-selection of catalogue ids (for a batch "Add to Library…").
     var selection = Set<Int64>()
+    /// The presented "Find match…" search sheet (PS Plus, PLAN §16), or nil.
+    var findMatchModel: IGDBLinkModel?
 
     @ObservationIgnored private var pageTask: Task<Void, Never>?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
@@ -66,9 +75,22 @@ final class RomCatalogueModel {
 
     func loadSystems() async {
         let perSystem = (try? await catalog.countsPerSystem(source: source.storage)) ?? [:]
-        systems = perSystem.map { RomCatalogueSystemCount(system: $0.key, count: $0.value) }
+        let src = source
+        systems = perSystem.map { RomCatalogueSystemCount(system: $0.key, count: $0.value, source: src) }
             .sorted { $0.count != $1.count ? $0.count > $1.count : $0.system < $1.system }
         totalAll = perSystem.values.reduce(0, +)
+    }
+
+    // MARK: PS Plus actions (PLAN §16)
+
+    /// Add PS Plus entries to the library as owned-via-subscription copies, then reload the row
+    /// so it shows "In Library". Library counts refresh through the library's own observation.
+    func addPSPlusToLibrary(ids: [Int64]) {
+        let promoter = VaultLibraryPromoter(staging: ImportStagingStore(catalog.database), catalog: catalog)
+        Task { [weak self] in
+            try? await promoter.addToLibrary(ids: ids)
+            self?.reload()
+        }
     }
 
     /// Reload the first page for the current system / filter / sort / search.

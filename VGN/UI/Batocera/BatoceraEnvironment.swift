@@ -12,6 +12,8 @@ final class BatoceraEnvironment {
     let catalog: RomCatalogStore
     /// Reads ROM box art from the share (read-only), or a nil-root loader outside live.
     let thumbnails: BatoceraThumbnailLoader
+    /// Loads remote PS Plus cover art into an in-memory cache (never the cover folder, PLAN §16).
+    let vaultCovers: VaultCoverLoader
     /// The Discover data seam (ranked games + never-played pool).
     let discover: any DiscoverBackend
     /// Whether the share is reachable right now (drives "Show in Finder" + placeholders).
@@ -25,23 +27,29 @@ final class BatoceraEnvironment {
     let showCatalogue: (@MainActor () -> Void)?
     /// The share roms root, for "Show in Finder" (nil outside live / unconfigured).
     let romsRoot: URL?
+    /// The manual "Find match…" seam for PS Plus entries (PLAN §16). nil unless IGDB is configured.
+    let findMatch: VaultFindMatchSeam?
 
     init(catalog: RomCatalogStore,
          thumbnails: BatoceraThumbnailLoader,
+         vaultCovers: VaultCoverLoader = VaultCoverLoader(),
          discover: any DiscoverBackend,
          isLive: Bool,
          romsRoot: URL?,
          addToLibrary: (@MainActor ([Int64]) -> Void)? = nil,
          inspectGame: (@MainActor (Int64) -> Void)? = nil,
-         showCatalogue: (@MainActor () -> Void)? = nil) {
+         showCatalogue: (@MainActor () -> Void)? = nil,
+         findMatch: VaultFindMatchSeam? = nil) {
         self.catalog = catalog
         self.thumbnails = thumbnails
+        self.vaultCovers = vaultCovers
         self.discover = discover
         self.isLive = isLive
         self.romsRoot = romsRoot
         self.addToLibrary = addToLibrary
         self.inspectGame = inspectGame
         self.showCatalogue = showCatalogue
+        self.findMatch = findMatch
     }
 
     /// Reveal a catalogue entry's ROM file (or its folder) in Finder, when the share is
