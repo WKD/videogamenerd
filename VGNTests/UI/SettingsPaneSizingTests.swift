@@ -42,6 +42,11 @@ struct SettingsPaneSizingTests {
                                        session: true, username: "nerd_ps"),
             login: nil)
         await psnSignedIn.refresh()
+        // Tallest PSN signed-in layout: the PS Plus deadline section expanded with the past-date
+        // hint (PLAN §16). The menu-style pickers lay out fine off-screen (never clicked).
+        psnSignedIn.planningToLeavePSPlus = true
+        psnSignedIn.deadlineYear = 2020
+        psnSignedIn.deadlineMonth = 1
         #if DEBUG
         psnSignedIn.buildSteps = PSNBuildStepsModel(
             runner: ScriptedPSNBuildRunner(session: true), accountLabel: "test")

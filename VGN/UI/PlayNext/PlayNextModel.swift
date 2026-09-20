@@ -99,6 +99,9 @@ final class PlayNextModel {
     private let backend: any PlayNextBackend
     private let secondOpinion: any SecondOpinionProviding
     private let defaults: UserDefaults
+    /// Months until the owner plans to leave PS Plus (nil ⇒ no date), read fresh each recompute
+    /// so a change in Settings ▸ PlayStation reaches the picks (PLAN §16). Injected for tests.
+    private let deadlineMonthsLeft: @MainActor () -> Double?
     private let recomputeDebounce: Duration
     /// How long a plain toast lingers, and (longer) an undoable "Started …" toast.
     /// Injected so tests never assert on wall-clock time.
@@ -111,6 +114,7 @@ final class PlayNextModel {
     private var askTask: Task<Void, Never>?
     private var elapsedTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
+    private var deadlineObserver: NSObjectProtocol?
     private var secondOpinionCache: [SecondOpinionCacheKey: SecondOpinion] = [:]
     private var activeSecondOpinionKey: SecondOpinionCacheKey?
 
@@ -121,6 +125,7 @@ final class PlayNextModel {
         pace: PlayPace = .default,
         playStyle: PlayStyle = .default,
         bracketHint: (@MainActor () -> LengthShelf?)? = nil,
+        deadlineMonthsLeft: @escaping @MainActor () -> Double? = { PSPlusDeadlinePreferences().monthsLeft() },
         recomputeDebounce: Duration = .milliseconds(250),
         toastDuration: Duration = .seconds(4),
         undoToastDuration: Duration = .seconds(10)
@@ -128,6 +133,7 @@ final class PlayNextModel {
         self.backend = backend
         self.secondOpinion = secondOpinion
         self.defaults = defaults
+        self.deadlineMonthsLeft = deadlineMonthsLeft
         self.pace = pace
         self.playStyle = playStyle
         self.bracketHint = bracketHint
@@ -174,7 +180,9 @@ final class PlayNextModel {
             includePlayedWithoutStatus: includePlayedWithoutStatus,
             seed: seed,
             maxAlternatives: 4,
-            preferExpiringSubscription: preferExpiringSubscription)
+            preferExpiringSubscription: preferExpiringSubscription,
+            psPlusMonthsLeft: deadlineMonthsLeft(),
+            psPlusPace: pace)
     }
 
     /// PLAN §7b: under ~15 ranked games, the view says so and leans on the crowd prior.
@@ -194,6 +202,17 @@ final class PlayNextModel {
         recompute(debounce: false)
         await loadBacktest()
         subscribeLive()
+        observeDeadlineChanges()
+    }
+
+    /// Recompute once when the PS Plus cancellation date changes in Settings (PLAN §16).
+    private func observeDeadlineChanges() {
+        guard deadlineObserver == nil else { return }
+        deadlineObserver = NotificationCenter.default.addObserver(
+            forName: PSPlusDeadlinePreferences.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recompute(debounce: false) }
+        }
     }
 
     func stop() {
@@ -202,6 +221,10 @@ final class PlayNextModel {
         askTask?.cancel()
         elapsedTask?.cancel()
         toastTask?.cancel()
+        if let deadlineObserver {
+            NotificationCenter.default.removeObserver(deadlineObserver)
+            self.deadlineObserver = nil
+        }
         // Navigating away drops the "Start playing" undo affordance (PLAN §7b:
         // "until the next action/navigation").
         clearPendingStartUndo()
@@ -635,8 +658,10 @@ private struct Prefs {
         get { defaults.bool(forKey: Key.includePlayedWithoutStatus) }
         nonmutating set { defaults.set(newValue, forKey: Key.includePlayedWithoutStatus) }
     }
+    /// "Prioritise PS Plus games" — on by default in the UI (the engine's own default stays
+    /// off for backtest neutrality; the model passes the persisted value on). PLAN §16.
     var preferExpiringSubscription: Bool {
-        get { defaults.bool(forKey: Key.preferExpiringSubscription) }
+        get { defaults.object(forKey: Key.preferExpiringSubscription) as? Bool ?? true }
         nonmutating set { defaults.set(newValue, forKey: Key.preferExpiringSubscription) }
     }
     var hasShownAskDisclosure: Bool {

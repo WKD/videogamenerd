@@ -121,7 +121,30 @@ final class PSNAccountModel {
 
     /// The optional "I plan to leave PS Plus around" cancellation date (PLAN §16). Persisted in
     /// ``AppPreferences/defaults``; both Play Next scorers read it. Editable directly here.
-    @ObservationIgnored let deadline = PSPlusDeadlinePreferences()
+    @ObservationIgnored let deadline: PSPlusDeadlinePreferences
+
+    /// The deadline picker bindings (PLAN §16). Writing any of them persists the date (or clears
+    /// it when the plan is off) and posts the change so an open Play Next recomputes.
+    var planningToLeavePSPlus: Bool { didSet { persistDeadline() } }
+    var deadlineMonth: Int { didSet { persistDeadline() } }
+    var deadlineYear: Int { didSet { persistDeadline() } }
+
+    /// Year choices for the picker: this year through six years out.
+    var deadlineYearChoices: [Int] {
+        let year = Calendar(identifier: .gregorian).component(.year, from: now())
+        return Array(year...(year + 6))
+    }
+    /// A gentle hint when the picked date is already in the past (PLAN §16).
+    var deadlinePastHint: String? {
+        guard planningToLeavePSPlus, deadline.isPast(now: now()) else { return nil }
+        return "That date is in the past — pick a later month or clear it."
+    }
+
+    private func persistDeadline() {
+        deadline.picked = planningToLeavePSPlus ? (deadlineYear, deadlineMonth) : nil
+    }
+
+    func clearDeadline() { planningToLeavePSPlus = false }
 
     /// Wired by the presenter: run one sync and present the review sheet.
     var onSyncRequested: () -> Void = {}
@@ -135,11 +158,26 @@ final class PSNAccountModel {
     var sourceLabel: String { backend.sourceLabel }
     var canSignIn: Bool { login != nil }
 
-    init(backend: any ImportBackend, login: PSNLoginConfig?) {
+    init(backend: any ImportBackend, login: PSNLoginConfig?,
+         deadline: PSPlusDeadlinePreferences = PSPlusDeadlinePreferences()) {
         self.backend = backend
         self.login = login
         self.accountLabel = AppPreferences.defaults.string(forKey: Self.accountLabelKey) ?? "test"
         self.liveEnabled = AppPreferences.defaults.bool(forKey: PSNImportBuilder.liveEnabledKey)
+        self.deadline = deadline
+        // Seed the picker from the stored date, else a sensible near-future default (this month,
+        // this year) that is only persisted once the plan is switched on.
+        let calendar = Calendar(identifier: .gregorian)
+        let comps = calendar.dateComponents([.year, .month], from: Date())
+        if let picked = deadline.picked {
+            self.planningToLeavePSPlus = true
+            self.deadlineYear = picked.year
+            self.deadlineMonth = picked.month
+        } else {
+            self.planningToLeavePSPlus = false
+            self.deadlineYear = comps.year ?? 2026
+            self.deadlineMonth = comps.month ?? 1
+        }
     }
 
     /// Reload account state (on appear / after a sign-in or sync).
@@ -290,6 +328,7 @@ struct PSNAccountPane: View {
                     signedOut
                 }
                 vaultSection
+                deadlineSection
                 turnOffRow
                 #if DEBUG
                 buildStepsButton
@@ -423,6 +462,47 @@ struct PSNAccountPane: View {
             }
             .padding(8)
             .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    // MARK: PS Plus deadline (PLAN §16)
+
+    private static let monthSymbols = Calendar(identifier: .gregorian).monthSymbols
+
+    /// "I plan to leave PS Plus around [month] [year]" (PLAN §16): an optional date that ramps a
+    /// boost for PS Plus games as it approaches. Menu-style pickers (never in click tests).
+    private var deadlineSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            Toggle("I plan to leave PS Plus around a date", isOn: $model.planningToLeavePSPlus)
+                .accessibilityIdentifier("psn.deadline.toggle")
+            if model.planningToLeavePSPlus {
+                HStack(spacing: 8) {
+                    Picker("Month", selection: $model.deadlineMonth) {
+                        ForEach(1...12, id: \.self) { m in
+                            Text(Self.monthSymbols[m - 1]).tag(m)
+                        }
+                    }
+                    .labelsHidden().fixedSize()
+                    .accessibilityIdentifier("psn.deadline.month")
+                    Picker("Year", selection: $model.deadlineYear) {
+                        ForEach(model.deadlineYearChoices, id: \.self) { y in
+                            Text(String(y)).tag(y)
+                        }
+                    }
+                    .labelsHidden().fixedSize()
+                    .accessibilityIdentifier("psn.deadline.year")
+                    Button("Clear") { model.clearDeadline() }
+                        .controlSize(.small)
+                        .accessibilityIdentifier("psn.deadline.clear")
+                }
+                if let hint = model.deadlinePastHint {
+                    Label(hint, systemImage: "exclamationmark.circle")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                Text("PS Plus games (and Vault entries) get a gentle nudge that grows as the date nears, scaled by whether you can still finish them in time.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
