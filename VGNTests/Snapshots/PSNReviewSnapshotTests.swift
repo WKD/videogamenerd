@@ -60,12 +60,14 @@ struct PSNReviewSnapshotTests {
         }
     }
 
-    // NOTE: the "own the ticked rows as ▸ Physical" *selected* state is deliberately not a
-    // snapshot. `ownTickedAs(.physical)` works at the model level (unit-tested in
-    // PSNReviewGroupingTests), but the segment's `ownAsSelection` reads back neutral in an
-    // off-screen capture, so a Physical-selected shot renders identically to the neutral one in
-    // `psn-review-groups` — recording it would be a misleading duplicate. The neutral segment is
-    // shown in `psn-review-groups`; the Physical behaviour is covered by the model test.
+    // NOTE (W18-C Part 4): the "Physical/Digital *selected*" state of the own-as control is not a
+    // separate snapshot. `psn-review-groups` now shows the fixed THREE-segment control ("Not owned
+    // | Physical | Digital", with the default "Not owned" selected). An off-screen
+    // `NSSegmentedControl` always renders its FIRST segment as selected regardless of the bound
+    // value, so a `.physical`-selected shot would misleadingly render "Not owned" selected —
+    // recording it would bless a wrong render. The click→model behaviour is proven faithfully by
+    // `ClickSweepSheetsTests.psnReviewOwnAsSegmentSwitchesFormat` and the `PSNOwnAsControlTests`
+    // model suite.
 
     @Test func reviewBundleAndTwin() async throws {
         let db = try AppDatabase.inMemory()

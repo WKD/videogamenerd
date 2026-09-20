@@ -153,6 +153,14 @@ first, then the real account; **stop and report on anything unexpected** before 
 - [ ] **S5b real account:** re-probe each data set with ONE tiny request before its full fetch;
   first sight of `PS_PLUS`. **S7** full sync imports through the review sheet in ≤ 20 requests; **S8**
   an immediate second sync makes **0** requests and proposes nothing new.
+- [ ] **"Played — no purchase found" own-as control** *(three-segment, wave 18 lane C — the owner's
+  "clicking Digital does not make Digital the default" fix)*: the segment reads **`Not owned | Physical
+  | Digital`** with **Not owned selected by default**. Picking **Digital** sticks (the segment stays on
+  Digital), those rows commit as digital copies, and rows you tick *afterwards* adopt Digital too —
+  **including when you'd unticked the whole group first** (the old bug: with nothing ticked the pick
+  snapped back). Picking **Not owned** again returns them to played-not-owned (no copy created). A
+  per-row **Own as** override that differs shows the segment as *mixed* (no segment highlighted);
+  choosing a segment again re-unifies the group.
 - [ ] A game owned **only** through PS Plus shows the yellow-circle "+" badge and appears under
   Format ▸ **PS Plus**; a game also on disc shows no badge. A lapsed Plus claim is **proposed** for
   removal in the review sheet, never removed silently.

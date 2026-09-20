@@ -1,5 +1,29 @@
 import SwiftUI
 
+/// The three choices of the PSN "Own the ticked rows as" control (PLAN §13.3): a
+/// *Played — no purchase found* game is kept **Not owned** (the default) or marked owned as a
+/// **Physical** or **Digital** copy. A real third segment (rather than an unselectable neutral)
+/// so a chosen format can always be undone back to "not owned".
+enum OwnAsChoice: Hashable, CaseIterable {
+    case notOwned, physical, digital
+
+    var format: ProductFormat? {
+        switch self {
+        case .notOwned: return nil
+        case .physical: return .physical
+        case .digital: return .digital
+        }
+    }
+
+    init(format: ProductFormat?) {
+        switch format {
+        case .physical: self = .physical
+        case .digital: self = .digital
+        default: self = .notOwned      // nil (or the never-used .rom) ⇒ not owned
+        }
+    }
+}
+
 /// One row of the import review sheet (PLAN §14.3): the persisted staging decision
 /// (`matchedGameID` / `ignored` / `platform`) merged with the transient mapping hints
 /// (release year, Mac availability, Linux-only note, noise reason) and the IGDB match
@@ -598,16 +622,25 @@ final class ImportReviewModel {
     /// `.physical` / `.digital` when they agree, or **nil** (played, not owned — the default;
     /// also the mixed look) when there are none or they differ. Setting it re-applies to every
     /// ticked row of the group immediately and becomes the choice rows ticked afterwards adopt.
-    var ownAsSelection: ProductFormat? {
-        get { commonOwnAsOfTickedPlayedNoPurchase }
-        set { applyOwnAs(newValue) }
+    /// The group segment's choice: the common own-as of the ticked *Played — no purchase found*
+    /// rows, or — when **none are ticked** — the remembered session choice `playedNoPurchaseOwnAs`,
+    /// so picking a segment always sticks (the owner's "clicking Digital didn't stick" bug: the
+    /// old getter read only the ticked rows and snapped back to neutral when none were). `nil`
+    /// only when ticked rows genuinely differ (a per-row override), which reads as no segment.
+    var ownAsChoice: OwnAsChoice? {
+        get {
+            let ticked = rows.filter { psnGroup(for: $0) == .playedNoPurchase && $0.include }
+            guard let first = ticked.first else { return OwnAsChoice(format: playedNoPurchaseOwnAs) }
+            guard ticked.allSatisfy({ $0.ownAsFormat == first.ownAsFormat }) else { return nil }
+            return OwnAsChoice(format: first.ownAsFormat)
+        }
+        set { if let newValue { applyOwnAs(newValue.format) } }
     }
 
-    private var commonOwnAsOfTickedPlayedNoPurchase: ProductFormat? {
-        let ticked = rows.filter { psnGroup(for: $0) == .playedNoPurchase && $0.include }
-        guard let first = ticked.first?.ownAsFormat,
-              ticked.allSatisfy({ $0.ownAsFormat == first }) else { return nil }
-        return first
+    /// Back-compat `ProductFormat?` accessor (nil = not owned, or mixed).
+    var ownAsSelection: ProductFormat? {
+        get { ownAsChoice?.format }
+        set { ownAsChoice = OwnAsChoice(format: newValue) }
     }
 
     /// Apply an own-as format (nil = played-only) to every ticked played-no-purchase row and
@@ -1262,21 +1295,21 @@ struct ImportReviewSheet: View {
     @ViewBuilder
     private var ownAsRow: some View {
         HStack(spacing: 8) {
-            Text("Own the ticked rows as").font(.caption).foregroundStyle(.secondary)
-            // A real two-segment toggle bound to model state (D5): it shows the current choice
-            // and re-applies to every ticked row immediately (and to rows ticked afterwards).
-            // Neutral (neither highlighted) = played, not owned — the PLAN §13.3 default; a per-
-            // row change shows the same neutral (mixed) look. `service: other` ⇒ probably a disc.
-            Picker("Own the ticked rows as", selection: $model.ownAsSelection) {
-                Text("Physical").tag(ProductFormat?.some(.physical))
-                Text("Digital").tag(ProductFormat?.some(.digital))
+            Text("These played games are").font(.caption).foregroundStyle(.secondary)
+            // A real THREE-segment control (PLAN §13.3 / D5): Not owned (the default) | Physical |
+            // Digital. It shows the current choice, re-applies to every ticked row immediately
+            // (and to rows ticked afterwards). "Not owned" is a real segment so a chosen format
+            // can always be undone — no unselectable neutral. No segment highlighted = mixed
+            // (a per-row override differs).
+            Picker("These played games are", selection: $model.ownAsChoice) {
+                Text("Not owned").tag(OwnAsChoice?.some(.notOwned))
+                Text("Physical").tag(OwnAsChoice?.some(.physical))
+                Text("Digital").tag(OwnAsChoice?.some(.digital))
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            if model.ownAsSelection == nil {
-                Text("(played, not owned)").font(.caption2).foregroundStyle(.tertiary)
-            }
+            .accessibilityIdentifier("review.ownAs")
         }
         .disabled(!model.canOwnPlayedRows)
     }

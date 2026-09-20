@@ -150,10 +150,13 @@ driving every screen — open `.build/snapshots/index.html`):
 
 **Two variants deliberately NOT recorded (would render misleadingly headless — reported,
 not blessed):**
-* The PSN "own the ticked rows as ▸ **Physical** selected" state: `ownTickedAs(.physical)`
-  works at the model level (unit-tested in `PSNReviewGroupingTests`) but the segment's
-  `ownAsSelection` reads back neutral in an off-screen capture, so a Physical-selected shot is
-  identical to the neutral one already in `psn-review-groups`.
+* The PSN own-as segment's **non-default selection** (e.g. Physical/Digital *selected*):
+  `psn-review-groups` shows the fixed **three-segment** control (`Not owned | Physical |
+  Digital`, wave 18 — see below), but an off-screen `NSSegmentedControl` **always renders its
+  first segment as selected regardless of the bound value**, so a Physical/Digital-selected shot
+  would misleadingly render "Not owned" selected. The click→model behaviour is captured
+  faithfully by `ClickSweepSheetsTests.psnReviewOwnAsSegmentSwitchesFormat` (a real click on the
+  Digital segment that asserts the model) and the `PSNOwnAsControlTests` model suite.
 * The **In the Vault expanded** state (with per-row "Bring back"): the group is a
   `DisclosureGroup` whose expansion is private `@State` that can't be driven without a real
   click, so only the collapsed group (in `psn-review-groups`) is captured. Both are exercised
