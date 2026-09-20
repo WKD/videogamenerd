@@ -458,6 +458,13 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   expansion or DLC result (e.g. *Diablo II: Lord of Destruction*) shows an "Expansion"/"DLC" chip but is
   **still selectable** (a boxed expansion is a real thing you own). In an import review, a DLC-type best
   match is **not** pre-ticked — the row stays, labelled, for you to decide.
+- [ ] **A port links to the original (W19-E part 2).** Choose a **port** result (IGDB's separate port
+  entry, e.g. a Switch/PS4 port of an older game) in **Quick Add** or **Link to IGDB…**: a confirm
+  appears — "add / link to the original *Name (Year)*" with a secondary **"Use the port entry instead"**;
+  picking the original adds the copy on the port's platform but on the one original game. In an
+  **import** (GOG/Delicious/PSN/Batocera/photo scan), a best match that is a port lands on the original
+  automatically, the review row noting **"Port → the original"**; a second sync makes no extra IGDB
+  request for it. If IGDB can't resolve the parent, the port entry is used as-is.
 
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line

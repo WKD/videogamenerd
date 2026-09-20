@@ -186,4 +186,39 @@ struct BundleMemberPolicyTests {
             #expect(result.leftOut.map(\.displayText) == ["Some DLC — DLC"])
         }
     }
+
+    // MARK: Import matcher — port best-match folds onto its parent (PLAN §5.1 D4)
+
+    @Test("IGDBImportBundleExpander resolves port matches to their parent in one batched games(ids:)")
+    func resolvingPortParentsFoldsToTheOriginal() async throws {
+        let (client, transport) = makeClient(
+            reverse: [:],
+            byID: [10: #"{"id":10,"name":"Super Mario Galaxy","game_type":0,"first_release_date":1183248000}"#])
+        let expander = IGDBImportBundleExpander(client: client)
+
+        let port = ScanMatch(igdbID: 20, name: "Super Mario Galaxy", releaseYear: 2020,
+                             coverImageID: nil, platformSlugs: ["switch"], score: 0.95,
+                             matchedName: "Super Mario Galaxy", gameType: .port, foldParentID: 10)
+        let main = ScanMatch(igdbID: 30, name: "Other Game", releaseYear: 2019, coverImageID: nil,
+                             platformSlugs: ["pc"], score: 0.9, matchedName: "Other Game", gameType: .mainGame)
+
+        let resolved = await expander.resolvingPortParents([port, main])
+        #expect(resolved[0].igdbID == 10)                    // the port became its parent
+        #expect(resolved[0].resolvedFromPortID == 20)
+        #expect(resolved[0].releaseYear == 2007)
+        #expect(resolved[1].igdbID == 30)                    // a non-port is untouched
+        #expect(transport.idLookupCount == 1)                // one batched parent lookup
+    }
+
+    @Test("A port whose parent does not resolve keeps the port entry")
+    func resolvingPortParentsKeepsUnresolvablePort() async throws {
+        let (client, _) = makeClient(reverse: [:], byID: [:])   // parent 10 not served
+        let expander = IGDBImportBundleExpander(client: client)
+        let port = ScanMatch(igdbID: 20, name: "Weird Port", releaseYear: 2020, coverImageID: nil,
+                             platformSlugs: ["switch"], score: 0.95, matchedName: "Weird Port",
+                             gameType: .port, foldParentID: 10)
+        let resolved = await expander.resolvingPortParents([port])
+        #expect(resolved[0].igdbID == 20)
+        #expect(resolved[0].resolvedFromPortID == nil)
+    }
 }

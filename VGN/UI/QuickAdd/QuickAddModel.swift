@@ -12,8 +12,25 @@ protocol CatalogSearching: Sendable {
     /// Member games of a bundle result after the one member policy (PLAN §5.1): non-standalone
     /// content dropped and ports folded onto their parent, with the "left out" notes.
     func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult
+    /// The parent game a **port** result links to (PLAN §5.1 D4): given the parent id (from
+    /// the result's `version_parent` / `parent_game`), the parent's title/year **when it is
+    /// itself a standalone game**, else nil. Default: nil (fakes / offline).
+    func portParent(parentID: Int64) async -> PortParentInfo?
     /// Whether IGDB credentials are present (drives the offline hint up front).
     func hasCredentials() async -> Bool
+}
+
+extension CatalogSearching {
+    func portParent(parentID: Int64) async -> PortParentInfo? { nil }
+}
+
+/// The original game a port links to (PLAN §5.1 D4 — "a port is the same game").
+struct PortParentInfo: Sendable, Equatable, Identifiable {
+    var id: Int64
+    var name: String
+    var year: Int?
+    /// "Super Mario Galaxy (2007)" — for the confirm line.
+    var display: String { year.map { "\(name) (\($0))" } ?? name }
 }
 
 /// Local-library search + the writes Quick Add performs. The live implementation
@@ -92,6 +109,9 @@ struct QuickAddResult: Identifiable, Sendable, Equatable {
     /// The IGDB `game_type` for a catalogue row (`.mainGame` for a local-only row), so the
     /// row can mark a non-standalone / port result (PLAN §5.1 D4).
     var gameType: IGDBGameType
+    /// A port result's parent id (`version_parent` / `parent_game`), for the "link to the
+    /// original" flow (PLAN §5.1 D4); nil when not a port / unknown.
+    var foldParentID: Int64?
     var igdbID: Int64?
     var source: Source
     /// The matching library game, or nil when this row is not in the library yet.
@@ -118,6 +138,7 @@ struct QuickAddResult: Identifiable, Sendable, Equatable {
         genres = r.genres
         isBundle = r.isBundle
         gameType = r.gameType
+        foldParentID = r.foldParentID
         igdbID = r.id
         source = .catalog
         self.libraryMatch = libraryMatch
@@ -134,6 +155,7 @@ struct QuickAddResult: Identifiable, Sendable, Equatable {
         genres = []
         isBundle = false
         gameType = .mainGame
+        foldParentID = nil
         igdbID = nil
         source = .local
         libraryMatch = m
@@ -145,6 +167,13 @@ struct QuickAddConfirmation: Sendable, Equatable {
     var message: String
     var gameID: Int64?
     var isError: Bool = false
+}
+
+/// The pending "this is a port — add the original?" confirm (PLAN §5.1 D4).
+struct PortConfirmState: Sendable, Equatable {
+    var result: QuickAddResult
+    var parent: PortParentInfo
+    var openInspector: Bool
 }
 
 // MARK: - Model
@@ -182,6 +211,9 @@ final class QuickAddModel {
     private(set) var confirmation: QuickAddConfirmation?
     /// The result id whose bundle members are being fetched (row spinner).
     private(set) var bundleInFlightID: String?
+    /// Set while the owner is confirming a **port** commit (PLAN §5.1 D4): add the original
+    /// game, or the port entry instead. Nil the rest of the time.
+    private(set) var portConfirm: PortConfirmState?
 
     // Sticky + per-entry state
     private(set) var flags: QuickAddFlags
@@ -262,6 +294,7 @@ final class QuickAddModel {
         tierLetter = nil
         confirmation = nil
         bundleInFlightID = nil
+        portConfirm = nil
         isSearchingRemote = false
     }
 
@@ -529,6 +562,8 @@ final class QuickAddModel {
     /// list, then moves the selection to the next row — for adding a whole series
     /// ("yakuza" → ⇧↩ ⇧↩ ⇧↩) without retyping. Ignored with `openInspector`.
     func commit(openInspector: Bool, keepResults: Bool = false) {
+        // While the port confirm is up, ↩ means "add the original" (its default action).
+        if portConfirm != nil { confirmPortOriginal(); return }
         commitTask?.cancel()
         keepResultsOnFinish = keepResults && !openInspector
         commitTask = Task { [weak self] in await self?.performCommit(openInspector: openInspector) }
@@ -541,9 +576,56 @@ final class QuickAddModel {
         }
         if result.isBundle {
             await addBundle(result, openInspector: openInspector)
+        } else if result.gameType == .port, let parentID = result.foldParentID {
+            await beginPortCommit(result, parentID: parentID, openInspector: openInspector)
         } else {
             await addSingle(result, openInspector: openInspector)
         }
+    }
+
+    // MARK: - Port commit (PLAN §5.1 D4 — "a port is the same game")
+
+    /// The selected result is a port. Resolve its parent (one read-through `games(ids:)`);
+    /// if the original is a real standalone game, pause on a confirm ("add the original" /
+    /// "add the port instead"); if it doesn't resolve, add the port as chosen.
+    private func beginPortCommit(_ result: QuickAddResult, parentID: Int64, openInspector: Bool) async {
+        bundleInFlightID = result.id           // reuse the row spinner while resolving
+        let parent = await catalog.portParent(parentID: parentID)
+        bundleInFlightID = nil
+        if Task.isCancelled { return }
+        guard let parent else {
+            await addSingle(result, openInspector: openInspector)
+            return
+        }
+        portConfirm = PortConfirmState(result: result, parent: parent, openInspector: openInspector)
+    }
+
+    /// Add the original game (the port's parent) as a copy on the chosen platform.
+    func confirmPortOriginal() {
+        guard let state = portConfirm else { return }
+        portConfirm = nil
+        commitTask?.cancel()
+        commitTask = Task { [weak self] in await self?.addResolvedPort(state) }
+    }
+
+    /// Add the port entry itself instead (the secondary action).
+    func usePortEntry() {
+        guard let state = portConfirm else { return }
+        portConfirm = nil
+        commitTask?.cancel()
+        commitTask = Task { [weak self] in await self?.addSingle(state.result, openInspector: state.openInspector) }
+    }
+
+    func cancelPortConfirm() { portConfirm = nil }
+
+    private func addResolvedPort(_ state: PortConfirmState) async {
+        let platform = effectivePlatform      // from the still-selected port result
+        let draft = GameDraft(
+            title: state.parent.name, igdbID: state.parent.id, year: state.parent.year,
+            altTitles: [], platformIDs: platform.map { [$0] } ?? [],
+            owned: platform != nil && flags.owned, played: flags.played,
+            tierID: tierID(for: tierLetter), format: flags.format, source: .manual)
+        await add(draft, title: state.parent.name, platform: platform, openInspector: state.openInspector)
     }
 
     /// Explicit "Create '…' manually" row action.
@@ -734,6 +816,7 @@ final class QuickAddModel {
     /// First `esc` clears a non-empty field (returns true, stays open); a second on
     /// an empty field returns false so the caller closes (PLAN §6.1).
     func handleEscape() -> Bool {
+        if portConfirm != nil { portConfirm = nil; return true }   // back out of the port confirm
         if !query.isEmpty { query = ""; return true }
         return false
     }

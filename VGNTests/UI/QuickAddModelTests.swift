@@ -371,4 +371,66 @@ struct QuickAddModelTests {
         #expect(model.query == "")
         #expect(model.handleEscape() == false)                // second esc → caller closes
     }
+
+    // MARK: - Port result → link to the original (PLAN §5.1 D4)
+
+    private func portModel(_ catalog: FakeCatalog, _ library: FakeLibrary) -> QuickAddModel {
+        let model = makeQuickAddModel(catalog: catalog, library: library)
+        model.prepare(sidebarPlatform: "switch", ownedPlatforms: [], tiers: TierInfo.defaultTiers)
+        model.query = "galaxy"
+        model.applyRemote(
+            [makeSearchResult(id: 20, name: "Super Mario Galaxy", year: 2020,
+                              platforms: ["switch"], port: true, parentID: 10)],
+            generation: model.searchGeneration, credentials: true)
+        return model
+    }
+
+    private func spin(_ until: () async -> Bool, _ limit: Int = 500) async {
+        var n = 0
+        while await !until(), n < limit { await Task.yield(); n += 1 }
+    }
+
+    @Test func portResultConfirmsThenAddsTheOriginal() async {
+        let catalog = FakeCatalog()
+        await catalog.configure(portParents: [10: PortParentInfo(id: 10, name: "Super Mario Galaxy", year: 2007)])
+        let library = FakeLibrary()
+        let model = portModel(catalog, library)
+        #expect(model.selectedResult?.gameType == .port)
+
+        model.commit(openInspector: false)
+        await spin { model.portConfirm != nil }
+        #expect(model.portConfirm?.parent.id == 10)
+        #expect(await library.addedDrafts.isEmpty)          // nothing added until confirmed
+
+        model.confirmPortOriginal()
+        await spin { await !library.addedDrafts.isEmpty }
+        let drafts = await library.addedDrafts
+        #expect(drafts.first?.igdbID == 10)                 // linked to the ORIGINAL
+        #expect(drafts.first?.platformIDs == ["switch"])    // on the port's platform
+        #expect(model.portConfirm == nil)
+    }
+
+    @Test func portResultCanUseThePortEntryInstead() async {
+        let catalog = FakeCatalog()
+        await catalog.configure(portParents: [10: PortParentInfo(id: 10, name: "Super Mario Galaxy", year: 2007)])
+        let library = FakeLibrary()
+        let model = portModel(catalog, library)
+
+        model.commit(openInspector: false)
+        await spin { model.portConfirm != nil }
+        model.usePortEntry()
+        await spin { await !library.addedDrafts.isEmpty }
+        #expect(await library.addedDrafts.first?.igdbID == 20)   // the PORT entry
+    }
+
+    @Test func portWithUnresolvableParentAddsThePortWithoutConfirm() async {
+        let catalog = FakeCatalog()                          // no portParents → resolves to nil
+        let library = FakeLibrary()
+        let model = portModel(catalog, library)
+
+        model.commit(openInspector: false)
+        await spin { await !library.addedDrafts.isEmpty }
+        #expect(model.portConfirm == nil)                    // no confirm shown
+        #expect(await library.addedDrafts.first?.igdbID == 20)
+    }
 }

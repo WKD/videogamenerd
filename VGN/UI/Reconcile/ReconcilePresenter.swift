@@ -14,6 +14,8 @@ final class IGDBLinkPresenter {
     var merge: IGDBMergeModel?
     /// The active bundle-expansion confirm sheet, or nil (PLAN §5.1).
     var bundleExpansion: BundleExpansionModel?
+    /// The active "this is a port — link to the original?" confirm sheet, or nil (PLAN §5.1 D4).
+    var portLink: PortLinkModel?
     /// The active "Expand All Unplayed" batch sheet, or nil (PLAN §13.3 / §5.1 D4b).
     var batchExpand: BundleBatchExpandModel?
     /// Notified after a bundle expansion or a "not a bundle" dismissal, so a live
@@ -86,16 +88,53 @@ final class IGDBLinkPresenter {
         link = model
     }
 
-    private func dismiss() { link = nil; merge = nil; bundleExpansion = nil }
+    private func dismiss() { link = nil; merge = nil; bundleExpansion = nil; portLink = nil }
 
     private func handleChoice(gameID: Int64, isLinked: Bool, choice: IGDBLinkChoice) {
         if choice.isBundle {
             beginBundleExpansion(gameID: gameID, bundleIGDBID: choice.igdbID, bundleTitle: choice.title)
         } else if let existing = choice.existingGameID {
             beginMerge(source: gameID, target: existing, targetTitle: choice.title)
+        } else if choice.isPort, let parentID = choice.portParentID {
+            Task { await beginPortLink(gameID: gameID, isLinked: isLinked, choice: choice, parentID: parentID) }
         } else {
             Task { await performLinkOrRelink(gameID: gameID, isLinked: isLinked, choice: choice) }
         }
+    }
+
+    // MARK: - Port link (PLAN §5.1 D4 — "a port is the same game")
+
+    /// The owner chose a port result. Resolve its parent (one read-through `games(ids:)`);
+    /// if the original is a real standalone game, confirm "link to the original" with a
+    /// secondary "use the port entry"; if it doesn't resolve, link to the port as chosen.
+    private func beginPortLink(gameID: Int64, isLinked: Bool, choice: IGDBLinkChoice, parentID: Int64) async {
+        guard let parent = await searcher.portParent(parentID: parentID) else {
+            await performLinkOrRelink(gameID: gameID, isLinked: isLinked, choice: choice)
+            return
+        }
+        let model = PortLinkModel(gameID: gameID, portTitle: choice.title, parent: parent)
+        model.onCancel = { [weak self] in self?.dismiss() }
+        model.onUsePort = { [weak self] in
+            self?.portLink = nil
+            Task { await self?.performLinkOrRelink(gameID: gameID, isLinked: isLinked, choice: choice) }
+        }
+        model.onLinkToOriginal = { [weak self] in
+            guard let self else { return }
+            self.portLink = nil
+            Task {
+                // If a *different* library game already holds the parent, this becomes a merge;
+                // otherwise a plain link — the same routing every other choice uses.
+                let index = (try? await self.store.igdbLinkIndex()) ?? [:]
+                let existing = index[parent.id]
+                let parentChoice = IGDBLinkChoice(
+                    igdbID: parent.id, title: parent.name, year: parent.year,
+                    existingGameID: (existing != nil && existing != gameID) ? existing : nil,
+                    isBundle: false)
+                self.handleChoice(gameID: gameID, isLinked: isLinked, choice: parentChoice)
+            }
+        }
+        link = nil
+        portLink = model
     }
 
     // MARK: - Bundle expansion (PLAN §5.1)
@@ -336,6 +375,9 @@ private struct IGDBLinkPresentationModifier: ViewModifier {
             }
             .sheet(item: $presenter.bundleExpansion) { model in
                 BundleExpansionSheet(model: model)
+            }
+            .sheet(item: $presenter.portLink) { model in
+                PortLinkSheet(model: model)
             }
             .sheet(item: $presenter.batchExpand) { model in
                 BundleBatchExpandSheet(model: model)

@@ -37,6 +37,11 @@ struct IGDBLinkChoice: Sendable, Equatable {
     /// Non-nil when a *different* library game already holds this IGDB id → merge into it.
     var existingGameID: Int64?
     var isBundle: Bool
+    /// The chosen result is a **port** (PLAN §5.1 D4) — the action layer offers to link to
+    /// its parent (the original) instead.
+    var isPort: Bool = false
+    /// The port's parent id (`version_parent` / `parent_game`), when known.
+    var portParentID: Int64? = nil
 }
 
 /// The link / change-match search sheet's model (PLAN §5.1). `@MainActor @Observable`;
@@ -194,7 +199,9 @@ final class IGDBLinkModel: Identifiable {
             title: row.result.name,
             year: row.result.releaseYear,
             existingGameID: row.alreadyInLibrary ? row.existingGameID : nil,
-            isBundle: row.isBundle))
+            isBundle: row.isBundle,
+            isPort: row.result.gameType == .port,
+            portParentID: row.result.foldParentID))
     }
 
     func cancel() { searchTask?.cancel(); onCancel() }

@@ -17,17 +17,24 @@ actor FakeCatalog: CatalogSearching {
     /// sleep in the debounce test). Resumed as soon as `search` is entered.
     private var searchWaiters: [CheckedContinuation<Void, Never>] = []
 
+    /// parentID → the port's resolved original (PLAN §5.1 D4).
+    var portParents: [Int64: PortParentInfo] = [:]
+
     func configure(
         results: [IGDBSearchResult]? = nil,
         members: [IGDBSearchResult]? = nil,
         credentials: Bool? = nil,
-        useGate: Bool? = nil
+        useGate: Bool? = nil,
+        portParents: [Int64: PortParentInfo]? = nil
     ) {
         if let results { self.results = results }
         if let members { self.members = members }
         if let credentials { self.credentials = credentials }
         if let useGate { self.useGate = useGate }
+        if let portParents { self.portParents = portParents }
     }
+
+    func portParent(parentID: Int64) async -> PortParentInfo? { portParents[parentID] }
 
     func search(_ text: String, platformIGDBIDs: [Int]?, limit: Int) async throws -> [IGDBSearchResult] {
         searchCallCount += 1
@@ -86,13 +93,15 @@ actor FakeLibrary: LibraryAdding {
 
 func makeSearchResult(
     id: Int64, name: String, year: Int? = nil, platforms: [String] = [],
-    coverImageID: String? = nil, alternativeNames: [String] = [], bundle: Bool = false
+    coverImageID: String? = nil, alternativeNames: [String] = [], bundle: Bool = false,
+    port: Bool = false, parentID: Int64? = nil
 ) -> IGDBSearchResult {
     IGDBSearchResult(
         id: id, name: name, releaseYear: year, coverImageID: coverImageID,
         platformIGDBIDs: [], platformAbbreviations: [], platformSlugs: platforms,
         genres: [], alternativeNames: alternativeNames,
-        gameType: bundle ? .bundle : .mainGame
+        gameType: port ? .port : (bundle ? .bundle : .mainGame),
+        versionParentID: port ? parentID : nil
     )
 }
 

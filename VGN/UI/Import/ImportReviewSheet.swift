@@ -95,6 +95,9 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
         guard let type = proposedMatch?.gameType, !type.isCompilation else { return nil }
         return GameTypePolicy.label(for: type)
     }
+    /// The best match was a **port** redirected onto its parent (PLAN §5.1 D4) — the row
+    /// links to the original game (its own copy is added to the one game).
+    var linksToOriginal: Bool { proposedMatch?.resolvedFromPortID != nil }
     var showsSourceTitle: Bool {
         guard let matched = proposedMatch?.name else { return true }
         return matched.caseInsensitiveCompare(sourceTitle) != .orderedSame
@@ -1497,6 +1500,12 @@ private struct ImportReviewRowView: View {
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(.quaternary, in: Capsule())
                         .help("IGDB classifies this match as \(typeLabel.lowercased()) — not a standalone game; ticked only if you say so.")
+                }
+                if row.linksToOriginal {
+                    Text("Port → the original").font(.caption2).foregroundStyle(.secondary)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                        .help("IGDB lists this as a port; it imports as a copy on the original game.")
                 }
                 if row.linuxOnly {
                     Text("Linux-only → PC").font(.caption2)
