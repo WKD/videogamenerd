@@ -86,9 +86,12 @@ final class PSNImportPresenter {
                 // any that vanished or crossed the 10-minute gate. A separate shelf — never the
                 // library. Belt-and-braces guard: only when this sync actually vaulted claims.
                 if backend.source == ImportSourceID.psn, !result.vaultPresentIDs.isEmpty {
-                    try? await RomCatalogStore(backend.staging.database)
+                    _ = try? await RomCatalogStore(backend.staging.database)
                         .syncPSNVault(entries: result.vaultEntries,
                                       presentExternalIDs: result.vaultPresentIDs)
+                    // Fill the freshly-vaulted claims with IGDB traits in the background so they
+                    // can be suggested in "From the vault" (PLAN §16). Capped, one run at a time.
+                    self.account?.vaultMatch?.refreshAndRun()
                 }
                 self.reviewModel = ImportReviewModel(
                     source: backend.source, sourceLabel: backend.sourceLabel,

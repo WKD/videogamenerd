@@ -115,6 +115,14 @@ final class PSNAccountModel {
     var showBuildSteps = false
     #endif
 
+    /// The Vault IGDB trait-matching pass (PLAN §16), attached by ``PSNImportBuilder`` in live
+    /// mode when IGDB is configured. nil elsewhere (no matching, no status line).
+    @ObservationIgnored var vaultMatch: VaultTraitMatchModel?
+
+    /// The optional "I plan to leave PS Plus around" cancellation date (PLAN §16). Persisted in
+    /// ``AppPreferences/defaults``; both Play Next scorers read it. Editable directly here.
+    @ObservationIgnored let deadline = PSPlusDeadlinePreferences()
+
     /// Wired by the presenter: run one sync and present the review sheet.
     var onSyncRequested: () -> Void = {}
     /// Injected in tests for deterministic ages/relative strings.
@@ -281,6 +289,7 @@ struct PSNAccountPane: View {
                 } else {
                     signedOut
                 }
+                vaultSection
                 turnOffRow
                 #if DEBUG
                 buildStepsButton
@@ -291,6 +300,7 @@ struct PSNAccountPane: View {
             }
         }
         .task { await model.refresh() }
+        .task { await model.vaultMatch?.refresh() }
         #if DEBUG
         .sheet(isPresented: $model.showBuildSteps) {
             if let steps = model.buildSteps {
@@ -389,6 +399,32 @@ struct PSNAccountPane: View {
         }
     }
     #endif
+
+    // MARK: The Vault (PLAN §16)
+
+    /// The Vault trait-matching status ("Vault: N of M matched") + "Match more now", shown once
+    /// there are PS Plus entries to match. Hidden entirely otherwise (no PS Plus in the Vault, or
+    /// IGDB not configured so no matcher was built).
+    @ViewBuilder
+    private var vaultSection: some View {
+        if let vault = model.vaultMatch, vault.hasEntries {
+            Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                Label("The Vault", systemImage: "archivebox").font(.callout).bold()
+                HStack(spacing: 8) {
+                    if vault.isRunning { ProgressView().controlSize(.small) }
+                    Text(vault.statusText).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Match more now") { vault.matchMoreNow() }
+                        .controlSize(.small)
+                        .disabled(!vault.canMatchMore)
+                        .accessibilityIdentifier("psn.vault.matchMore")
+                }
+            }
+            .padding(8)
+            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+        }
+    }
 
     // MARK: Signed out
 
