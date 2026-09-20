@@ -1,5 +1,14 @@
 import Foundation
 
+/// The one-line "me vs. average" summary (owner 2026-09-20): my formatted time, the "N % of
+/// <estimate>" comparison, and whether my time is beyond every estimate (the comparison is
+/// emphasised when it is). Pure value, unit-tested without a view.
+struct PlaytimeComparison: Sendable, Equatable {
+    var mineText: String
+    var comparison: String
+    var beyond: Bool
+}
+
 /// Pure geometry for the inspector's "me vs. average" playtime bar (PLAN §6.4).
 /// My playtime is a fill; the IGDB rushed / main / completionist averages are
 /// markers along the same scale. Sensible when I exceed the completionist figure
@@ -38,6 +47,23 @@ struct PlaytimeBar: Sendable, Equatable {
 
     /// True when nothing can be drawn (no mine, no averages).
     var isEmpty: Bool { mineSeconds == nil && markers.isEmpty }
+
+    /// The one-line "me vs. average" summary under the bar (owner 2026-09-20): my time and how
+    /// it compares to the nearest estimate at or above it ("62 % of main"), or, when my time
+    /// exceeds every estimate, to the largest one with a "beyond 100 %" flag ("141 % of
+    /// completionist"). Nil when there is nothing to compare (no time, or no averages).
+    func comparisonSummary() -> PlaytimeComparison? {
+        guard let mine = mineSeconds, mine > 0, !markers.isEmpty else { return nil }
+        // markers are in ascending time order; the nearest estimate at/above my time, else the
+        // largest (my time is beyond every estimate).
+        let target = markers.first { $0.seconds >= mine } ?? markers[markers.count - 1]
+        let beyond = markers.allSatisfy { $0.seconds < mine }
+        let pct = Int((Double(mine) / Double(max(1, target.seconds)) * 100).rounded())
+        return PlaytimeComparison(
+            mineText: "You \(PlaytimeParser.format(seconds: mine))",
+            comparison: "\(pct) % of \(target.label.lowercased())",
+            beyond: beyond)
+    }
 
     /// Build the bar from my time and the three IGDB averages (any may be nil).
     static func make(mineSeconds: Int?, rushed: Int?, main: Int?, completionist: Int?) -> PlaytimeBar {

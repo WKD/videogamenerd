@@ -93,6 +93,48 @@ private struct SingleGameInspector: View {
 
     private var ids: Set<Int64> { [detail.id] }
 
+    /// The header action buttons (PLAN §8): link/re-match, refresh, choose cover, and the
+    /// conditional "Remove custom cover" / "Expand Bundle" repairs. Built as data so the same
+    /// set renders as a horizontal row or a vertical stack (``InspectorActionsView``).
+    private var headerActions: [InspectorAction] {
+        var actions: [InspectorAction] = [
+            InspectorAction(
+                title: detail.igdbID == nil ? "Link to IGDB…" : "Change IGDB Match…",
+                systemImage: "link",
+                help: detail.igdbID == nil
+                    ? "Match this game to an IGDB entry to fetch metadata, cover and time estimates."
+                    : "Re-match this game to a different IGDB entry (wrong edition / localised title).",
+                accessibilityID: "inspector.linkIGDB",
+                action: { vm.requestLinkToIGDB(gameID: detail.id) }),
+            InspectorAction(
+                title: "Refresh metadata", systemImage: "arrow.clockwise",
+                help: "Re-fetch metadata, cover and completion times from IGDB.",
+                isDisabled: detail.igdbID == nil,
+                action: { vm.refreshMetadata(gameID: detail.id) }),
+            InspectorAction(
+                title: "Choose Cover…", systemImage: "photo.stack",
+                help: "Browse every cover from all providers, or pick an image file.",
+                isDisabled: !vm.canChooseCover,
+                action: { vm.requestChooseCover(gameID: detail.id) }),
+        ]
+        if detail.userEditedCover {
+            actions.append(InspectorAction(
+                title: "Remove custom cover", systemImage: "photo.badge.arrow.down",
+                help: "Drop the hand-picked cover and fetch one from IGDB / libretro again.",
+                action: { vm.removeCustomCover(gameID: detail.id) }))
+        }
+        // A linked game that sits on its own (not a compilation member) may be an unexpanded
+        // bundle — offer to expand it (PLAN §5.1 repair). Verified against IGDB on click; a
+        // no-op with a note when it is not a bundle.
+        if detail.igdbID != nil, !detail.isCompilationMember {
+            actions.append(InspectorAction(
+                title: "Expand Bundle into Games…", systemImage: "square.stack.3d.up",
+                help: "If this is a bundle/collection on IGDB, expand it into its member games.",
+                action: { vm.requestExpandBundle(gameID: detail.id) }))
+        }
+        return actions
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -111,60 +153,10 @@ private struct SingleGameInspector: View {
 
                 if detail.igdbID == nil { unlinkedNotice }
 
-                HStack(spacing: 12) {
-                    Button {
-                        vm.requestLinkToIGDB(gameID: detail.id)
-                    } label: {
-                        Label(detail.igdbID == nil ? "Link to IGDB…" : "Change IGDB Match…",
-                              systemImage: "link")
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityIdentifier("inspector.linkIGDB")
-                    .help(detail.igdbID == nil
-                          ? "Match this game to an IGDB entry to fetch metadata, cover and time estimates."
-                          : "Re-match this game to a different IGDB entry (wrong edition / localised title).")
-
-                    Button {
-                        vm.refreshMetadata(gameID: detail.id)
-                    } label: {
-                        Label("Refresh metadata", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(detail.igdbID == nil)
-                    .help("Re-fetch metadata, cover and completion times from IGDB.")
-
-                    Button {
-                        vm.requestChooseCover(gameID: detail.id)
-                    } label: {
-                        Label("Choose Cover…", systemImage: "photo.stack")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(!vm.canChooseCover)
-                    .help("Browse every cover from all providers, or pick an image file.")
-
-                    if detail.userEditedCover {
-                        Button {
-                            vm.removeCustomCover(gameID: detail.id)
-                        } label: {
-                            Label("Remove custom cover", systemImage: "photo.badge.arrow.down")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Drop the hand-picked cover and fetch one from IGDB / libretro again.")
-                    }
-
-                    // A linked game that sits on its own (not a compilation member) may be an
-                    // unexpanded bundle — offer to expand it (PLAN §5.1 repair). Verified
-                    // against IGDB on click; a no-op with a note when it is not a bundle.
-                    if detail.igdbID != nil, !detail.isCompilationMember {
-                        Button {
-                            vm.requestExpandBundle(gameID: detail.id)
-                        } label: {
-                            Label("Expand Bundle into Games…", systemImage: "square.stack.3d.up")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("If this is a bundle/collection on IGDB, expand it into its member games.")
-                    }
-                }
+                // The action buttons lay out as one horizontal row when they fit on a single
+                // line without any label wrapping, else stack vertically — one full-width,
+                // left-aligned icon+label button per line (owner 2026-09-20, narrow inspector).
+                InspectorActionsView(actions: headerActions)
 
                 if !detail.genres.isEmpty {
                     Text(detail.genres.joined(separator: " · "))
@@ -421,11 +413,14 @@ private struct SingleGameInspector: View {
             PlaytimeEditor(detail: detail) { seconds in
                 Task { await vm.actions?.setMyPlaytime(gameID: detail.id, seconds: seconds) }
             }
-            if let psn = detail.psnPlaytimeS, psn > 0 {
-                psnRow(psn)
-            }
+            // A single label-left / value-right table (owner 2026-09-20): PSN/Batocera source
+            // rows and the IGDB estimates read as one thing and never wrap mid-value.
+            PlaytimeEstimatesTable(
+                psnSeconds: detail.psnPlaytimeS, manualWins: detail.myPlaytimeS != nil,
+                mainS: detail.ttbNormallyS, completionistS: detail.ttbCompletelyS,
+                rushedS: detail.ttbHastilyS,
+                sourceLabel: Self.sourceLabel(detail.ttbSource), showEstimates: hasAverages)
             if hasAverages {
-                averagesText
                 MeVsAverageBar(bar: bar)
             } else {
                 Text("Average completion times arrive with metadata.")
@@ -445,12 +440,16 @@ private struct SingleGameInspector: View {
     /// HowLongToBeat" link (the exact page when the HLTB id is known).
     @ViewBuilder
     private var hltbActions: some View {
-        HStack(spacing: 12) {
+        // Row when it fits, else stacked — so the long "Fetch from HowLongToBeat" label and
+        // the "Open on HowLongToBeat" link never squeeze letter-by-letter at a narrow width.
+        InspectorWrappingRow(spacing: 12) {
             if hasTimeGap, let hltbFetch {
                 Button {
                     hltbFetch.fetchOne(gameID: detail.id)
                 } label: {
                     Label("Fetch from HowLongToBeat", systemImage: "clock.arrow.circlepath")
+                        .lineLimit(1)
+                        .fixedSize()
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
@@ -469,35 +468,6 @@ private struct SingleGameInspector: View {
 
     private var hasAverages: Bool {
         detail.ttbHastilyS != nil || detail.ttbNormallyS != nil || detail.ttbCompletelyS != nil
-    }
-
-    /// PSN playtime, shown with the "manual wins" note when a manual value overrides
-    /// it (PLAN §6.4 — both are kept, manual is effective).
-    private func psnRow(_ psn: Int) -> some View {
-        HStack {
-            Text("PSN").foregroundStyle(.secondary)
-            Text(PlaytimeParser.format(seconds: psn)).foregroundStyle(.secondary)
-            if detail.myPlaytimeS != nil {
-                Text("(manual wins)").font(.caption2).foregroundStyle(.tertiary)
-            }
-            Spacer()
-        }
-        .font(.callout)
-    }
-
-    private var averagesText: some View {
-        // PLAN §10: "Main ≈ 32 h · Rushed ≈ 27 h · Completionist ≈ 61 h" + source.
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 10) {
-                if let s = detail.ttbNormallyS { Text("Main \(PlaytimeParser.formatApprox(seconds: s))") }
-                if let s = detail.ttbHastilyS { Text("Rushed \(PlaytimeParser.formatApprox(seconds: s))") }
-                if let s = detail.ttbCompletelyS { Text("Completionist \(PlaytimeParser.formatApprox(seconds: s))") }
-            }
-            if let label = Self.sourceLabel(detail.ttbSource) {
-                Text("Source: \(label)").font(.caption2).foregroundStyle(.tertiary)
-            }
-        }
-        .font(.caption).foregroundStyle(.secondary)
     }
 
     /// Display the ttb source as "IGDB" / "HowLongToBeat" / "edited" (PLAN §5.3), or
@@ -527,6 +497,76 @@ private struct SingleGameInspector: View {
 }
 
 // MARK: - Reusable pieces
+
+/// One inspector header action, as data so ``InspectorActionsView`` can render the same set
+/// horizontally or vertically without duplicating the button definitions (owner 2026-09-20).
+struct InspectorAction: Identifiable {
+    let title: String
+    let systemImage: String
+    let help: String
+    var accessibilityID: String? = nil
+    var isDisabled: Bool = false
+    let action: () -> Void
+
+    var id: String { title }
+}
+
+/// The inspector's action buttons: one horizontal row when they fit on a single line without
+/// any label wrapping, else a vertical stack of full-width, left-aligned icon+label buttons
+/// (PLAN §8; the narrow-inspector fix). Each label is one line; tooltips use `appKitTooltip`
+/// (the reliable one for the inspector column).
+struct InspectorActionsView: View {
+    let actions: [InspectorAction]
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                ForEach(actions) { button($0, fillWidth: false) }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(actions) { button($0, fillWidth: true) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func button(_ a: InspectorAction, fillWidth: Bool) -> some View {
+        Button(action: a.action) {
+            Label(a.title, systemImage: a.systemImage)
+                .lineLimit(1)
+                // Horizontal: pin the intrinsic width so ViewThatFits measures the true row
+                // width (and rejects it when it doesn't fit). Vertical: let it fill the column.
+                .fixedSize(horizontal: !fillWidth, vertical: true)
+                .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
+        }
+        .buttonStyle(.borderless)
+        .disabled(a.isDisabled)
+        .appKitTooltip(a.help)
+        .accessibilityIdentifierIfPresent(a.accessibilityID)
+    }
+}
+
+/// Lays its content as a horizontal row when it fits, else a vertical stack — for short action
+/// clusters (e.g. the HowLongToBeat actions) whose labels must never squeeze letter-by-letter.
+/// Children should carry `.fixedSize()` so the horizontal candidate is measured at true width.
+private struct InspectorWrappingRow<Content: View>: View {
+    var spacing: CGFloat = 12
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: spacing) { content }
+            VStack(alignment: .leading, spacing: 6) { content }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func accessibilityIdentifierIfPresent(_ id: String?) -> some View {
+        if let id { accessibilityIdentifier(id) } else { self }
+    }
+}
 
 /// The tier picker used in both single and multi inspectors.
 private struct TierPickerRow: View {
@@ -668,10 +708,90 @@ private struct PlaytimeEditor: View {
     }
 }
 
-/// The "me vs. average" bar (PLAN §6.4): my playtime as a fill, with the IGDB
-/// rushed / main / completionist averages as labelled markers on the same scale.
-/// Geometry is the pure ``PlaytimeBar``; this only draws it.
-private struct MeVsAverageBar: View {
+/// A label-left / value-right table for the inspector's Playtime section (owner 2026-09-20):
+/// PSN/Batocera source rows and the IGDB estimates, values right-aligned with monospaced
+/// digits and `.lineLimit(1)` so they never wrap mid-value (a missing estimate shows "—").
+/// The estimate order is Main, Completionist (what the app plans with), then Rushed (last and
+/// secondary-styled).
+struct PlaytimeEstimatesTable: View {
+    var psnSeconds: Int?
+    var manualWins: Bool
+    var mainS: Int?
+    var completionistS: Int?
+    var rushedS: Int?
+    var sourceLabel: String?
+    var showEstimates: Bool
+
+    private var hasPSN: Bool { (psnSeconds ?? 0) > 0 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 3) {
+                if let psn = psnSeconds, psn > 0 {
+                    row("PSN", PlaytimeParser.format(seconds: psn), secondary: true)
+                }
+                if showEstimates {
+                    row("Main", estimate(mainS))
+                    row("Completionist", estimate(completionistS))
+                    row("Rushed", estimate(rushedS), secondary: true)
+                }
+            }
+            if hasPSN, manualWins {
+                Text("Your manual time is used; PSN is kept for reference.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .lineLimit(1).minimumScaleFactor(0.85)
+            }
+            if showEstimates, let sourceLabel {
+                Text("Source: \(sourceLabel)").font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func estimate(_ s: Int?) -> String {
+        s.map { PlaytimeParser.formatApprox(seconds: $0) } ?? "—"
+    }
+
+    @ViewBuilder
+    private func row(_ label: String, _ value: String, secondary: Bool = false) -> some View {
+        GridRow {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .foregroundStyle(secondary ? Color.secondary : Color.primary)
+        }
+        .font(.caption)
+        .opacity(secondary ? 0.85 : 1)
+    }
+}
+
+/// The one-line "me vs. average" summary shown under the bar (owner 2026-09-20): "You 84 h 49 ·
+/// 141 % of completionist", the comparison emphasised in orange only when my time is beyond
+/// every estimate. One line, scaled down before it would wrap.
+struct PlaytimeComparisonLabel: View {
+    let bar: PlaytimeBar
+
+    var body: some View {
+        if let c = bar.comparisonSummary() {
+            (Text(c.mineText)
+             + Text(" · ")
+             + Text(c.comparison).foregroundStyle(c.beyond ? Color.orange : Color.secondary))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .accessibilityLabel("\(c.mineText), \(c.comparison)\(c.beyond ? ", beyond every estimate" : "")")
+        }
+    }
+}
+
+/// The "me vs. average" bar (PLAN §6.4): my playtime as a fill, with the IGDB rushed / main /
+/// completionist averages as tick markers on the same scale — each tick carrying its label on
+/// hover (`appKitTooltip`), with a single one-line summary underneath. Geometry is the pure
+/// ``PlaytimeBar``; this only draws it.
+struct MeVsAverageBar: View {
     let bar: PlaytimeBar
 
     private let height: CGFloat = 12
@@ -688,32 +808,23 @@ private struct MeVsAverageBar: View {
                         Capsule().fill(Color.accentColor)
                             .frame(width: max(bar.mineSeconds == nil ? 0 : 3, width * bar.fillFraction),
                                    height: height)
-                        // Average markers.
+                        // Average markers, each with a wider transparent hover target carrying
+                        // its "Main ≈ 39 h" tooltip so the labels stay discoverable.
                         ForEach(bar.markers) { marker in
-                            Rectangle()
-                                .fill(.primary.opacity(0.55))
+                            Rectangle().fill(.primary.opacity(0.55))
                                 .frame(width: 2, height: height + 6)
-                                .offset(x: min(width - 2, width * marker.fraction))
+                                .frame(width: 14)
+                                .contentShape(Rectangle())
+                                .appKitTooltip("\(marker.label) \(PlaytimeParser.formatApprox(seconds: marker.seconds))")
+                                .offset(x: min(width - 14, max(0, width * marker.fraction - 7)))
                         }
                     }
                 }
                 .frame(height: height + 6)
 
-                HStack(spacing: 10) {
-                    if let mine = bar.mineSeconds {
-                        Label("You \(PlaytimeParser.format(seconds: mine))", systemImage: "person.fill")
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    ForEach(bar.markers) { marker in
-                        Text("\(marker.label) \(PlaytimeParser.formatApprox(seconds: marker.seconds))")
-                    }
-                    if bar.exceedsCompletionist {
-                        Text("· beyond 100%").foregroundStyle(.orange)
-                    }
-                }
-                .font(.caption2).foregroundStyle(.secondary)
+                PlaytimeComparisonLabel(bar: bar)
             }
-            .accessibilityElement(children: .ignore)
+            .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityText)
         }
     }
