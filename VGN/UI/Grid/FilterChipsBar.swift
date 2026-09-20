@@ -36,6 +36,27 @@ struct FilterChipsBar: View {
                             .font(.caption)
                             .help("Search the whole library, not just this list")
                     }
+                    // "37 of 443 games" — after "Clear all", yields before the chips do
+                    // (lower layout priority) and never truncates them (single line).
+                    if let count = FilterCountSummary.text(
+                        shown: vm.games.count,
+                        total: vm.counts.count(for: vm.selection),
+                        selected: vm.selectedGameIDs.count,
+                        loaded: vm.gamesLoaded) {
+                        Text(count)
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .layoutPriority(-1)
+                            .padding(.leading, 8)
+                            .accessibilityIdentifier(A11yID.filterCount)
+                            .accessibilityLabel(FilterCountSummary.accessibilityLabel(
+                                shown: vm.games.count,
+                                total: vm.counts.count(for: vm.selection),
+                                selected: vm.selectedGameIDs.count,
+                                loaded: vm.gamesLoaded) ?? "")
+                    }
                 }
             }
             .padding(.horizontal, 16)

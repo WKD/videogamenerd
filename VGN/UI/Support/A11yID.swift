@@ -27,6 +27,7 @@ enum A11yID {
     static let filterChips = "filter.chips"
     static func filterChip(_ kind: String) -> String { "filter.chip.\(kind)" }
     static let filterClearAll = "filter.clearAll"
+    static let filterCount = "filter.count"
 
     // Inspector
     static let inspector = "inspector"
