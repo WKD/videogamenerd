@@ -20,6 +20,7 @@ Legend: **[doing]** being built now · **[later]** deliberately postponed · **[
 | Data folder | Stays `~/Library/Application Support/VGN/` although the app is now "Video Game Nerd" (`com.pomatelier.VideoGameNerd`). |
 | Build now | Library stats view · cleanup batch · insertion line for The Top's reorder drag. ("Choose cover…" sheet + grid entry and Undo for Play Next "Start playing" are **done**, wave 7 lane B.) **[doing]** |
 | The Vault *(2026-09-20)* | Batocera ROMs and barely-played PS Plus games (≤ 10 min) share one pool, **The Vault** (PLAN §16): out of the library, browsable, suggested only by Play Next ▸ "From the vault". PS Plus games get a boost that ramps up to the owner's planned unsubscribe date, scaled by whether the game can still be finished in time. **[planned — after the PSN live fixes]** |
+| ROM format *(2026-09-20)* | **Kept** — not folded into Digital. Everything that comes from Batocera is a `rom` copy. |
 | Next milestone | **GOG import (M8)**, planned in PLAN §14 and built before PSN (it creates the shared importer machinery). Sign-in = **OAuth** (owner, 2026-09-19) with GOG's publicly documented Galaxy client credentials, kept in one file. Same cache-first / stop-and-ask protocol as PSN; live steps G1–G5 need the owner present. PSN (M7) and Polish (M9) after. |
 
 ## 2. The big caveat: the GUI has barely been driven
