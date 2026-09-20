@@ -104,33 +104,46 @@ struct RootView: View {
             if vm.isBundlesToExpandSelection {
                 BundlesToExpandHeader(vm: vm)
             }
-            ZStack(alignment: .bottom) {
-                if vm.isRankingSelection {
-                    RankingPlaceholderView(selection: vm.selection)
-                        .environment(\.rankingLibraryFilter, vm.filter)
-                        .environment(\.rankingActions, RankingViewActions(
-                            goToDuel: { vm.select(.duel) },
-                            inspect: { id in vm.selectOnly(id); vm.showInspector() }))
-                } else if vm.isPlayNextSelection {
-                    PlayNextView()
-                        .environment(\.rankingActions, RankingViewActions(
-                            goToDuel: { vm.select(.duel) },
-                            inspect: { id in vm.selectOnly(id); vm.showInspector() }))
-                } else if vm.isVaultSelection {
-                    RomCatalogueView(source: vm.selectedVaultSource ?? .batocera)
-                } else {
-                    LibraryGridView(vm: vm)
+            // STRUCTURAL GUARD (wave 19): the destination area lives inside a `GeometryReader`
+            // so the DETAIL column can never leak an unbounded ideal height into the
+            // `NavigationSplitView` — which would size BOTH columns to it and push the sidebar
+            // up under the title bar (owner bug, waves 17 + 19). A `GeometryReader` fills the
+            // space the fixed-height header bars leave and proposes a CONCRETE size to its child,
+            // so even a child with `.fixedSize(vertical: true)` multi-line text can no longer
+            // move the sidebar (`.frame(maxHeight:)`/`idealHeight` do NOT contain it — proven in
+            // `SidebarJumpMatrixTests`). The grid stays the ZStack's direct child (and the detail
+            // column's top scroll view, for the unified toolbar's scroll tracking); the
+            // `GeometryReader` is not a scroll view, so it does not disturb that.
+            GeometryReader { geo in
+                ZStack(alignment: .bottom) {
+                    if vm.isRankingSelection {
+                        RankingPlaceholderView(selection: vm.selection)
+                            .environment(\.rankingLibraryFilter, vm.filter)
+                            .environment(\.rankingActions, RankingViewActions(
+                                goToDuel: { vm.select(.duel) },
+                                inspect: { id in vm.selectOnly(id); vm.showInspector() }))
+                    } else if vm.isPlayNextSelection {
+                        PlayNextView()
+                            .environment(\.rankingActions, RankingViewActions(
+                                goToDuel: { vm.select(.duel) },
+                                inspect: { id in vm.selectOnly(id); vm.showInspector() }))
+                    } else if vm.isVaultSelection {
+                        RomCatalogueView(source: vm.selectedVaultSource ?? .batocera)
+                    } else {
+                        LibraryGridView(vm: vm)
+                    }
+                    if let banner = vm.banner {
+                        BannerView(banner: banner,
+                                   onAction: banner.actionTitle != nil ? { vm.performBannerAction() } : nil,
+                                   onSecondaryAction: banner.secondaryActionTitle != nil ? { vm.performBannerSecondaryAction() } : nil,
+                                   onDismiss: { vm.dismissBanner() })
+                            .padding(12)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
-                if let banner = vm.banner {
-                    BannerView(banner: banner,
-                               onAction: banner.actionTitle != nil ? { vm.performBannerAction() } : nil,
-                               onSecondaryAction: banner.secondaryActionTitle != nil ? { vm.performBannerSecondaryAction() } : nil,
-                               onDismiss: { vm.dismissBanner() })
-                        .padding(12)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                .frame(width: geo.size.width, height: geo.size.height)
+                .animation(.easeInOut(duration: 0.2), value: vm.banner)
             }
-            .animation(.easeInOut(duration: 0.2), value: vm.banner)
         }
     }
 

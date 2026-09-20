@@ -19,6 +19,13 @@ enum LibraryKey: Hashable, Sendable {
 final class LibraryViewModel {
     // MARK: Loaded data (observed from the data source)
     private(set) var games: [GameSummary] = []
+    /// Whether the CURRENT scope's grid observation has delivered at least once. Reset to
+    /// `false` on every scope/filter change (in ``restartGames``) and set `true` on the first
+    /// ``applyGames`` after it. Lets the grid tell "still loading this scope" from "loaded and
+    /// genuinely empty" so it never flashes a misleading empty state (which, being a
+    /// `NavigationSplitView` detail child, must never leak an ideal height — see
+    /// ``SidebarJumpMatrixTests``).
+    private(set) var gamesLoaded = false
     private(set) var counts: SidebarCounts = .empty
     private(set) var platforms: [PlatformInfo] = []
     private(set) var tiers: [TierInfo] = []
@@ -368,6 +375,7 @@ final class LibraryViewModel {
 
     private func restartGames() {
         gamesTask?.cancel()
+        gamesLoaded = false
         gamesGeneration &+= 1
         let generation = gamesGeneration
         let filter = self.filter
@@ -389,6 +397,7 @@ final class LibraryViewModel {
     /// store next wave) can drive it directly.
     func applyGames(_ rows: [GameSummary]) {
         games = rows
+        gamesLoaded = true
         let ids = Set(rows.map(\.id))
         for row in rows {
             if let model = cellModels[row.id] {

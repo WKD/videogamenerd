@@ -24,6 +24,13 @@ struct LibraryGridView: View {
         Group {
             if vm.isEmptyLibrary {
                 emptyLibraryState
+            } else if vm.games.isEmpty && !vm.gamesLoaded {
+                // The newly-selected scope's first rows have not arrived yet. Show a quiet,
+                // empty area — NEVER the "nothing here" empty state, which would be wrong while
+                // still loading and, being a `NavigationSplitView` detail child, must not flash a
+                // view that could momentarily leak an ideal height (waves 17 + 19, see
+                // `SidebarJumpMatrixTests`). Static, so it costs nothing at idle.
+                loadingPlaceholder
             } else if vm.isEmptyFilterResult {
                 emptyResultState
             } else {
@@ -249,7 +256,14 @@ struct LibraryGridView: View {
         action(ids)
     }
 
-    // MARK: Empty states
+    // MARK: Empty / loading states
+
+    /// A quiet placeholder shown while the selected scope's first rows load, instead of the
+    /// (possibly wrong) empty state. Fills its space so the layout does not jump when the rows
+    /// arrive.
+    private var loadingPlaceholder: some View {
+        Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 
     private var emptyLibraryState: some View {
         EmptyStateView(

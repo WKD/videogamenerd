@@ -39,7 +39,14 @@ struct EmptyStateView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // Bounded, NOT `.fixedSize(vertical: true)`: this view is mounted in the
+                    // `NavigationSplitView` DETAIL column, where a wrapping `Text` with an
+                    // unbounded ideal height makes the split view size BOTH columns to it and
+                    // pushes the sidebar up under the title bar (owner bug, waves 17 + 19 —
+                    // guarded by `SidebarJumpMatrixTests`). A line cap + the capped width below
+                    // give the message a finite ideal height; the copy is one or two sentences,
+                    // so nothing truncates in practice.
+                    .lineLimit(6)
             }
 
             if !actions.isEmpty {

@@ -412,6 +412,16 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   Cover… / Add copy… / Edit compilation… / trash all look like real (bordered) buttons; the inspector
   still lays out correctly at its narrowest width (they stack, each with a visible button shape).
 
+## Sidebar never jumps (wave 19, lane D) — needs owner eyes
+- [ ] Make the window **short** (drag it down so the sidebar list only just fits, or less). Click **every**
+  sidebar row in turn — All, Owned, Played, Backlog, Unranked, Play Next, Unlinked, Bundles to Expand,
+  each RANKINGS row, every BY LENGTH shelf, Unmeasured, each THE VAULT source, and several platforms —
+  including your **biggest** scopes (Played, Unranked) and any that are currently **empty**. The sidebar
+  must **never** scroll up under the traffic lights or grow taller than the window; its first row stays
+  reachable at the top. (This is the bug that used to hit "Bundles to Expand".)
+- [ ] Switching to a big scope shows the grid (or a blank area for a beat) and **never flashes** a
+  "Nothing here yet" message before the games appear.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
