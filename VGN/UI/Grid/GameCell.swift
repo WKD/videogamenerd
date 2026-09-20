@@ -178,10 +178,21 @@ struct GameCell: View {
     private var badges: some View {
         VStack {
             HStack(alignment: .top) {
-                if let letter = game.tierLetter {
-                    // Label comes from the `\.tierLabels` environment; the derived
-                    // score (when the game is ranked) enriches the hover tooltip.
-                    TierChip(letter: letter, colorHex: game.tierColorHex, size: 22, score: score)
+                // Top-left corner: the tier chip first when present, then the PS Plus
+                // licensing badge right after it — vertically centred with the chip, sized
+                // by the shared badge-diameter rule so it stays legible at the smallest tile
+                // (owner, wave 19: PS Plus is a licence, not a format). PS Plus alone when
+                // there is no tier.
+                HStack(spacing: badgeSpacing) {
+                    if let letter = game.tierLetter {
+                        // Label comes from the `\.tierLabels` environment; the derived
+                        // score (when the game is ranked) enriches the hover tooltip.
+                        TierChip(letter: letter, colorHex: game.tierColorHex, size: 22, score: score)
+                    }
+                    if let plus = FormatBadges.licensing(for: game) {
+                        PSPlusBadgeView(size: badgeDiameter)
+                            .help(Self.badgeTooltip(plus))
+                    }
                 }
                 Spacer(minLength: 0)
                 if game.isCompilationMember {
