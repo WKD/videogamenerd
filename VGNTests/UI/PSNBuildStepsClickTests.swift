@@ -32,16 +32,18 @@ struct PSNBuildStepsClickTests {
         return found.first { $0.0 == tooltip }?.1
     }
 
-    /// Click a button (by tooltip) repeatedly until `done`. Safe for an idempotent control
-    /// like Acknowledge; retries a click dropped under parallel load.
+    /// Click a button located deterministically by its tooltip rect, then poll the post-condition
+    /// across run-loop turns; retry (the control is idempotent, e.g. Acknowledge) if a click is
+    /// dropped under parallel load. No fixed-sleep tier.
     private func clickUntil(_ window: ClickProbeWindow, tooltip: String,
                             done: () -> Bool, max: Int = 60) async throws {
-        for attempt in 0..<max {
+        for _ in 0..<max {
             if done() { return }
             if let r = rect(window, tooltip: tooltip) {
-                window.click(at: NSPoint(x: r.midX, y: r.midY))
+                if await window.clickAndAwait(at: NSPoint(x: r.midX, y: r.midY), until: done) { return }
+            } else {
+                _ = await window.awaitCondition(.milliseconds(60), until: done)
             }
-            try await Task.sleep(for: .milliseconds(attempt < 6 ? 40 : 150))
         }
     }
 
@@ -87,7 +89,8 @@ struct PSNBuildStepsClickTests {
             for kind in PSNBuildStepKind.allCases {
                 if let r = rect(window, tooltip: kind.title) {
                     window.click(at: NSPoint(x: r.midX, y: r.midY))
-                    try await Task.sleep(for: .milliseconds(20))
+                    // Give a (wrongful) runner call a chance to appear, then move on — poll, not sleep.
+                    _ = await window.awaitCondition(.milliseconds(40)) { runner.callCount > 0 }
                 }
             }
         }

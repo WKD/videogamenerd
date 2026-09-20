@@ -37,14 +37,17 @@ struct LibrarySearchFieldTests {
         func walk(_ v: NSView) { if let t = v.toolTip, !t.isEmpty { tips.append((t, v.convert(v.bounds, to: nil))) }; v.subviews.forEach(walk) }
         if let root = window.window.contentView { walk(root) }
         let clear = try #require(tips.first { $0.0.hasPrefix("Clear search") })
-        window.click(at: NSPoint(x: clear.1.midX, y: clear.1.midY))
-        try await Task.sleep(for: .milliseconds(300))
+        _ = await window.clickAndAwait(at: NSPoint(x: clear.1.midX, y: clear.1.midY)) { box.cleared == 1 }
         #expect(box.text.isEmpty)
         #expect(box.cleared == 1)
 
-        // With no text the button is gone.
-        tips = []
-        if let root = window.window.contentView { walk(root) }
-        #expect(!tips.contains { $0.0.hasPrefix("Clear search") })
+        // With no text the button disappears — poll, since the re-render follows the model change
+        // across run-loop turns (a fixed sleep here only masks the race).
+        let gone = await window.poll {
+            tips = []
+            if let root = window.window.contentView { walk(root) }
+            return !tips.contains { $0.0.hasPrefix("Clear search") }
+        }
+        #expect(gone, "the clear button should disappear once the field is empty")
     }
 }

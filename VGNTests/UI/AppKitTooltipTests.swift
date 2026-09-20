@@ -54,8 +54,7 @@ struct AppKitTooltipTests {
         try await window.settle()
         let tip = try #require(allTooltips(window).first { $0.0 == "S — Masterpiece" })
         #expect(tip.1.width >= 30 && tip.1.height >= 30, "the tooltip must cover the chip")
-        window.click(at: NSPoint(x: tip.1.midX, y: tip.1.midY))
-        try await Task.sleep(for: .milliseconds(200))
+        _ = await window.clickAndAwait(at: NSPoint(x: tip.1.midX, y: tip.1.midY)) { counter.clicks == 1 }
         #expect(counter.clicks == 1, "the click must reach the button under the tooltip overlay")
     }
 }

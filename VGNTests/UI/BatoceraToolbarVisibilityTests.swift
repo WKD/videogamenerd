@@ -45,6 +45,10 @@ struct BatoceraToolbarVisibilityTests {
         defer { vaultWindow.close() }
         try await vaultWindow.settle()
 
+        // The toolbar bridges over run-loop turns; poll until both windows have it before counting.
+        await allWindow.poll { (allWindow.window.toolbar?.items.count ?? 0) > 0 }
+        await vaultWindow.poll { (vaultWindow.window.toolbar?.items.count ?? 0) > 0 }
+
         let allItems = allWindow.window.toolbar?.items.count ?? 0
         let vaultItems = vaultWindow.window.toolbar?.items.count ?? 0
         #expect(allItems > vaultItems, "the grid toolbar (search/filters/sort/size) is dropped in the Vault (\(allItems) vs \(vaultItems))")

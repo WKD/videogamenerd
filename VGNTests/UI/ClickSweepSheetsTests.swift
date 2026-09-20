@@ -30,7 +30,7 @@ struct ClickSweepSheetsTests {
         let window = host(StatsDashboardView(model: model), NSSize(width: 760, height: 520))
         defer { window.close() }
         await window.settleShort()
-        #expect(window.hasSegmentedControl(), "Stats scope should be a segmented control, not a menu")
+        #expect(await window.poll { window.hasSegmentedControl() }, "Stats scope should be a segmented control, not a menu")
 
         #expect(await window.clickSegment(targetIndex, of: StatsScope.allCases.count),
                 "the Stats scope segmented control was not located")
@@ -161,7 +161,7 @@ struct ClickSweepSheetsTests {
             size: NSSize(width: 720, height: 480))
         defer { window.close() }
         await window.settleShort()
-        #expect(window.hasSegmentedControl(), "the own-as segmented control should be present")
+        #expect(await window.poll { window.hasSegmentedControl() }, "the own-as segmented control should be present")
         #expect(await window.clickSegment(2, of: 3), "the own-as segmented control was not located")
         let switched = await window.poll { model.ownAsSelection == .digital }
         #expect(switched, "clicking the Digital segment did not switch the own-as format")
