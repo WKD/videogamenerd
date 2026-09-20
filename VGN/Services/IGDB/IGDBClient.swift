@@ -91,8 +91,8 @@ actor IGDBClient {
 
         var byID: [Int64: IGDBGameMetadata] = [:]
         if !force {
-            let cached = await cache.freshEntries(forIDs: ids)
-            for (id, entry) in cached where CatalogCacheShapeJSON.shapes(in: entry.json).contains(.metadata) {
+            let cached = await cache.freshEntries(forIDs: ids, satisfying: .metadata)
+            for (id, entry) in cached {
                 if let meta = metadata(fromCachedGameJSON: entry.json) { byID[id] = meta }
             }
         }
@@ -133,13 +133,10 @@ actor IGDBClient {
         // Read-through: a fresh bundle blob carries its expanded member-id list
         // (`.bundleMembers`) and each member has a fresh `.search` payload — serve it
         // all without a request (PLAN §5.1).
-        if !force, let bundleEntry = await cache.entry(forID: id),
-           CatalogCacheShapeJSON.shapes(in: bundleEntry.json).contains(.bundleMembers),
+        if !force, let bundleEntry = await cache.freshEntry(forID: id, satisfying: .bundleMembers),
            let memberIDs = CatalogCacheShapeJSON.bundleMemberIDs(in: bundleEntry.json) {
-            let cached = await cache.freshEntries(forIDs: memberIDs)
-            if memberIDs.allSatisfy({ id in
-                cached[id].map { CatalogCacheShapeJSON.shapes(in: $0.json).contains(.search) } ?? false
-            }) {
+            let cached = await cache.freshEntries(forIDs: memberIDs, satisfying: .search)
+            if memberIDs.allSatisfy({ cached[$0] != nil }) {
                 return memberIDs.compactMap { cached[$0].flatMap { searchResult(fromCachedGameJSON: $0.json) } }
             }
         }
@@ -149,10 +146,11 @@ actor IGDBClient {
         // Cache the expanded member-id list in the bundle's own blob (merged, so the
         // bundle's game fields — if ever fetched — are kept). The member payloads were
         // written through as `.search` during expansion.
+        let stampedAt = Date()
         var object: [String: Any] = ["id": id, CatalogCacheShapeJSON.bundleMembersKey: members.map(\.id)]
-        CatalogCacheShapeJSON.tag(&object, shapes: .bundleMembers)
+        CatalogCacheShapeJSON.tag(&object, shapes: .bundleMembers, stampedAt: stampedAt)
         if let json = try? JSONSerialization.data(withJSONObject: object) {
-            await cache.store(CatalogCacheEntry(igdbID: id, json: json, fetchedAt: Date()))
+            await cache.store(CatalogCacheEntry(igdbID: id, json: json, fetchedAt: stampedAt))
         }
         return members
     }
@@ -209,8 +207,7 @@ actor IGDBClient {
     /// Returns `[]` when the game has no artworks.
     /// - Parameter force: skip the cache and re-fetch (an explicit refresh), overwriting it.
     func artworks(forGameID igdbID: Int64, force: Bool = false) async throws -> [IGDBArtwork] {
-        if !force, let entry = await cache.entry(forID: igdbID),
-           CatalogCacheShapeJSON.shapes(in: entry.json).contains(.artworks) {
+        if !force, let entry = await cache.freshEntry(forID: igdbID, satisfying: .artworks) {
             return Self.artworks(fromCachedGameJSON: entry.json)
         }
         let query = IGDBQuery()
@@ -433,7 +430,7 @@ actor IGDBClient {
         out.reserveCapacity(array.count)
         for var object in array {
             guard let id = (object["id"] as? NSNumber)?.int64Value else { continue }
-            CatalogCacheShapeJSON.tag(&object, shapes: shapes)
+            CatalogCacheShapeJSON.tag(&object, shapes: shapes, stampedAt: now)
             guard let json = try? JSONSerialization.data(withJSONObject: object) else { continue }
             out.append(CatalogCacheEntry(igdbID: id, json: json, fetchedAt: now))
         }
