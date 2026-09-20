@@ -34,6 +34,12 @@ protocol ImportBackend: Sendable {
     /// Run one sync (cache-first, budgeted, validated): stage, match, summarise. Throws
     /// ``ImportError`` on a reject — nothing is retried (PLAN §14.5).
     func runSync(onProgress: @Sendable @escaping (ImportProgress) -> Void) async throws -> ImportSyncResult
+
+    /// The IGDB matcher for the review sheet's per-row **Re-match** (PLAN §5.1, wave 16), or nil
+    /// to hide it: inert / sample / test backends, and live backends where IGDB is not
+    /// configured (a no-match matcher would only ever clear the match). Live backends expose the
+    /// same matcher the sync coordinator uses.
+    var rematchMatcher: (any ImportMatcher)? { get }
 }
 
 extension ImportBackend {
@@ -41,6 +47,9 @@ extension ImportBackend {
     func lastSync() async -> Date? {
         await cacheAges().map(\.fetchedAt).max()
     }
+
+    /// Default: no Re-match (inert / sample / test). Live backends override.
+    var rematchMatcher: (any ImportMatcher)? { nil }
 }
 
 // MARK: - Live GOG backend
@@ -62,6 +71,8 @@ struct LiveGOGImportBackend: ImportBackend {
     var source: String { ImportSourceID.gog }
     var sourceLabel: String { "GOG" }
     var dataSets: [ImportDataSet] { importer.dataSets }
+    /// Re-match uses the sync matcher, except a no-match one (IGDB not configured) hides it.
+    var rematchMatcher: (any ImportMatcher)? { matcher is NoMatchImportMatcher ? nil : matcher }
 
     func hasSession() async -> Bool { await auth.hasSession() }
 

@@ -128,6 +128,10 @@ final class ImportReviewModel {
     let sourceLabel: String
     private let staging: ImportStagingStore
     private let onLibraryChanged: () -> Void
+    /// The IGDB matcher for the per-row **Re-match** action (PLAN §5.1, wave 16); nil offline /
+    /// in tests without one, and unused for Batocera (see ``canRematch``). Wired by the GOG /
+    /// Delicious / PSN builders to the same matcher the sync coordinator uses.
+    @ObservationIgnored private let rematchMatcher: (any ImportMatcher)?
 
     let summary: ImportSyncSummary
     /// The copy format an imported title commits as: `.digital` for GOG, `.physical` for
@@ -196,6 +200,15 @@ final class ImportReviewModel {
     /// row matched to a game already in the library (adds play time only, no second copy).
     @ObservationIgnored private var romCopyGameKeys: Set<String> = []
 
+    /// External ids whose per-row **Re-match** is in flight (PLAN §5.1) — the row shows a spinner.
+    private(set) var rematchingIDs: Set<String> = []
+    /// The in-flight re-match task per external id, so a Re-match is cancellable and never runs twice.
+    @ObservationIgnored private var rematchTasks: [String: Task<Void, Never>] = [:]
+
+    /// Whether the per-row Re-match affordance is offered. Needs a matcher; hidden for Batocera
+    /// (romPromotion) whose ROM rows match by libretro filename, not the IGDB title ladder.
+    var canRematch: Bool { rematchMatcher != nil && !romPromotion }
+
     /// Header line: file source → "N games read from …"; network source → cache/network.
     var summaryLine: String { summary.summaryLine(sourceLabel: sourceLabel) }
 
@@ -213,6 +226,7 @@ final class ImportReviewModel {
          rowDetailByID: [String: String] = [:],
          customCommit: (@Sendable ([ImportReviewCommitRow]) async throws -> ImportCommitResult)? = nil,
          afterCommit: (@Sendable (ImportCommitResult, Bool) async -> Void)? = nil,
+         rematchMatcher: (any ImportMatcher)? = nil,
          onLibraryChanged: @escaping () -> Void = {}) {
         self.source = source
         self.sourceLabel = sourceLabel
@@ -229,6 +243,7 @@ final class ImportReviewModel {
         self.customCommit = customCommit
         self.useSourceCovers = showsSourceCoverToggle
         self.afterCommit = afterCommit
+        self.rematchMatcher = rematchMatcher
         self.onLibraryChanged = onLibraryChanged
         self.transientByID = Dictionary(result.rows.map { ($0.externalID, $0) }, uniquingKeysWith: { a, _ in a })
         self.matchByID = Dictionary(
@@ -507,6 +522,61 @@ final class ImportReviewModel {
             if bucket == .none { bucket = .plausible }   // an explicit pick is at least plausible
             row.confidence = bucket
             if !row.ignored { row.include = true }
+        }
+    }
+
+    // MARK: Re-match (PLAN §5.1, wave 16)
+
+    /// Whether this row can be re-matched right now: the affordance is enabled, the row is a
+    /// *New* one (no existing match to override), and not already re-matching.
+    func canRematch(_ row: ImportReviewRow) -> Bool {
+        canRematch && row.bucket == .new && row.matchedGameID == nil && !rematchingIDs.contains(row.externalID)
+    }
+
+    /// Re-run IGDB matching for **one** row (PLAN §5.1): clear its persisted attempt (so a later
+    /// sync also re-queries), query the matcher for just this title, then update the row's
+    /// proposal / alternatives / confidence and persist the fresh outcome. Cancellable
+    /// (``cancelRematch(_:)``); never a whole-sheet re-match. Returns the task so tests can await it.
+    @discardableResult
+    func rematch(_ externalID: String) -> Task<Void, Never>? {
+        guard let matcher = rematchMatcher,
+              let row = rows.first(where: { $0.externalID == externalID }),
+              !rematchingIDs.contains(externalID) else { return nil }
+        rematchingIDs.insert(externalID)
+        let request = ImportMatchRequest(
+            title: row.sourceTitle, platformSlug: row.platform, releaseYear: row.releaseYear)
+        let staging = self.staging, src = source
+        let task = Task { [weak self] in
+            try? await staging.clearMatchAttempt(source: src, externalID: externalID)
+            let outcome = try? await matcher.match(request)
+            guard let self, self.rematchingIDs.contains(externalID) else { return }  // cancelled ⇒ bail
+            self.applyRematch(externalID, outcome: outcome)
+            if let outcome {
+                try? await staging.recordMatchOutcome(
+                    source: src, externalID: externalID,
+                    PersistedImportMatch(outcome: outcome, bundle: nil))
+            }
+        }
+        rematchTasks[externalID] = task
+        return task
+    }
+
+    /// Cancel an in-flight Re-match (the spinner acts as a cancel button).
+    func cancelRematch(_ externalID: String) {
+        rematchTasks[externalID]?.cancel()
+        rematchTasks[externalID] = nil
+        rematchingIDs.remove(externalID)
+    }
+
+    private func applyRematch(_ externalID: String, outcome: ScanMatchOutcome?) {
+        rematchingIDs.remove(externalID)
+        rematchTasks[externalID] = nil
+        mutate(externalID) { row in
+            row.proposedMatch = outcome?.best
+            row.alternatives = outcome?.alternatives ?? []
+            row.confidence = outcome?.bucket ?? .none
+            if let year = outcome?.best?.releaseYear { row.releaseYear = year }
+            // The owner reviews the fresh proposal — never auto-tick a re-matched row.
         }
     }
 
@@ -1174,9 +1244,13 @@ private struct ImportReviewRowView: View {
 
     private var trailing: some View {
         HStack(spacing: 8) {
+            rematchControl
             Menu {
                 MatchAlternativesSection(alternatives: row.alternatives) { alt in
                     model.chooseAlternative(alt, externalID: row.externalID)
+                }
+                if model.canRematch(row) {
+                    Button("Re-match") { model.rematch(row.externalID) }
                 }
                 Divider()
                 if row.vaulted {
@@ -1193,6 +1267,23 @@ private struct ImportReviewRowView: View {
                 Image(systemName: "ellipsis.circle")
             }
             .menuStyle(.borderlessButton).fixedSize()
+        }
+    }
+
+    /// The per-row Re-match affordance (PLAN §5.1): a small button on a New row, replaced by a
+    /// cancel-able spinner while the single-title IGDB query runs. Never a whole-sheet re-match.
+    @ViewBuilder
+    private var rematchControl: some View {
+        if model.rematchingIDs.contains(row.externalID) {
+            Button { model.cancelRematch(row.externalID) } label: {
+                ProgressView().controlSize(.small)
+            }
+            .buttonStyle(.borderless)
+            .help("Matching… click to cancel")
+        } else if model.canRematch(row) {
+            Button("Re-match") { model.rematch(row.externalID) }
+                .font(.caption2).buttonStyle(.borderless)
+                .help("Search IGDB again for this title")
         }
     }
 }
@@ -1246,9 +1337,19 @@ private struct PSNReviewRowView: View {
                 Button("Bring back") { model.bringBack(row.externalID) }
                     .controlSize(.small)
             } else if !isReadOnly {
+                if model.rematchingIDs.contains(row.externalID) {
+                    Button { model.cancelRematch(row.externalID) } label: {
+                        ProgressView().controlSize(.small)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Matching… click to cancel")
+                }
                 Menu {
                     MatchAlternativesSection(alternatives: row.alternatives) { alt in
                         model.chooseAlternative(alt, externalID: row.externalID)
+                    }
+                    if model.canRematch(row) {
+                        Button("Re-match") { model.rematch(row.externalID) }
                     }
                     Divider()
                     if group == .ignored {

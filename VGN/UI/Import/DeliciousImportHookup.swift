@@ -101,7 +101,9 @@ final class DeliciousImportPresenter {
                     productFormat: .physical, platformChoices: platformChoices,
                     detectShelfDuplicates: true, showsSourceCoverToggle: afterCommit != nil,
                     showsPlatformPolicy: true,
-                    afterCommit: afterCommit, onLibraryChanged: onLibraryChanged)
+                    afterCommit: afterCommit,
+                    rematchMatcher: matcher is NoMatchImportMatcher ? nil : matcher,
+                    onLibraryChanged: onLibraryChanged)
                 review.onShowInVault = self.onShowInVault
                 self.reviewModel = review
                 self.progress = nil

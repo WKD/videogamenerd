@@ -20,6 +20,8 @@ struct LivePSNImportBackend: ImportBackend {
     var source: String { ImportSourceID.psn }
     var sourceLabel: String { "PlayStation" }
     var dataSets: [ImportDataSet] { importer.dataSets }
+    /// Re-match uses the sync matcher, except a no-match one (IGDB not configured) hides it.
+    var rematchMatcher: (any ImportMatcher)? { matcher is NoMatchImportMatcher ? nil : matcher }
 
     func hasSession() async -> Bool { await auth.hasSession() }
 
