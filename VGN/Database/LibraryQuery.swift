@@ -152,6 +152,11 @@ enum LibraryQuery {
             // `restrictToIDs` (see ``LibraryStore/fetchGames(_:_:)``). Reached with no restrict
             // set only in the preview/in-memory path, where the evaluator scopes it.
             break
+        case .dlcAndExpansions:
+            // Pure cached-type predicate (no request), like the bundle cached-type check (PLAN §5.1).
+            wheres.append(dlcAndExpansionsPredicate())
+        case .sameGameTwoEntries:
+            wheres.append(sameGameTwoEntriesPredicate())
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
@@ -447,6 +452,48 @@ enum LibraryQuery {
     /// the scalar/per-platform/length counts, never as a second observation.
     static func fetchUnlinkedCount(_ db: Database) throws -> Int {
         try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games WHERE igdb_id IS NULL") ?? 0
+    }
+
+    // MARK: - "What counts as a game" review lists (PLAN §5.1)
+
+    /// The cached IGDB `game_type` for `g` (else the legacy `category`), read from the game's
+    /// own `catalog_cache` blob — the same zero-request join the bundle candidate rule uses.
+    private static func cachedTypeExpr() -> String {
+        "COALESCE(json_extract(cc.json, '$.game_type'), json_extract(cc.json, '$.category'))"
+    }
+
+    /// PLAN §5.1 "DLC & Expansions": a game whose own cached IGDB type is dlc_addon (1),
+    /// expansion (2), mod (5), season (7), pack (13) or update (14) — NOT standalone_expansion (4)
+    /// or episode (6), which are games in their own right.
+    static func dlcAndExpansionsPredicate() -> String {
+        """
+        EXISTS(SELECT 1 FROM catalog_cache cc WHERE cc.igdb_id = g.igdb_id
+               AND \(cachedTypeExpr()) IN (1, 2, 5, 7, 13, 14))
+        """
+    }
+
+    /// PLAN §5.1 "Same Game, Two Entries": a game that is an IGDB **port** (game_type 11) whose
+    /// `parent_game` or `version_parent` IGDB id is **also** a library game — the pairs the owner
+    /// may want to merge (e.g. a 2020 port next to the 2007 original).
+    static func sameGameTwoEntriesPredicate() -> String {
+        """
+        EXISTS(SELECT 1 FROM catalog_cache cc WHERE cc.igdb_id = g.igdb_id
+               AND \(cachedTypeExpr()) = 11
+               AND (json_extract(cc.json, '$.parent_game')
+                        IN (SELECT igdb_id FROM games WHERE igdb_id IS NOT NULL AND igdb_id <> g.igdb_id)
+                    OR json_extract(cc.json, '$.version_parent')
+                        IN (SELECT igdb_id FROM games WHERE igdb_id IS NOT NULL AND igdb_id <> g.igdb_id)))
+        """
+    }
+
+    /// Sidebar count for the "DLC & Expansions" row (composed into the single counts observation).
+    static func fetchDLCAndExpansionsCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(dlcAndExpansionsPredicate())") ?? 0
+    }
+
+    /// Sidebar count for the "Same Game, Two Entries" row.
+    static func fetchSameGameTwoEntriesCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(sameGameTwoEntriesPredicate())") ?? 0
     }
 
     /// Locale-independent decimal literal for a `Double` app constant (Swift's own

@@ -27,6 +27,12 @@ struct SidebarCounts: Hashable, Sendable {
     /// shown only when > 0 (PLAN §5.1). Computed in the same single counts observation, via the
     /// shared candidate rule (``LibraryStore/fetchBundleExpansionCandidates(_:)``).
     var bundlesToExpand: Int
+    /// Library games whose cached IGDB type is DLC/expansion/pack/season/update/mod — the
+    /// "DLC & Expansions" row, shown only when > 0 (PLAN §5.1). Same single counts observation.
+    var dlcAndExpansions: Int
+    /// Library games that are an IGDB port whose parent is also in the library — the
+    /// "Same Game, Two Entries" row, shown only when > 0 (PLAN §5.1). Same counts observation.
+    var sameGameTwoEntries: Int
 
     init(
         all: Int = 0,
@@ -39,7 +45,9 @@ struct SidebarCounts: Hashable, Sendable {
         lengthShelves: [LengthShelf: Int] = [:],
         unmeasured: Int = 0,
         unlinked: Int = 0,
-        bundlesToExpand: Int = 0
+        bundlesToExpand: Int = 0,
+        dlcAndExpansions: Int = 0,
+        sameGameTwoEntries: Int = 0
     ) {
         self.all = all
         self.owned = owned
@@ -52,6 +60,8 @@ struct SidebarCounts: Hashable, Sendable {
         self.unmeasured = unmeasured
         self.unlinked = unlinked
         self.bundlesToExpand = bundlesToExpand
+        self.dlcAndExpansions = dlcAndExpansions
+        self.sameGameTwoEntries = sameGameTwoEntries
     }
 
     static let empty = SidebarCounts()
@@ -69,6 +79,8 @@ struct SidebarCounts: Hashable, Sendable {
         case .tierBoard, .theTop, .playNext: return nil
         case .unlinked: return unlinked
         case .bundlesToExpand: return bundlesToExpand
+        case .dlcAndExpansions: return dlcAndExpansions
+        case .sameGameTwoEntries: return sameGameTwoEntries
         case .length(let shelf): return lengthShelves[shelf] ?? 0
         case .unmeasured: return unmeasured
         // The ROM catalogue is a separate shelf — its count never rides the library counts
