@@ -16,6 +16,9 @@ import UniformTypeIdentifiers
 final class DeliciousImportPresenter {
     private let staging: ImportStagingStore
     private let matcher: any ImportMatcher
+    /// Expands a bundle match ("The Tomb Raider Trilogy") into its member games during
+    /// matching (PLAN §5.1); nil offline (a bundle then commits as a single).
+    @ObservationIgnored private let bundleExpander: (any ImportBundleExpanding)?
     private let platformChoices: [String]
     /// Live cover fallback context (store + cover actor); nil ⇒ no source covers offered.
     @ObservationIgnored private let coverContext: (store: LibraryStore, coverStore: CoverStore)?
@@ -31,11 +34,13 @@ final class DeliciousImportPresenter {
 
     init(staging: ImportStagingStore,
          matcher: any ImportMatcher,
+         bundleExpander: (any ImportBundleExpanding)? = nil,
          platformChoices: [String],
          coverContext: (store: LibraryStore, coverStore: CoverStore)? = nil,
          onLibraryChanged: @escaping () -> Void = {}) {
         self.staging = staging
         self.matcher = matcher
+        self.bundleExpander = bundleExpander
         self.platformChoices = platformChoices
         self.coverContext = coverContext
         self.onLibraryChanged = onLibraryChanged
@@ -74,13 +79,16 @@ final class DeliciousImportPresenter {
         let importer = DeliciousImporter(reader: DeliciousLibraryReader(url: url))
         let coordinator = ImportSyncCoordinator(staging: staging)
         let matcher = self.matcher
+        let bundleExpander = self.bundleExpander
         let staging = self.staging
         let platformChoices = self.platformChoices
         let onLibraryChanged = self.onLibraryChanged
         let afterCommit = coverApplier(for: url)
         syncTask = Task {
             do {
-                let result = try await coordinator.run(importer, matcher: matcher) { p in
+                let result = try await coordinator.run(
+                    importer, matcher: matcher, bundleExpander: bundleExpander
+                ) { p in
                     Task { @MainActor in self.progress = p }
                 }
                 if Task.isCancelled { self.reset(); return }
@@ -142,13 +150,18 @@ enum DeliciousImportBuilder {
         let staging = ImportStagingStore(database)
 
         let matcher: any ImportMatcher
+        var bundleExpander: (any ImportBundleExpanding)?
         if mode == .live, let graph, let platformCatalog,
            secrets.hasValue(for: .igdbClientID), secrets.hasValue(for: .igdbClientSecret) {
             matcher = ResilientImportMatcher(base: IGDBImportMatcher(
                 client: graph.igdbClient,
                 platformIGDBIDs: { slug in platformCatalog.entry(forSlug: slug)?.igdbIDs ?? [] }))
+            // Expand bundles ("The Tomb Raider Trilogy", "God of War Collection") into
+            // compilations at match time (PLAN §5.1) — the shared IGDB client.
+            bundleExpander = IGDBImportBundleExpander(client: graph.igdbClient)
         } else {
             matcher = NoMatchImportMatcher()
+            bundleExpander = nil
         }
 
         // Every VGN platform is offered per-row (Delicious spans consoles + hybrid discs).
@@ -160,7 +173,8 @@ enum DeliciousImportBuilder {
             graph.map { (store, $0.coverStore) }
 
         let presenter = DeliciousImportPresenter(
-            staging: staging, matcher: matcher, platformChoices: platformChoices,
+            staging: staging, matcher: matcher, bundleExpander: bundleExpander,
+            platformChoices: platformChoices,
             coverContext: coverContext, onLibraryChanged: onLibraryChanged)
         presenter.onError = onError
         return presenter

@@ -55,6 +55,9 @@ struct LiveGOGImportBackend: ImportBackend {
     let matcher: any ImportMatcher
     let cache: ImportResponseCacheStore
     let staging: ImportStagingStore
+    /// Expands a bundle match into its member games during matching (PLAN §5.1); nil when
+    /// IGDB is not configured, so a bundle simply commits as a single.
+    var bundleExpander: (any ImportBundleExpanding)? = nil
 
     var source: String { ImportSourceID.gog }
     var sourceLabel: String { "GOG" }
@@ -104,7 +107,8 @@ struct LiveGOGImportBackend: ImportBackend {
     }
 
     func runSync(onProgress: @Sendable @escaping (ImportProgress) -> Void) async throws -> ImportSyncResult {
-        try await coordinator.run(importer, matcher: matcher, onProgress: onProgress)
+        try await coordinator.run(importer, matcher: matcher, bundleExpander: bundleExpander,
+                                  onProgress: onProgress)
     }
 }
 
