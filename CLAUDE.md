@@ -123,7 +123,11 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   fourth fate — a review row the owner sent to the Vault, kept out of the library, never
   re-proposed), `match_attempted_at` + `match_json` (the persisted per-title IGDB match outcome
   so a cancelled-then-restarted or a second sync resumes without re-querying — matched reused
-  indefinitely, no-match re-queried after 30 days or on "Re-match")). `LibraryStore`
+  indefinitely, no-match re-queried after 30 days or on "Re-match");
+  v14 adds `games.cover_provisional` (PLAN §5.2/§5.5) — 1 marks an importer-supplied (Delicious)
+  cover as a stopgap the background cover job may upgrade; a user-chosen cover is never touched and
+  a miss keeps it (the 7-day negative cache stops a refetch loop); pure additive `ADD COLUMN` + a
+  one-shot backfill of Delicious-origin, not-user-chosen covers that never went through a cover job)). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`

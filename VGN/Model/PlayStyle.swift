@@ -68,6 +68,13 @@ enum PlayStyle: String, Hashable, Sendable, Codable, CaseIterable, Identifiable 
     }
 }
 
+extension Notification.Name {
+    /// Posted when the owner commits a new ``PlayStyle``. The BY LENGTH shelves re-run
+    /// through their own wiring; other open windows (the Library Stats window) listen for
+    /// this to re-read the style and re-query (owner request 2026-09-20).
+    static let vgnPlayStyleDidChange = Notification.Name("vgn.playStyleDidChange")
+}
+
 /// A game's length *for the owner* — the personal length in seconds, plus whether it
 /// was derived from only one side (so the UI may show "≈"). `nil` from the builder means
 /// *Unmeasured* (no main and no completionist estimate — a rushed-only game qualifies).

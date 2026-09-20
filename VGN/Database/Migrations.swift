@@ -593,6 +593,44 @@ enum Migrations {
         }
     }
 
+    // MARK: - v14 — provisional (importer-supplied) covers (PLAN §5.2 / §5.5, owner request)
+
+    /// v14 marks an importer-supplied cover (Delicious box art, §5.5) as **provisional**
+    /// so the background cover job may still upgrade it (owner request: "a Delicious
+    /// box-art cover sticks even when a better one exists"). A provisional cover is a
+    /// stopgap: the provider chain (IGDB → libretro…) is still run for the game and, on a
+    /// hit, replaces it; a **user-chosen** cover (`user_edited` contains `cover`) is never
+    /// touched, and when the chain finds nothing the provisional cover stays (the usual
+    /// 7-day negative cache prevents a refetch loop).
+    ///
+    ///  - `games.cover_provisional` — 0 = a real/chosen cover (or none), 1 = an importer
+    ///    stopgap the cover job may replace. Pure additive `ADD COLUMN`.
+    ///  - **Backfill** for existing libraries: a game's current cover *came from the
+    ///    Delicious importer* exactly when it is Delicious-origin, has a cover, has not
+    ///    been hand-chosen, and has **no `cover` enrichment job** — because a game whose
+    ///    cover was empty at import time would have had a cover job enqueued and run,
+    ///    whereas an importer-supplied cover fills `cover_file` before that scan, so no
+    ///    cover job is ever created for it. That "no cover job" signal is what makes the
+    ///    provenance identifiable and the backfill safe (it never touches a real
+    ///    provider-fetched cover).
+    static func registerV14(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v14") { db in
+            try db.execute(sql: """
+                ALTER TABLE games ADD COLUMN cover_provisional INTEGER NOT NULL DEFAULT 0
+                    CHECK (cover_provisional IN (0, 1));
+                """)
+            try db.execute(sql: """
+                UPDATE games SET cover_provisional = 1
+                 WHERE origin = 'delicious'
+                   AND cover_file IS NOT NULL AND cover_file <> ''
+                   AND (',' || user_edited || ',') NOT LIKE '%,cover,%'
+                   AND NOT EXISTS (
+                        SELECT 1 FROM enrichment_jobs j
+                        WHERE j.game_id = games.id AND j.kind = 'cover');
+                """)
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

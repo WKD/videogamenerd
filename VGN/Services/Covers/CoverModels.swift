@@ -49,6 +49,9 @@ struct CoverCandidate: Sendable, Equatable, Identifiable {
     /// the "Choose Cover…" sheet's per-tile label. `nil` when the provider can't
     /// tell (e.g. the IGDB key-art fallback).
     var region: String? = nil
+    /// What kind of image this is within its provider ("cover", "artwork"…), for the
+    /// sheet's per-tile label (provider · kind · size). `nil` leaves it out.
+    var kind: String? = nil
     /// Pixel dimensions of the source image when known ahead of download (the IGDB
     /// size tokens have fixed dimensions; libretro sizes are unknown until fetched).
     var pixelSize: CGSize? = nil

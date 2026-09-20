@@ -23,6 +23,7 @@ struct IGDBCoverProvider: CoverProvider {
             score: 1.0,          // exact key art for this game
             isConfident: true,
             region: nil,
+            kind: "cover",
             pixelSize: Self.pixelSize(for: size)
         )]
     }

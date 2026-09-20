@@ -16,10 +16,13 @@ struct LibraryStatsStore: Sendable {
 
     init(_ database: AppDatabase) { self.database = database }
 
-    /// One-shot report for a scope.
-    func report(scope: StatsScope, referenceDate: Date = Date()) async throws -> LibraryStatsReport {
+    /// One-shot report for a scope. `playStyle` sets the owner's **personal length** — the
+    /// single source of truth the BY LENGTH shelves use — for planning hours like the
+    /// backlog estimate (D4, owner request 2026-09-20).
+    func report(scope: StatsScope, playStyle: PlayStyle = .default,
+                referenceDate: Date = Date()) async throws -> LibraryStatsReport {
         try await dbReader.read { db in
-            try Self.fetchReport(db, scope: scope, referenceDate: referenceDate)
+            try Self.fetchReport(db, scope: scope, playStyle: playStyle, referenceDate: referenceDate)
         }
     }
 
@@ -68,7 +71,8 @@ struct LibraryStatsStore: Sendable {
 
     // MARK: - Report
 
-    static func fetchReport(_ db: Database, scope: StatsScope, referenceDate: Date) throws -> LibraryStatsReport {
+    static func fetchReport(_ db: Database, scope: StatsScope, playStyle: PlayStyle = .default,
+                            referenceDate: Date) throws -> LibraryStatsReport {
         let s = scopeClause(scope)
 
         // 1 — Overview head + section-4 unknown-year, in one pass over games.
@@ -191,9 +195,15 @@ struct LibraryStatsStore: Sendable {
             FROM games g
             WHERE \(s) AND \(effectiveOrNull) IS NOT NULL AND g.ttb_normally_s IS NOT NULL
             """)!
+        // "Backlog to beat" is a planning figure — time the owner would need — so it uses
+        // the **personal length** at their play style (the BY LENGTH source of truth), not
+        // the raw IGDB main story. A game with only a rushed estimate has no personal
+        // length → it counts as *without an estimate* (D4). "Me vs. average" above keeps the
+        // raw advertised `ttb_normally_s`, because that is what the comparison is against.
+        let lengthExpr = LibraryQuery.lengthEstimateExpr(style: playStyle)
         let backlogEstRow = try Row.fetchOne(db, sql: """
-            SELECT COALESCE(SUM(g.ttb_normally_s), 0) AS est,
-                   COALESCE(SUM(g.ttb_normally_s IS NULL), 0) AS missing
+            SELECT COALESCE(SUM(\(lengthExpr)), 0) AS est,
+                   COALESCE(SUM(\(lengthExpr) IS NULL), 0) AS missing
             FROM games g
             WHERE \(s) AND g.played = 0
               AND EXISTS(SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)

@@ -104,8 +104,12 @@ import GRDB
         #expect(r.myHoursVsAverage.mineSeconds == 50 * h)
         #expect(r.myHoursVsAverage.averageSeconds == 50 * h)
 
-        // Backlog estimate: g5's 15 h; g6 missing.
-        #expect(r.myHoursVsAverage.backlogEstimateSeconds == 15 * h)
+        // Backlog estimate uses the owner's PERSONAL length at the default play style
+        // (D4), not the raw 15 h main story; g6 has no estimate.
+        let expectedBacklog = PersonalLength.compute(
+            normallyS: 15 * h, completelyS: nil, style: .default)!.seconds
+        #expect(r.myHoursVsAverage.backlogEstimateSeconds == expectedBacklog)
+        #expect(expectedBacklog != 15 * h)   // it reflects the play style
         #expect(r.myHoursVsAverage.backlogGamesMissingEstimate == 1)
     }
 

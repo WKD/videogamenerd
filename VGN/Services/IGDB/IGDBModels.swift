@@ -72,6 +72,22 @@ struct IGDBGameDTO: Decodable, Sendable {
     }
 }
 
+/// One game's artworks as IGDB returns them for the "Choose Cover…" fetch (PLAN §5.2).
+struct IGDBArtworksDTO: Decodable, Sendable {
+    let id: Int64
+    let artworks: [ArtworkImage]?
+
+    struct ArtworkImage: Decodable, Sendable {
+        let imageId: String?
+        let width: Int?
+        let height: Int?
+        enum CodingKeys: String, CodingKey {
+            case imageId = "image_id"
+            case width, height
+        }
+    }
+}
+
 /// One `game_time_to_beats` row. Durations are in seconds; any may be absent.
 struct IGDBTimeToBeatDTO: Decodable, Sendable {
     let gameId: Int64
@@ -161,6 +177,15 @@ enum IGDBTraitLimits {
     static let keywords = 12
 }
 
+/// One IGDB artwork/screenshot image for a game (PLAN §5.2 "Choose Cover…"): the
+/// image CDN id plus its source pixel dimensions when known, so a candidate tile can be
+/// labelled before the image is fetched.
+struct IGDBArtwork: Sendable, Equatable {
+    let imageID: String
+    let width: Int?
+    let height: Int?
+}
+
 /// Average completion times (PLAN §5.1 / §6.4). All durations in seconds.
 struct IGDBTimeToBeat: Sendable, Equatable, Identifiable {
     let gameID: Int64
@@ -198,6 +223,9 @@ enum IGDBFields {
     ]
 
     static let timeToBeat = ["game_id", "hastily", "normally", "completely", "count"]
+
+    /// The "Choose Cover…" artwork fetch (PLAN §5.2 step 4): one `/v4/games` query by id.
+    static let artworks = ["artworks.image_id", "artworks.width", "artworks.height"]
 }
 
 // MARK: - Date helpers

@@ -147,6 +147,23 @@ actor IGDBClient {
         }
     }
 
+    /// The artworks for one game (PLAN §5.2 "Choose Cover…" step 4): one rate-limited
+    /// `/v4/games` query by IGDB id, returning each artwork's image id + source
+    /// dimensions. Fetched on demand when the sheet opens — nothing is cached or stored.
+    /// Returns `[]` when the game has no artworks.
+    func artworks(forGameID igdbID: Int64) async throws -> [IGDBArtwork] {
+        let query = IGDBQuery()
+            .fields(IGDBFields.artworks)
+            .filter("id = \(igdbID)")
+            .limit(1)
+        let data = try await requestData(endpoint: "games", body: query.build())
+        let dtos = try decode([IGDBArtworksDTO].self, from: data)
+        return (dtos.first?.artworks ?? []).compactMap { image in
+            guard let id = image.imageId, !id.isEmpty else { return nil }
+            return IGDBArtwork(imageID: id, width: image.width, height: image.height)
+        }
+    }
+
     // MARK: - Cache decode (enrichment cache-hit path)
 
     /// Decode one cached `/v4/games` JSON object into public metadata, so the

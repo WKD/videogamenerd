@@ -189,12 +189,14 @@ actor EnrichmentCoordinator {
             ON CONFLICT(kind, game_id) DO NOTHING
             """, arguments: ["now": now])
 
-        // cover: any game without a cover file, if it is searchable — an igdb game
-        // (has key art) or a game on a platform with a libretro repo.
+        // cover: any game without a cover file — or one whose cover is only a
+        // **provisional** importer stopgap (v14, Delicious box art) that a provider may
+        // upgrade — if it is searchable: an igdb game (has key art) or a game on a
+        // platform with a libretro repo.
         try db.execute(sql: """
             INSERT INTO enrichment_jobs (kind, game_id, state, attempts, next_attempt_at, created_at)
             SELECT 'cover', g.id, 'pending', 0, :now, :now FROM games g
-            WHERE g.cover_file IS NULL
+            WHERE (g.cover_file IS NULL OR g.cover_provisional = 1)
               AND (
                     g.igdb_id IS NOT NULL
                  OR EXISTS (
@@ -354,15 +356,27 @@ actor EnrichmentCoordinator {
                         let stored = try await store.fetchAndStoreCover(for: query, gameID: row.id)
                         if let stored {
                             // Don't clobber a user-set cover: a user-edited cover is
-                            // protected even on a refresh; otherwise fill when empty
-                            // (or re-fetch on force).
+                            // protected even on a refresh. Otherwise fill when empty, or
+                            // **replace a provisional** importer cover (v14), or re-fetch
+                            // on force. A miss (nil) leaves a provisional cover in place —
+                            // the negative cache then stops a refetch loop.
                             let coverEdited = row.userEdited.contains(.cover)
-                            let current: String? = (try? await library.dbReader.read { db in
-                                try String.fetchOne(db, sql: "SELECT cover_file FROM games WHERE id = ?",
-                                                    arguments: [row.id])
-                            }) ?? nil
-                            if !coverEdited && (force || current == nil) {
-                                try await library.updateMetadata(gameID: row.id, MetadataPatch(coverFile: stored.coverFile))
+                            let state: (file: String?, provisional: Bool) =
+                                (try? await library.dbReader.read { db in
+                                    let r = try Row.fetchOne(
+                                        db, sql: "SELECT cover_file, cover_provisional FROM games WHERE id = ?",
+                                        arguments: [row.id])
+                                    return (r?["cover_file"], (r?["cover_provisional"] as Int? ?? 0) == 1)
+                                }) ?? (nil, false)
+                            let current = state.file
+                            let provisional = state.provisional
+                            if !coverEdited && (force || current == nil || provisional) {
+                                let replaced = try await library.setProviderCover(
+                                    gameID: row.id, coverFile: stored.coverFile)
+                                // Delete the now-orphaned original (the provisional/old file).
+                                if let replaced, replaced != stored.coverFile {
+                                    await store.removeCover(replaced)
+                                }
                             }
                         }
                         // A miss (nil) is a normal outcome (respects the negative cache).
