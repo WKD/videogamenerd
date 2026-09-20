@@ -25,8 +25,11 @@ struct MiscSnapshotTests {
     }
 
     @Test func photoScanSettings() async {
+        // The tab probes the local `claude --version` on appear; a longer render settle lets the
+        // detected path/version resolve before capture (else it races the capture and the frame
+        // differs run to run — the same async-content flake as playnext-small-library).
         await SnapshotHarness.capture(group: settingsGroup, "settings-photo-scan",
-                                      size: SnapSize(width: 560, height: 460)) {
+                                      size: SnapSize(width: 560, height: 460), settle: 16) {
             PhotoScanSettingsTab().frame(width: 500, height: 420)
         }
     }
@@ -103,6 +106,44 @@ struct MiscSnapshotTests {
         await SnapshotHarness.capture(group: sheetsGroup, "sheet-batch-owned",
                                       size: SnapSize(width: 480, height: 460)) {
             BatchOwnershipSheet(model: model, onClose: {})
+        }
+    }
+
+    // MARK: Import — shared matching-progress modal (GOG / PSN / Delicious / Batocera)
+
+    @Test func importMatchingProgress() async {
+        // Determinate matching phase with a very long title (the shared view must keep a fixed
+        // size and not resize as titles scroll by).
+        await SnapshotHarness.capture(group: sheetsGroup, "import-matching-progress",
+                                      size: SnapSize(width: 500, height: 260)) {
+            ImportMatchingProgressView(
+                progress: ImportProgress(phase: .matching, completed: 137, total: 412,
+                                         currentTitle: "The Legend of Zelda: Tears of the Kingdom — Collector's Edition",
+                                         alreadyMatched: 24),
+                phaseLabel: "Matching to IGDB…")
+        }
+        // Indeterminate fetching phase.
+        await SnapshotHarness.capture(group: sheetsGroup, "import-matching-fetching",
+                                      size: SnapSize(width: 500, height: 220)) {
+            ImportMatchingProgressView(
+                progress: ImportProgress(phase: .fetching, detail: "Reading page 3"),
+                phaseLabel: "Fetching your PlayStation library…")
+        }
+    }
+
+    // MARK: Bundle expansion sheet (a placeholder bundle → a compilation of members)
+
+    @Test func bundleExpansion() async {
+        let members = [
+            CompilationMemberDraft(title: "Mass Effect", year: 2007),
+            CompilationMemberDraft(title: "Mass Effect 2", year: 2010),
+            CompilationMemberDraft(title: "Mass Effect 3", year: 2012),
+        ]
+        let model = BundleExpansionModel(gameID: 1, bundleTitle: "Mass Effect Legendary Edition",
+                                         members: members, carriesPlayData: false)
+        await SnapshotHarness.capture(group: sheetsGroup, "sheet-bundle-expansion",
+                                      size: SnapSize(width: 500, height: 540)) {
+            BundleExpansionSheet(model: model)
         }
     }
 

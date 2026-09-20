@@ -47,8 +47,14 @@ else
   echo "Generating snapshots (no verify) …"
 fi
 
+  # Snapshots render on the main thread; running the suites in parallel lets them steal
+  # main-actor time from each other's deferred glyph/text pass, which makes the sub-pixel
+  # anti-aliasing non-deterministic run-to-run (a same-machine record→verify then flaked on
+  # ~16 screens at 2–7%). Serialising the suites (-parallel-testing-enabled NO) makes the
+  # round-trip stable, so verify is a reliable check. See docs/snapshots.md.
   xcodebuild -project VGN.xcodeproj -scheme VGN -destination 'platform=macOS' \
     -derivedDataPath .build/dd \
+    -parallel-testing-enabled NO \
     test \
     -only-testing:VGNTests/SnapshotSmokeTests \
     -only-testing:VGNTests/LibrarySnapshotTests \
@@ -57,7 +63,11 @@ fi
     -only-testing:VGNTests/RankingSnapshotTests \
     -only-testing:VGNTests/PlayNextSnapshotTests \
     -only-testing:VGNTests/ScanSnapshotTests \
-    -only-testing:VGNTests/MiscSnapshotTests
+    -only-testing:VGNTests/MiscSnapshotTests \
+    -only-testing:VGNTests/StatsSnapshotTests \
+    -only-testing:VGNTests/BatoceraSnapshotTests \
+    -only-testing:VGNTests/GOGSnapshotTests \
+    -only-testing:VGNTests/DeliciousSnapshotTests
 
 echo
 echo "Done. Contact sheet: $ROOT/.build/snapshots/index.html"

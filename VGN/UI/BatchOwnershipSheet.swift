@@ -13,7 +13,10 @@ struct BatchOwnershipSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(model.title)
+            // A string literal so SwiftUI applies the `inflect:` grammar agreement
+            // ("1 Game" / "4 Games"); `model.title` is a runtime String and `Text(String)`
+            // renders verbatim, which leaked the raw `^[…](inflect:)` markup.
+            Text("Mark ^[\(model.rows.count) Game](inflect: true) as Owned")
                 .font(.title3.bold())
                 .padding([.top, .horizontal], 20)
             summary
@@ -73,20 +76,18 @@ struct BatchOwnershipSheet: View {
         .frame(width: 460)
     }
 
-    @ViewBuilder
-    private var summary: some View {
-        // "3 games · 2 already owned — unchanged". Extra skips only when present.
-        let parts: [String] = {
-            var out = ["^[\(model.rows.count) game](inflect: true) to mark owned"]
-            if model.alreadyOwnedCount > 0 {
-                out.append("\(model.alreadyOwnedCount) already owned — unchanged")
-            }
-            if model.noPlatformCount > 0 {
-                out.append("^[\(model.noPlatformCount) game](inflect: true) without a platform — skipped")
-            }
-            return out
-        }()
-        Text(parts.joined(separator: " · "))
+    // "3 games · 2 already owned — unchanged". Each piece is a string LITERAL so the
+    // `inflect:` grammar agreement is applied — joining runtime Strings and rendering the
+    // result verbatim leaked the raw `^[…](inflect:)` markup. Extra skips only when present.
+    private var summary: Text {
+        var text = Text("^[\(model.rows.count) game](inflect: true) to mark owned")
+        if model.alreadyOwnedCount > 0 {
+            text = text + Text(" · \(model.alreadyOwnedCount) already owned — unchanged")
+        }
+        if model.noPlatformCount > 0 {
+            text = text + Text(" · ^[\(model.noPlatformCount) game](inflect: true) without a platform — skipped")
+        }
+        return text
     }
 
     private func platformBinding(_ row: BatchOwnershipRow) -> Binding<String> {

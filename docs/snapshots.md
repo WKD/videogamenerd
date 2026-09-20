@@ -104,15 +104,18 @@ On a failure a `<name>@<appearance>.diff.png` (changed pixels flagged red) is
 written next to the output for inspection. Thresholds are constants at the top of
 `SnapshotHarness.swift` (`SnapThresholds`).
 
-**Stability today:** once placeholder tints were made deterministic (above), a
-same-machine record→verify round-trip is clean on 123 of 124 references — text
-anti-aliasing stays well under the 2 % budget. The one that still trips is
-`playnext-small-library@light`: its taste-model line depends on when the async
-backtest resolves relative to capture, so the frame occasionally differs. It is
-left as-is (verify is opt-in and not a gate); if it bothers you, give that test a
-larger `settle`. References are downscaled to 560 px wide before committing (the
-current capture is downscaled to match before comparing), which keeps the set at
-~6.8 MB.
+**Stability — run the suites SERIALLY (wave 18).** `scripts/snapshots.sh` now passes
+`-parallel-testing-enabled NO`. Rendering is main-thread work; when the snapshot suites
+ran **in parallel** they stole main-actor time from each other's deferred glyph/text
+pass, so the sub-pixel anti-aliasing came out **non-deterministic run to run** — a
+same-machine record→verify (both parallel) flaked on ~16 *random* screens at 2–7 %
+(different set each run, i.e. pure AA noise, not a real diff). This is worse than the
+one-off `playnext-small-library` timing case the earlier note described. Serialising the
+suites makes the round-trip **stable**: a full serial record→verify is clean, and a
+repeated serial verify stays clean. Always record and verify with the script (or add the
+flag yourself) so both sides use the same serial timing. References are downscaled to
+560 px wide before committing (the current capture is downscaled to match before
+comparing), which keeps the set small.
 
 ## Coverage
 
@@ -124,7 +127,15 @@ current capture is downscaled to match before comparing), which keeps the set at
 | `RankingSnapshotTests` | Duel (placement / refine / border / empty), disputes sheet, Triage (active / done), Tier Board (small / empty / 300 tiles), The Top (unfiltered / filtered / short), tier legend, unavailable |
 | `PlayNextSnapshotTests` | Hero + alternatives (wide + compact), small-library banner, empty (nothing fits / no rankings), unavailable, Ask Claude (asking / agreed / disagreed / failed) |
 | `ScanSnapshotTests` | Input, progress rows, review sheet (all three buckets + greyed duplicates), review compact |
-| `MiscSnapshotTests` | Settings (Accounts + Photo Scan tabs), compilation editor, ownership / batch-mark-owned / copy-removal / group-compilation sheets, stats popover, database-error screen, shared components (chips, placeholder covers, ranking covers) |
+| `MiscSnapshotTests` | Settings (Accounts + Photo Scan tabs), compilation editor, ownership / batch-mark-owned / copy-removal / group-compilation / **bundle-expansion** sheets, the **shared import matching-progress modal** (matching w/ long title + fetching), stats popover, database-error screen, shared components (chips, placeholder covers, ranking covers) |
+| `StatsSnapshotTests` | Library Stats dashboard (populated + empty scope) — the new full-window stats view (`stats-popover` in Misc is the sidebar popover) |
+| `BatoceraSnapshotTests` | ROM catalogue browser, Discover card, Settings ▸ Batocera pane |
+| `GOGSnapshotTests` | Import-from-GOG review sheet, account pane (signed-out / signed-in / rejected) |
+| `DeliciousSnapshotTests` | Import-from-Delicious review sheet |
+
+The four suites above (Stats, Batocera, GOG, Delicious) were added to disk in waves 12–17
+but were **missing from `scripts/snapshots.sh`** until wave 18, so their references had
+never been recorded; they are now in the script and recorded.
 
 Layout-sensitive screens (main window, Tier Board 300, Play Next, scan review) are
 captured at two sizes (≈ 1200×780 and ≈ 900×600); the rest at one representative
@@ -161,6 +172,16 @@ size. Everything is captured in both light and dark.
 Every screen was reviewed by eye in both appearances against PLAN §8/§7/§7b.
 
 ### Fixed (surgical, in `VGN/UI/**`)
+
+* **Bulk "Mark Owned" sheet leaked raw grammar-agreement markup (wave 18).** The title
+  and subtitle read literally `Mark ^[4 Game](inflect: true) as Owned` /
+  `^[4 game](inflect: true) to mark owned …` instead of "Mark 4 Games as Owned". Cause:
+  `BatchOwnershipModel.title` and the summary were built as runtime `String`s and rendered
+  with `Text(String)`, which is **verbatim** — SwiftUI's `inflect:` grammar agreement only
+  runs for a string *literal* (`LocalizedStringKey`). This is a real app bug (not an
+  off-screen artifact — the live app rendered the markup too). Fixed in
+  `BatchOwnershipSheet` by rendering the title + summary from string literals (the summary
+  as a concatenated `Text`). Found by eyeballing `sheet-batch-owned` before recording it.
 
 * **Duel header showed the progress count twice** — `ranking-duel-placement`
   read "Placing Bloodborne in S · 3 of ~6" *and* a second "3 of ~6" beside it.
