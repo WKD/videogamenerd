@@ -14,6 +14,9 @@ import SwiftUI
 final class HLTBFetchPresenter {
     private let store: LibraryStore
     private let makeSearch: @Sendable () -> any HLTBSearching
+    /// Whether the injected searcher reaches the network (live mode) — the manual Find
+    /// sheet says so and stays inert otherwise (PLAN §5.3, D5).
+    private let searchIsLive: Bool
     /// The focused library view model — for selection scope, banners and Undo.
     weak var library: LibraryViewModel?
 
@@ -21,6 +24,8 @@ final class HLTBFetchPresenter {
     var bulk: HLTBBulkFetchModel?
     /// Non-nil while the single-game picker sheet is up.
     var picker: HLTBPickerRequest?
+    /// Non-nil while the manual "Find on HowLongToBeat…" sheet is up (D5).
+    var find: HLTBFindModel?
     private(set) var isFetchingOne = false
 
     /// The game ids the owner dismissed as "Estimate Looks Right" (PLAN §5.3). Cached
@@ -28,9 +33,11 @@ final class HLTBFetchPresenter {
     /// `app_state` directly in SQL. Loaded once, then kept in sync on each toggle.
     private(set) var dismissedEstimateIDs: Set<Int64> = []
 
-    init(store: LibraryStore, makeSearch: @escaping @Sendable () -> any HLTBSearching) {
+    init(store: LibraryStore, makeSearch: @escaping @Sendable () -> any HLTBSearching,
+         searchIsLive: Bool = false) {
         self.store = store
         self.makeSearch = makeSearch
+        self.searchIsLive = searchIsLive
         Task { [weak self] in await self?.reloadDismissedEstimates() }
     }
 
@@ -131,20 +138,32 @@ final class HLTBFetchPresenter {
         guard !isFetchingOne, let library else { return }
         isFetchingOne = true
         let search = makeSearch()
+        let service = HLTBFillService(search: search)
         let store = self.store
+        // An explicit inspector Refresh honours the 24 h cache floor (D1); a gap-fill takes
+        // any fresh cache.
+        let policy: HLTBFreshnessPolicy = mode == .replace ? .refresh : .cacheFirst
         Task { [weak self] in
             defer { self?.isFetchingOne = false }
             guard let facts = (try? await store.timeToBeatFacts(gameIDs: [gameID]))?[gameID] else { return }
+            let slugs = facts.platformSlugSet
             do {
-                let candidates = try await search.search(title: facts.title)
-                switch HLTBMatcher.match(title: facts.title, year: facts.year, candidates: candidates) {
-                case .confident(let candidate):
-                    await self?.applyConfident(gameID: gameID, candidate: candidate, mode: mode)
-                case .ambiguous(let list):
-                    self?.picker = HLTBPickerRequest(
-                        gameID: gameID, title: facts.title, year: facts.year, candidates: list, mode: mode)
-                case .notFound:
-                    library.showBanner("No HowLongToBeat match for “\(facts.title)”.", kind: .info)
+                // D4: a linked game refreshes exactly by its stored id — never ambiguous.
+                if let hltbID = facts.hltbID {
+                    switch try await service.resolveLinked(
+                        title: facts.title, year: facts.year, hltbID: hltbID, librarySlugs: slugs, policy: policy) {
+                    case .exact(let candidate):
+                        await self?.applyConfident(gameID: gameID, candidate: candidate, mode: mode)
+                        await search.rememberChosen(candidate)
+                    case .lost(let outcome):
+                        await self?.handleSingle(outcome, gameID: gameID, facts: facts, mode: mode,
+                                                 search: search, lostLink: true)
+                    }
+                } else {
+                    let outcome = try await service.resolve(
+                        title: facts.title, year: facts.year, librarySlugs: slugs, policy: policy)
+                    await self?.handleSingle(outcome, gameID: gameID, facts: facts, mode: mode,
+                                             search: search, lostLink: false)
                 }
             } catch let error as ImportError {
                 library.showBanner(Self.stopMessage(error), kind: .error)
@@ -154,11 +173,39 @@ final class HLTBFetchPresenter {
         }
     }
 
-    /// The user picked one candidate from the single-game picker sheet.
+    /// Route a single-game match outcome (D2/D4): apply a confident match (and remember it),
+    /// raise the picker for an ambiguous one (with the game's platforms), or banner a miss.
+    private func handleSingle(_ outcome: HLTBMatchOutcome, gameID: Int64, facts: HLTBGameFacts,
+                              mode: HLTBWriteMode, search: any HLTBSearching, lostLink: Bool) async {
+        guard let library else { return }
+        switch outcome {
+        case .confident(let candidate):
+            await applyConfident(gameID: gameID, candidate: candidate, mode: mode)
+            await search.rememberChosen(candidate)
+        case .ambiguous(let list):
+            if lostLink {
+                library.showBanner("HowLongToBeat entry not found any more — pick again.", kind: .info)
+            }
+            picker = HLTBPickerRequest(gameID: gameID, title: facts.title, year: facts.year,
+                                       candidates: list, mode: mode, librarySlugs: facts.platformSlugs)
+        case .notFound:
+            let note = lostLink
+                ? "HowLongToBeat entry not found any more for “\(facts.title)”."
+                : "No HowLongToBeat match for “\(facts.title)”."
+            library.showBanner(note, kind: .info)
+        }
+    }
+
+    /// The user picked one candidate from the single-game picker sheet — also remembers it
+    /// under its id-key (D1) so the next refresh is exact.
     func pickForSingle(_ candidate: HLTBCandidate) {
         guard let request = picker else { return }
         picker = nil
-        Task { await applyConfident(gameID: request.gameID, candidate: candidate, mode: request.mode) }
+        let search = makeSearch()
+        Task {
+            await applyConfident(gameID: request.gameID, candidate: candidate, mode: request.mode)
+            await search.rememberChosen(candidate)
+        }
     }
 
     func dismissPicker() { picker = nil }
@@ -197,6 +244,101 @@ final class HLTBFetchPresenter {
         }
         return "HowLongToBeat request stopped."
     }
+
+    // MARK: - Manual "Find on HowLongToBeat…" (D5)
+
+    /// Open the manual search + link sheet for one game (inspector, grid context menu,
+    /// Game menu). Prefilled with the D3-cleaned title; the searcher is inert unless live.
+    func findOne(gameID: Int64) {
+        guard find == nil else { return }
+        let store = self.store
+        let search = makeSearch()
+        let isLive = searchIsLive
+        Task { [weak self] in
+            guard let self else { return }
+            guard let facts = (try? await store.timeToBeatFacts(gameIDs: [gameID]))?[gameID] else { return }
+            let model = HLTBFindModel(
+                gameID: gameID, title: facts.title, year: facts.year,
+                librarySlugs: facts.platformSlugs, linkedID: facts.hltbID,
+                prefill: HLTBQueryLadder.prefill(for: facts.title),
+                search: search, isInert: !isLive)
+            model.onCancel = { [weak self] in self?.find = nil }
+            model.onLink = { [weak self] candidate, kind in
+                self?.applyFindLink(gameID: gameID, candidate: candidate, kind: kind, search: search)
+            }
+            model.onUnlink = { [weak self] in self?.applyFindUnlink(gameID: gameID) }
+            self.find = model
+        }
+    }
+
+    func dismissFind() { find = nil }
+
+    /// Whether "Find on HowLongToBeat…" is offerable from the Game menu — a single game
+    /// is selected in a library grid destination.
+    var canFindSelected: Bool {
+        guard let library, library.isLibraryGridDestination else { return false }
+        return library.selectedGameIDs.count == 1
+    }
+
+    /// Open the Find sheet for the single selected game (Game menu).
+    func findSelected() {
+        guard let library, library.selectedGameIDs.count == 1,
+              let id = library.selectedGameIDs.first else { return }
+        findOne(gameID: id)
+    }
+
+    private func applyFindLink(gameID: Int64, candidate: HLTBCandidate,
+                               kind: HLTBFindModel.LinkKind, search: any HLTBSearching) {
+        find = nil
+        guard let library else { return }
+        let store = self.store
+        Task { [weak self] in
+            await search.rememberChosen(candidate)
+            switch kind {
+            case .linkAndUse:
+                let result = try? await store.replaceHLTBTimes(gameID: gameID, candidate: candidate)
+                if let result, result.didWrite {
+                    let snapshot = result.previous
+                    library.undoManager?.registerUndo(withTarget: library) { _ in
+                        Task { try? await store.restoreTimeToBeat(gameID: gameID, snapshot) }
+                    }
+                    library.undoManager?.setActionName("Link to HowLongToBeat")
+                    await self?.reloadDismissedEstimates()
+                    library.showBanner("Linked to HowLongToBeat and used its times. Press ⌘Z to undo.", kind: .info)
+                } else {
+                    // No usable times on HLTB — still store the link so refresh is exact.
+                    let previous = (try? await store.setHLTBLink(gameID: gameID, hltbID: candidate.id)) ?? nil
+                    Self.registerLinkUndo(gameID: gameID, previous: previous, store: store, library: library)
+                    library.showBanner("Linked to HowLongToBeat “\(candidate.name)” (it has no times). Press ⌘Z to undo.", kind: .info)
+                }
+            case .linkOnly:
+                let previous = (try? await store.setHLTBLink(gameID: gameID, hltbID: candidate.id)) ?? nil
+                Self.registerLinkUndo(gameID: gameID, previous: previous, store: store, library: library)
+                library.showBanner("Linked to HowLongToBeat “\(candidate.name)” (times unchanged). Press ⌘Z to undo.", kind: .info)
+            }
+        }
+    }
+
+    private func applyFindUnlink(gameID: Int64) {
+        find = nil
+        guard let library else { return }
+        let store = self.store
+        Task {
+            let previous = (try? await store.setHLTBLink(gameID: gameID, hltbID: nil)) ?? nil
+            Self.registerLinkUndo(gameID: gameID, previous: previous, store: store, library: library)
+            library.undoManager?.setActionName("Unlink from HowLongToBeat")
+            library.showBanner("Unlinked from HowLongToBeat. Press ⌘Z to undo.", kind: .info)
+        }
+    }
+
+    /// Register a one-step Undo that restores a game's previous HLTB link (id only).
+    private static func registerLinkUndo(gameID: Int64, previous: Int64?,
+                                         store: LibraryStore, library: LibraryViewModel) {
+        library.undoManager?.registerUndo(withTarget: library) { _ in
+            Task { _ = try? await store.setHLTBLink(gameID: gameID, hltbID: previous) }
+        }
+        library.undoManager?.setActionName("Link to HowLongToBeat")
+    }
 }
 
 // MARK: - Builder
@@ -217,7 +359,8 @@ enum HLTBFetchBuilder {
         } else {
             makeSearch = { HLTBInertSearch() }
         }
-        let presenter = HLTBFetchPresenter(store: store, makeSearch: makeSearch)
+        let presenter = HLTBFetchPresenter(store: store, makeSearch: makeSearch,
+                                           searchIsLive: mode == .live)
         presenter.library = library
         return presenter
     }
@@ -245,8 +388,15 @@ private struct HLTBFetchPresentation: ViewModifier {
                 )) { request in
                     HLTBPickerSheet(
                         title: request.title, year: request.year, candidates: request.candidates,
+                        librarySlugs: request.librarySlugs,
                         onPick: { presenter.pickForSingle($0) },
                         onCancel: { presenter.dismissPicker() })
+                }
+                .sheet(item: Binding(
+                    get: { presenter.find },
+                    set: { if $0 == nil { presenter.dismissFind() } }
+                )) { model in
+                    HLTBFindSheet(model: model)
                 }
                 .focusedSceneValue(\.hltbFetchPresenter, presenter)
                 .environment(\.hltbFetchPresenter, presenter)

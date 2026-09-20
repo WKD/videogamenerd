@@ -466,6 +466,25 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   automatically, the review row noting **"Port → the original"**; a second sync makes no extra IGDB
   request for it. If IGDB can't resolve the parent, the port entry is used as-is.
 
+## HowLongToBeat — cache, platforms, manual link (wave 20) [owner]
+- **Refresh serves the cache the second time.** Refresh a flagged game from the inspector, then
+  Refresh it again within a few hours → the second is instant / "from cache" (no request); a Refresh a
+  couple of days later goes to the network again (paced). "Ask HowLongToBeat again" forces one request.
+- **Platforms disambiguate.** For an ambiguous game (e.g. a title with a PS and a PC entry), the picker
+  shows "In your library: …" and emphasises the candidate on my platform; where one clearly matches it
+  fills without asking, and two same-platform twins still ask.
+- **Find on HowLongToBeat… links a long title.** For a long / edition-heavy game ("… - Complete
+  Edition"), open **Find on HowLongToBeat…** (inspector / grid context menu / Game menu), pick the entry,
+  **Link & Use** → times fill and the game shows "Linked to HowLongToBeat". The **next Refresh of that
+  game asks nothing** (exact by id). **Unlink** clears the link; times stay. ⌘Z undoes each.
+- **Manual search is polite.** Typing does not fire a request per keystroke (waits for Return or a pause,
+  ≥ 3 chars); the counter shows the requests spent this session and stops on the cap or a bad reply.
+
+## Filter result count (wave 20) [owner]
+- With a filter or search active, the chips bar's right end reads "N of M games" (e.g. "37 of 443
+  games"); it says "No games" at 0 and appends "· 5 selected" when several are selected; it never
+  pushes the chips off-screen.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

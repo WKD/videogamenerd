@@ -231,6 +231,11 @@ struct LibraryGridView: View {
             Button("Refresh Time Estimates from HowLongToBeat…") {
                 act(on: game) { _ in hltb.presentRefresh() }
             }
+            // Manual search + link for this one game (PLAN §5.3, D5).
+            Button("Find on HowLongToBeat…") {
+                if !vm.selectedGameIDs.contains(game.id) { vm.selectOnly(game.id) }
+                hltb.findOne(gameID: game.id)
+            }
         }
         Divider()
         Button("Delete…", role: .destructive) { act(on: game) { vm.actions?.requestDelete(ids: $0) } }

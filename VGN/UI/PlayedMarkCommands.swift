@@ -69,6 +69,10 @@ struct PlayedMarkCommands: Commands {
                 .disabled(!(hltb?.canRunBulk ?? false))
                 .help("Replace the rushed / main / completionist estimates from HowLongToBeat for "
                       + "the current selection, or every game with a suspicious estimate. Values are overwritten.")
+            // Manual search + link for one game (PLAN §5.3, D5) — useful for long / edition-heavy titles.
+            Button("Find on HowLongToBeat…") { hltb?.findSelected() }
+                .disabled(!(hltb?.canFindSelected ?? false))
+                .help("Search HowLongToBeat by title and link the selected game to its entry.")
         }
     }
 }

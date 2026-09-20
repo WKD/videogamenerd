@@ -133,6 +133,50 @@ writes, selected by a `mode`:
   owner's own playtime columns are never touched. One `HLTBTimeSnapshot` per game is collected so
   the whole batch is a single Undo. The replace bulk sheet confirms the count first.
 
+## Caching, platforms, the query ladder & linking (wave 20)
+
+Owner asks (2026-09-20): cache the reply on refresh; use my library platforms to disambiguate;
+a manual lookup/link UI for long / edition-heavy titles; and store an HLTB id with matched games
+so later refreshes are exact.
+
+- **Cache the reply (D1).** A search already reads cache-first (`search:<canonical title>`, found
+  180 d / no-result 30 d; a valid reply — including an *ambiguous* multi-candidate one — is stored;
+  an error/reject is never cached). Wave 20 adds a **second entry keyed by the HLTB id**
+  (`id:<hltbID>` → the chosen candidate's JSON incl. its canonical HLTB name, same 180 d TTL),
+  written whenever a candidate is applied / linked / picked. It powers exact refresh-by-id.
+  - **The Refresh rule I settled on.** A normal fill takes any fresh cache. An explicit **Refresh**
+    uses `HLTBFreshnessPolicy.refresh`: if the cached reply is **younger than 24 h**
+    (`ImportPolicy.hltbRefreshFloor`) it is **served from cache** (zero requests) — you just ran it,
+    no point re-asking; **older than 24 h** (but inside the 180 d TTL) a Refresh **goes to the
+    network** (paced). A secondary **"Ask HowLongToBeat again"** (`.bypassOne`) ignores the cache for
+    exactly one entry. `HLTBClient.cacheAge(title:now:)` backs a "from cache, N h old" caption.
+- **Platforms disambiguate (D2).** `timeToBeatFacts` now returns each game's **effective platforms**
+  (`LibraryQuery.effectivePlatformsSQL`) and its stored `hltb_id`. `HLTBPlatformMap` (pure, in
+  `VGN/Matching`) maps VGN slugs ↔ HLTB platform names (spelling lint against the fixtures).
+  `HLTBMatcher` takes `librarySlugs` and uses platform overlap as a **tie-breaker only**: among
+  equally-good titles it prefers the one on one of my platforms (and closest year); it never promotes
+  a worse title, and two candidates still tied after platform + year stay ambiguous. The picker shows
+  "In your library: …" and emphasises the overlapping candidate platforms.
+- **Query ladder for long titles (D3).** `HLTBQueryLadder` (pure) expands a title into ≤ 3 ordered
+  queries — as-is; edition/packaging noise stripped (trademark symbols, `PlatformTail`, trailing
+  "Complete/GOTY/Definitive/Deluxe/Ultimate/Special/Collector's/Limited/Anniversary/Enhanced/
+  Legendary/Royal Edition", "Director's Cut", a conservative "Remastered"/"HD", "Game of the …
+  Edition") with the subtitle kept; then also drop the subtitle. Never strips a numeral or a bare
+  qualifier ("Doom 3", "Resident Evil 2", "Persona 5 Royal" survive). The fill service stops at the
+  first confident match.
+- **Exact refresh by id (D4).** A game with `hltb_id` refreshes via
+  `HLTBFillService.resolveLinked`: it searches by the remembered canonical name (ladder fallback) and
+  picks the candidate whose id equals the stored id — never ambiguous, never re-asks. If the id is
+  gone from the reply it falls back to normal matching and says "not found any more — pick again".
+  Bulk sorts id-linked games first and the summary adds "linked by id" / "links lost".
+- **Manual "Find on HowLongToBeat…" (D5).** `HLTBFindModel` + `HLTBFindSheet`: a Quick-Add-style
+  search prefilled with the D3-cleaned title, **polite** — search on Return or an 800 ms pause, ≥ 3
+  chars, identical queries served from an in-session cache, a visible per-session request counter with
+  the per-run cap, a clean stop on the first reject. Actions: **Link & Use These Times**
+  (`replaceHLTBTimes`), **Link Only** (`setHLTBLink`, times untouched), **Unlink** — each one undo
+  step. Inert (no network) in sample/seeded/test modes. Reachable from the inspector, the grid context
+  menu and the Game menu; the bulk sheet's unresolved rows get a per-row **Find…**.
+
 ## Fixtures / recording
 
 `scripts/record-hltb-fixtures.swift` — bounded (≤ 25 requests, ≥ 2 s apart, serial, stop on the

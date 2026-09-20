@@ -585,6 +585,43 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   keyed on the title (`IGDBWebLink`), not a direct game page — IGDB has no stable public URL from the
   numeric id alone. One scheme, shared.
 
+## 5h. HowLongToBeat cache / platforms / manual link (§5.3, wave 20) — as built
+- **The query ladder never re-scores against the raw stored title.** It matches candidates against the
+  ladder query that fetched them (rung 1 = the raw title, deeper rungs = the cleaned name), so a game
+  found only under its clean name still matches. It does **not** yet use IGDB `alt_titles` as extra
+  match targets (D3 mentions it as optional; the alias matching lives on `HLTBCandidate.aliases` only).
+- **Platform overlap is a small tie-breaker, not a hard filter.** A candidate on a different platform is
+  never rejected — it just loses a title tie. `HLTBPlatformMap` covers the platforms HLTB catalogues;
+  obscure slugs (WonderSwan, CD-i, Vectrex, MSX2…) have no entry and simply don't participate. The
+  non-fixture spellings (Genesis/Mega Drive, TurboGrafx, Neo Geo…) are best-effort — only the
+  fixtures' names are lint-checked.
+- **The inspector "Linked to HowLongToBeat" caption shows no name.** `games` stores only `hltb_id`, not
+  the HLTB title; the remembered name lives in the `id:<hltbID>` cache but the inspector detail doesn't
+  read it, so the caption is name-less. Wiring the name through would need a detail read of the id-key
+  entry (small follow-up).
+- **The bulk "Find…" per-row button opens a sheet over the bulk sheet.** It calls the presenter's find
+  flow; presenting a sheet over a sheet is functional but the bulk sheet stays up behind it. Not
+  snapshot-tested. The picker "Choose…" path (with platforms) is the primary in-bulk resolution.
+- **No snapshots were re-recorded.** The picker and Find sheets are new; the hardening snapshot lane
+  should add references. No existing filter-chips snapshot was found to re-record for the result count.
+- **`HLTBFindModel`'s request counter is a model-level count**, not a read of the client's
+  cache/network tally: it counts each distinct in-session query it issues (identical queries are served
+  from its own cache and don't count). The client's DB cache may still answer at zero network cost.
+
+## 5i. Filter result count (§8, wave 20) — as built
+- **The total is the sidebar scope count, not a fresh query.** For a scope the VM has no count for (a
+  platform row, a BY LENGTH shelf), the line degrades to "N games" with no "of M" — by design (no
+  second grid query). Right-alignment is approximate: the count is the last item in the wrapping flow
+  after "Clear all", not pinned to the trailing edge, and it drops its whole self (lower layout
+  priority) rather than only the "of N" part before the chips wrap.
+
+## To-revisit play status (owner, 2026-09-20) — NOT built, needs its own lane
+- Owner asked mid-wave-20 for a **"To revisit"** play status: an abandoned game flagged as wanting to
+  play again. This spans a **migration** (a new `PlayStatus` value — a single-owner hot file), the
+  `PlayStatus` model enum + its filter/sidebar facet, the inspector status control and the grid badge.
+  It is outside the HLTB lane's owned paths and was **not** implemented here — it needs a data+UI lane
+  (there is already a `PlayStatus` type and a `games` status column to extend).
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.
