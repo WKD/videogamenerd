@@ -172,8 +172,6 @@ struct LibraryStore: Sendable {
                            arguments: [productID, gameID])
             try Self.purgeEmptyProduct(productID, db)
             try Self.normalizeProductKind(productID, db)
-            // Drop any platform row this copy alone put on the member (bug 2026-09-20).
-            try Self.pruneCopyOnlyPlatforms(gameIDs: [gameID], db: db)
             return try Self.resolveOrphans([gameID], confirmOrphanDelete: confirmOrphanDelete, db: db)
         }
     }
@@ -249,8 +247,6 @@ struct LibraryStore: Sendable {
                 db, sql: "SELECT game_id FROM product_games WHERE product_id = ?",
                 arguments: [productID])
             try db.execute(sql: "DELETE FROM products WHERE id = ?", arguments: [productID])
-            // Drop any platform rows these copies alone put on their games (bug 2026-09-20).
-            try Self.pruneCopyOnlyPlatforms(gameIDs: members, db: db)
             return try Self.resolveOrphans(members, confirmOrphanDelete: confirmOrphanDelete, db: db)
         }
     }

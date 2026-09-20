@@ -73,61 +73,6 @@ extension LibraryStore {
             """, arguments: [gameID, platformID, played])
     }
 
-    /// Remove `game_platforms` rows a copy alone put there, once that copy is gone
-    /// (owner bug 2026-09-20: deleting the Mac copy of a Mac+PC game left a stale "Mac"
-    /// pill for ever). Adding a copy calls ``ensureGamePlatform`` with `played: false`,
-    /// so a removed copy's platform row otherwise survives with no copy behind it and the
-    /// grid's `plat` CTE (`game_platforms ∪ product platforms`) keeps drawing it.
-    ///
-    /// The single rule, run in the same transaction by every write that removes or
-    /// re-points a copy. For each game, a `game_platforms` row is dropped **iff** ALL of:
-    ///  - (a) no remaining copy of that game is on that platform;
-    ///  - (b) the row's `played` flag is 0 — a platform the owner marked *played on* is
-    ///    the owner's own statement and stays;
-    ///  - (c) the game keeps at least one platform afterwards (from `game_platforms` or a
-    ///    remaining copy). A game must never end with zero platforms, so a played-not-owned
-    ///    game whose only platform came from its single (now-removed) copy keeps that row.
-    ///
-    /// Caveat (documented in LIMITATIONS): a platform row the owner picked deliberately at
-    /// Quick Add is indistinguishable from one a copy added — both are `played = 0`. Rules
-    /// (b)+(c) are the compromise: only copy-only, not-played rows are pruned, and never the
-    /// last one. Returns the number of rows removed.
-    @discardableResult
-    static func pruneCopyOnlyPlatforms(gameIDs: [Int64], db: Database) throws -> Int {
-        var removed = 0
-        for gameID in Set(gameIDs) {
-            // Platforms still backed by a remaining copy (product) of this game.
-            let copyPlats = Set(try String.fetchAll(db, sql: """
-                SELECT DISTINCT p.platform_id FROM products p
-                JOIN product_games pg ON pg.product_id = p.id
-                WHERE pg.game_id = ?
-                """, arguments: [gameID]))
-            // game_platforms rows, ordered for a deterministic "keep one" choice below.
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT platform_id, played FROM game_platforms WHERE game_id = ? ORDER BY platform_id
-                """, arguments: [gameID])
-            // A game keeps a platform when a copy still backs one, or a played=1 row survives.
-            var keepsPlatform = !copyPlats.isEmpty
-            var candidates: [String] = []              // played = 0 and no backing copy
-            for row in rows {
-                let plat: String = row["platform_id"]
-                let played: Bool = row["played"]
-                if played || copyPlats.contains(plat) { keepsPlatform = true }
-                else { candidates.append(plat) }
-            }
-            guard !candidates.isEmpty else { continue }
-            // (c) If nothing else keeps the game on a platform, leave one candidate behind.
-            var toRemove = candidates
-            if !keepsPlatform { toRemove.removeFirst() }
-            for plat in toRemove {
-                try db.execute(sql: "DELETE FROM game_platforms WHERE game_id = ? AND platform_id = ?",
-                               arguments: [gameID, plat])
-                removed += 1
-            }
-        }
-        return removed
-    }
-
     /// Create a single-game Product on `platformID` and link the game.
     @discardableResult
     static func makeSingleProduct(
