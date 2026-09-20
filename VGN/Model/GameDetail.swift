@@ -111,6 +111,11 @@ struct GameDetail: Sendable, Hashable, Identifiable {
         /// Member game ids, parallel to ``memberTitles`` (so a member row can select
         /// the game it names). Empty for a single-game copy.
         var memberIDs: [Int64] = []
+        /// **(PSN, PLAN §13.3 / D2)** The play time PSN recorded for the *whole collection* when it
+        /// was not routed to a single member — the inspector shows "75 h on the whole collection
+        /// (PSN)" under the "Part of …" line. nil ⇒ no record, or the time went to one member.
+        /// Filled by the detail loader (never a DB read from a view).
+        var collectionPlaytimeS: Int? = nil
 
         var isCompilation: Bool { kind == .compilation || memberCount > 1 }
 
@@ -127,7 +132,8 @@ struct GameDetail: Sendable, Hashable, Identifiable {
             position: Int,
             memberCount: Int,
             memberTitles: [String] = [],
-            memberIDs: [Int64] = []
+            memberIDs: [Int64] = [],
+            collectionPlaytimeS: Int? = nil
         ) {
             self.productID = productID
             self.platformID = platformID
@@ -142,6 +148,7 @@ struct GameDetail: Sendable, Hashable, Identifiable {
             self.memberCount = memberCount
             self.memberTitles = memberTitles
             self.memberIDs = memberIDs
+            self.collectionPlaytimeS = collectionPlaytimeS
         }
     }
 }

@@ -522,10 +522,10 @@ only when the placeholder is ranked. ✅ **Remembered single-played member** —
 play-time/date updates to it; member ticks are also persisted to `match_json` for a re-opened review.
 ✅ **Cross-gen twin folding** — a New PSN twin that cleans to the same title/IGDB match + PlayStation
 family folds under the kept (newest-gen) row with an "also: PS4 & PS5 version" note, never a second
-row; both external ids stay idempotent. **One item is blocked by an ownership boundary this wave:** the
-compilation view's "N h on the whole collection (PSN)" *display line* belongs in `VGN/UI/Inspector/**`
-(owned by another lane this wave); its data layer is done (`LibraryStore.collectionPlaytimeSeconds`),
-ready for the Inspector lane to render.
+row; both external ids stay idempotent. ✅ **"N h on the whole collection (PSN)"** — the inspector's
+compilation copy row shows the whole-collection PSN play time under its "Part of …" line (part 3), read
+through the detail-loading path (`LibraryStore.collectionPlaytimeSeconds`, `GameDetail.Copy.collectionPlaytimeS`
+— never a DB read from a view); nothing when there is no record or the time was routed to a single member.
 
 ### 13.4 Architecture
 `VGN/Services/Importers/` — `LibraryImporter` protocol (authenticate → fetch → emit staging rows → shared review sheet; GOG will be the second implementation), `PSN/PSNAuth` (WebView bridge, token actor with single-flight refresh, Keychain), `PSN/PSNClient` (actor: allow-list, serial queue, delay, budget, validation, cache-first reads through `PSNResponseCache`), `PSN/PSNMapping` (pure: DTO → staging rows, noise rules), `PSNSyncCoordinator` (orchestrates a sync, progress + summary). UI: Settings ▸ Accounts ▸ PlayStation (sign in, status, token expiry, last sync, cache age per data set, Force refresh, Sign out & wipe), the import review sheet (shared component with photo scan where it fits). Everything behind protocols with fakes; **unit tests never touch the network** — they run on recorded, scrubbed fixtures and an injected clock (TTL, delay, budget, reject paths, resume after a partial paged fetch).

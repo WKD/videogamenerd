@@ -150,12 +150,13 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   sheet's per-member played ticks + tier/rank picker. The single-played member is remembered as the
   staging row's `matched_game_id` so re-sync routes updates to it. Tests: `PSNBundleReviewTests`,
   `BundleBatchExpandTests`. Remaining caveats:
-  - **The compilation view's "N h on the whole collection (PSN)" *display line* is not rendered.**
-    Its data layer is done (`LibraryStore.collectionPlaytimeSeconds(source:externalID:)` — returns the
-    seconds only when the play time stayed on the whole collection, i.e. not routed to a single
-    member), but the line itself belongs on the inspector's compilation copy row
-    (`VGN/UI/Inspector/**`), which another lane owns this wave. Ready for the Inspector lane to wire.
-    **[follow-up — ownership boundary]**
+  - **The compilation view's "N h on the whole collection (PSN)" line is rendered (part 3).** The
+    inspector's compilation copy row shows it under "Part of …" (`CompilationCollectionPlaytimeLabel`,
+    one line, `minimumScaleFactor` at the 300 pt minimum), fed through the detail read
+    (`GameDetail.Copy.collectionPlaytimeS` ← `LibraryStore.collectionPlaytimeSeconds`) — never a DB
+    read from a `body`; nothing shown when there is no record or the time was routed to a single member.
+    Not added to the Compilation *editor* header (it would be a multi-file change through
+    `CompilationProductInfo`, past the "two-line" bar the brief set). **[minor follow-up]**
   - A re-synced compilation reuses its existing `(source, external_id)` Product and does **not**
     rewrite its `subscription` (a PS Plus claim that became a purchase keeps the old flag) — the same
     behaviour as a single import copy. **[watch]**

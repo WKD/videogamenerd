@@ -116,7 +116,7 @@ extension LibraryStore {
 
         let copyRows = try Row.fetchAll(db, sql: """
             SELECT p.id AS product_id, p.platform_id, p.format, p.kind, p.title,
-                   p.edition, p.region, p.source, p.subscription, pg.position,
+                   p.edition, p.region, p.source, p.external_id, p.subscription, pg.position,
                    (SELECT COUNT(*) FROM product_games x WHERE x.product_id = p.id) AS member_count
             FROM product_games pg JOIN products p ON p.id = pg.product_id
             WHERE pg.game_id = ? ORDER BY p.id
@@ -126,12 +126,21 @@ extension LibraryStore {
             let memberCount: Int = r["member_count"]
             var memberTitles: [String] = []
             var memberIDs: [Int64] = []
+            var collectionPlaytimeS: Int?
             // Only a compilation copy needs its full member list (PLAN §8 — the
             // all-or-nothing ownership names every affected game).
             if memberCount > 1 {
                 let members = try Self.fetchCompilationMembers(productID, db)
                 memberTitles = members.map(\.title)
                 memberIDs = members.map(\.gameID)
+                // The whole-collection PSN play time (PLAN §13.3 / D2) — resolved here in the
+                // detail read, so the inspector never touches the DB from a `body`. nil unless the
+                // copy came from an importer that recorded a collection play time not routed to one
+                // member (only PSN today).
+                if let source: String = r["source"], let externalID: String = r["external_id"] {
+                    collectionPlaytimeS = try Self.collectionPlaytimeSeconds(
+                        source: source, externalID: externalID, db: db)
+                }
             }
             return GameDetail.Copy(
                 productID: productID,
@@ -146,7 +155,8 @@ extension LibraryStore {
                 position: r["position"],
                 memberCount: memberCount,
                 memberTitles: memberTitles,
-                memberIDs: memberIDs
+                memberIDs: memberIDs,
+                collectionPlaytimeS: collectionPlaytimeS
             )
         }
 
