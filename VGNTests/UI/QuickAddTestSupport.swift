@@ -13,6 +13,9 @@ actor FakeCatalog: CatalogSearching {
     private(set) var searchCallCount = 0
     private(set) var lastSearchText: String?
     private var gate: CheckedContinuation<Void, Never>?
+    /// Waiters for a deterministic "search happened" signal (replaces a wall-clock
+    /// sleep in the debounce test). Resumed as soon as `search` is entered.
+    private var searchWaiters: [CheckedContinuation<Void, Never>] = []
 
     func configure(
         results: [IGDBSearchResult]? = nil,
@@ -29,12 +32,22 @@ actor FakeCatalog: CatalogSearching {
     func search(_ text: String, platformIGDBIDs: [Int]?, limit: Int) async throws -> [IGDBSearchResult] {
         searchCallCount += 1
         lastSearchText = text
+        let waiters = searchWaiters; searchWaiters = []
+        for w in waiters { w.resume() }
         if useGate { await withCheckedContinuation { gate = $0 } }
         if !credentials { throw IGDBError.missingCredentials }
         return results
     }
 
     func release() { gate?.resume(); gate = nil }
+
+    /// Suspends until `search` has been called at least `count` times — a deterministic
+    /// replacement for sleeping past the debounce in tests.
+    func waitForSearchCalls(_ count: Int = 1) async {
+        while searchCallCount < count {
+            await withCheckedContinuation { searchWaiters.append($0) }
+        }
+    }
 
     func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult { BundleMemberResult(members: members) }
     func hasCredentials() async -> Bool { credentials }
@@ -116,11 +129,13 @@ func makeQuickAddModel(
     preferences: InMemoryQuickAddPreferences = InMemoryQuickAddPreferences(),
     platforms: [PlatformInfo] = QuickAddTestPlatforms.all,
     debounce: Duration = .seconds(60),
+    sleep: (@Sendable (Duration) async throws -> Void)? = nil,
     generation: (@Sendable (String) -> Int?)? = nil
 ) -> QuickAddModel {
     QuickAddModel(
         catalog: catalog, library: library, preferences: preferences,
         platforms: platforms, debounce: debounce,
+        sleep: sleep ?? { try await Task.sleep(for: $0) },
         platformGeneration: generation ?? { QuickAddTestPlatforms.generation[$0] }
     )
 }

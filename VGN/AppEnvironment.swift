@@ -547,10 +547,11 @@ final class AppEnvironment {
                 do { _ = try database.makeLaunchSnapshot() }
                 catch { NSLog("VGN: launch snapshot failed: \(error)") }
             }
-            // NOTE (owner decision 2026-09-20, PLAN §4 inv. 5): launch performs **no**
-            // clean-up of library data. Stale platform rows are surfaced as the
-            // "Platform Without a Copy" review list and removed only by an explicit,
-            // undoable owner action — never automatically here.
+            // NOTE (owner decision 2026-09-20, PLAN §4 inv. 4–5): launch performs **no**
+            // clean-up of library data. A platform with no copy needs no clean-up at all —
+            // the effective-platform rule derives a game's platforms from its copies at
+            // *read* time (`LibraryQuery.effectivePlatformsSQL`), so a deleted or
+            // re-platformed copy corrects the display without ever touching a row here.
         }
     }
 }

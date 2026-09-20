@@ -158,15 +158,22 @@ struct QuickAddModelTests {
     @Test func debounceCoalescesAndCancelsPrevious() async throws {
         let catalog = FakeCatalog()
         await catalog.configure(results: [makeSearchResult(id: 1, name: "Zelda")])
-        let model = makeQuickAddModel(catalog: catalog, debounce: .milliseconds(30))
+        // Instant sleeper ⇒ no wall-clock debounce; the three synchronous query sets each
+        // cancel the previous remote task, so only the last survives to call `search`.
+        let model = makeQuickAddModel(catalog: catalog, debounce: .milliseconds(30), sleep: { _ in })
 
         model.query = "zel"
         model.query = "zeld"
         model.query = "zelda"
-        try await Task.sleep(for: .milliseconds(150))
+        await catalog.waitForSearchCalls(1)                  // deterministic: wait for the one search
 
         #expect(await catalog.searchCallCount == 1)          // only the final query ran
         #expect(await catalog.lastSearchText == "zelda")
+        // `applyRemote` runs on the main actor after `search` returns; yield until applied.
+        var spins = 0
+        while !model.results.contains(where: { $0.title == "Zelda" }), spins < 100 {
+            await Task.yield(); spins += 1
+        }
         #expect(model.results.contains { $0.title == "Zelda" })
     }
 

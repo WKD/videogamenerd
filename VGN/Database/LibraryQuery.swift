@@ -20,14 +20,21 @@ enum LibraryQuery {
     /// table untouched (nothing is ever pruned; owner decision 2026-09-20). Because a game
     /// always has either a copy or a `game_platforms` row, this never yields zero platforms
     /// for a game that has any.
+    /// Perf note (W19): the "game with no copy" branch used to be a **correlated**
+    /// `NOT EXISTS (… product_games WHERE game_id = gp.game_id)` evaluated per
+    /// `game_platforms` row, which roughly doubled the 2 k-game grid query. It is now a
+    /// single **anti-join** against one grouped pass over `product_games` (`has_prod`,
+    /// covered by `product_games_game_idx`) — same set, no per-row subquery. `UNION`
+    /// (not `UNION ALL`) still de-duplicates the (game, platform) pairs.
     static let effectivePlatformsSQL = """
         SELECT pg.game_id AS game_id, p.platform_id AS platform_id
         FROM products p JOIN product_games pg ON pg.product_id = p.id
         UNION
         SELECT gp.game_id AS game_id, gp.platform_id AS platform_id
         FROM game_platforms gp
-        WHERE gp.played = 1
-           OR NOT EXISTS (SELECT 1 FROM product_games pg2 WHERE pg2.game_id = gp.game_id)
+        LEFT JOIN (SELECT game_id FROM product_games GROUP BY game_id) has_prod
+               ON has_prod.game_id = gp.game_id
+        WHERE gp.played = 1 OR has_prod.game_id IS NULL
         """
 
     /// The grid's SELECT with its per-game facts (owned / compilation / ROM /
@@ -37,10 +44,17 @@ enum LibraryQuery {
     /// their bridge tables once and are joined, so the grid query drops from
     /// ~40–53 ms to a few ms in DEBUG.
     ///
-    /// - `own(game_id, owned, is_comp, has_rom)` — one grouped pass over
-    ///   `product_games ⋈ products`.
-    /// - `plat(game_id, ids)` — one grouped pass over the platform sources
-    ///   (`game_platforms` ∪ product platforms), `group_concat`ed.
+    /// - `own(game_id, owned, is_comp, has_rom, prod_plats, …)` — one grouped pass over
+    ///   `product_games ⋈ products`; the product **platforms** are `group_concat`ed here
+    ///   (`prod_plats`) in the SAME pass, so they cost nothing extra.
+    /// - `gp_plat(game_id, ids)` — one grouped pass over `game_platforms` (the played rows,
+    ///   plus every row of a game that has no copy — via an anti-join, not a per-row
+    ///   subquery). The grid's `platform_ids` is `prod_plats ⧺ gp_plat.ids` (the Swift
+    ///   `dedupedList` de-duplicates), so `product_games ⋈ products` is scanned **once**,
+    ///   not twice (W19 perf: the effective-platform rule had `plat` re-scan it and dedup a
+    ///   `UNION`, ~doubling the 2 k-game grid; this restores it near the old cost). The set
+    ///   still equals ``effectivePlatformsSQL`` (which stays canonical for the filters), so
+    ///   pills ≡ Platform filter ≡ sidebar counts.
     private static let selectClause = """
         WITH own AS (
             SELECT pg.game_id AS game_id,
@@ -48,6 +62,7 @@ enum LibraryQuery {
                    MAX(p.kind = 'compilation')      AS is_comp,
                    MAX(p.format = 'rom')            AS has_rom,
                    MIN(p.subscription IS NOT NULL)  AS sub_only,
+                   group_concat(p.platform_id)      AS prod_plats,
                    MAX(CASE WHEN p.kind = 'compilation' THEN p.id END)    AS comp_id,
                    MAX(CASE WHEN p.kind = 'compilation' THEN p.title END) AS comp_title,
                    -- Per-format platform lists for the grid badges + tooltips (PLAN §8):
@@ -66,9 +81,16 @@ enum LibraryQuery {
             FROM product_games pg JOIN products p ON p.id = pg.product_id
             GROUP BY pg.game_id
         ),
-        plat AS (
-            SELECT game_id, group_concat(platform_id) AS ids
-            FROM (\(effectivePlatformsSQL)) GROUP BY game_id
+        gp_plat AS (
+            -- Only the game_platforms contribution to the effective platforms: the played
+            -- rows, plus every row of a game with no copy (anti-join on has_prod). The
+            -- product platforms come from `own.prod_plats`, so this never touches products.
+            SELECT gp.game_id AS game_id, group_concat(gp.platform_id) AS ids
+            FROM game_platforms gp
+            LEFT JOIN (SELECT game_id FROM product_games GROUP BY game_id) has_prod
+                   ON has_prod.game_id = gp.game_id
+            WHERE gp.played = 1 OR has_prod.game_id IS NULL
+            GROUP BY gp.game_id
         )
         SELECT
             g.id                                             AS id,
@@ -93,11 +115,17 @@ enum LibraryQuery {
             own.sub_plats                                    AS sub_plats,
             COALESCE(own.changeable_count, 0)                AS changeable_count,
             own.changeable_format                            AS changeable_format,
-            plat.ids                                         AS platform_ids
+            -- Effective platforms = product platforms ⧺ game_platforms contribution; the
+            -- Swift `dedupedList` de-duplicates and keeps first-seen order (products first).
+            CASE
+                WHEN own.prod_plats IS NOT NULL AND gp_plat.ids IS NOT NULL
+                     THEN own.prod_plats || ',' || gp_plat.ids
+                ELSE COALESCE(own.prod_plats, gp_plat.ids)
+            END                                              AS platform_ids
         FROM games g
         LEFT JOIN tiers t ON t.id = g.tier_id
-        LEFT JOIN own  ON own.game_id = g.id
-        LEFT JOIN plat ON plat.game_id = g.id
+        LEFT JOIN own     ON own.game_id = g.id
+        LEFT JOIN gp_plat ON gp_plat.game_id = g.id
         """
 
     /// Full grid query for `filter`.
