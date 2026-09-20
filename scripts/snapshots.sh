@@ -67,7 +67,9 @@ fi
     -only-testing:VGNTests/StatsSnapshotTests \
     -only-testing:VGNTests/BatoceraSnapshotTests \
     -only-testing:VGNTests/GOGSnapshotTests \
-    -only-testing:VGNTests/DeliciousSnapshotTests
+    -only-testing:VGNTests/DeliciousSnapshotTests \
+    -only-testing:VGNTests/VaultSnapshotTests \
+    -only-testing:VGNTests/PSNReviewSnapshotTests
 
 echo
 echo "Done. Contact sheet: $ROOT/.build/snapshots/index.html"

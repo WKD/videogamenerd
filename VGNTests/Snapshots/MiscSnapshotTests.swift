@@ -1,4 +1,5 @@
 #if DEBUG
+import GRDB
 import SwiftUI
 import Testing
 @testable import VGN
@@ -144,6 +145,63 @@ struct MiscSnapshotTests {
         await SnapshotHarness.capture(group: sheetsGroup, "sheet-bundle-expansion",
                                       size: SnapSize(width: 500, height: 540)) {
             BundleExpansionSheet(model: model)
+        }
+    }
+
+    // MARK: Bundle batch-expand confirmation + "Bundles to Expand" header
+
+    private func addBundleGame(_ store: LibraryStore, title: String, igdbID: Int64) async throws -> Int64 {
+        let id = try await store.dbWriter.write { db -> Int64 in
+            var g = GameRecord(igdbID: igdbID, title: title, sortTitle: SortTitle.make(from: title))
+            try g.insert(db)
+            return g.id!
+        }
+        try await store.dbWriter.write { db in
+            try db.execute(sql: "INSERT INTO products (platform_id, kind, format, source) VALUES ('ps4', 'single', 'physical', 'manual')")
+            let pid = db.lastInsertedRowID
+            try db.execute(sql: "INSERT INTO product_games (product_id, game_id, position) VALUES (?, ?, 0)", arguments: [pid, id])
+            try db.execute(sql: "INSERT INTO game_platforms (game_id, platform_id, played) VALUES (?, 'ps4', 0) ON CONFLICT DO NOTHING", arguments: [id])
+        }
+        return id
+    }
+
+    @Test func bundleBatchExpandConfirm() async throws {
+        let store = try await TestDB.makeStore()
+        _ = try await addBundleGame(store, title: "Alpha Collection", igdbID: 10)
+        _ = try await addBundleGame(store, title: "Beta Trilogy", igdbID: 20)
+        let gamma = try await addBundleGame(store, title: "Gamma Pack", igdbID: 30)
+        _ = try await addBundleGame(store, title: "Delta Collection", igdbID: 40)   // → not a bundle
+        let model = BundleBatchExpandModel(store: store, membersOf: { cand in
+            switch cand.igdbID {
+            case 10: return [CompilationMemberDraft(title: "Alpha I", igdbID: 11, position: 0),
+                             CompilationMemberDraft(title: "Alpha II", igdbID: 12, position: 1)]
+            case 20: return [CompilationMemberDraft(title: "Beta I", igdbID: 21, position: 0),
+                             CompilationMemberDraft(title: "Beta II", igdbID: 22, position: 1),
+                             CompilationMemberDraft(title: "Beta III", igdbID: 23, position: 2)]
+            case 30: return [CompilationMemberDraft(title: "Gamma I", igdbID: 31, position: 0)]
+            default: return []   // Delta → not a bundle
+            }
+        })
+        await model.run(try await store.unplayedBundleExpansionCandidates())
+        model.setIncluded(false, gameID: gamma)   // untick one bundle (by its real game row id)
+        await SnapshotHarness.settle(rounds: 4)
+        await SnapshotHarness.capture(group: sheetsGroup, "sheet-bundle-batch-expand",
+                                      size: SnapSize(width: 540, height: 580)) {
+            BundleBatchExpandSheet(model: model)
+        }
+    }
+
+    @Test func bundlesToExpandHeader() async {
+        let vm = await SnapSupport.libraryVM(.sampled, selection: .bundlesToExpand)
+        vm.loadUnplayedBundleCount = { 5 }
+        await SnapshotHarness.settle(rounds: 4)
+        await SnapshotHarness.capture(group: sheetsGroup, "bundles-to-expand-header",
+                                      size: SnapSize(width: 900, height: 560)) {
+            VStack(spacing: 0) {
+                BundlesToExpandHeader(vm: vm)
+                Divider()
+                GridContent(vm: vm)
+            }
         }
     }
 

@@ -129,6 +129,77 @@ struct LibrarySnapshotTests {
         }
     }
 
+    // MARK: Seeded sidebar (THE VAULT · Unlinked · Bundles to Expand · BY LENGTH pace-only)
+
+    /// A forwarding data source that carries the sidebar/vault counts a plain
+    /// `PreviewLibraryDataSource` hard-codes to zero, so the conditional sections render.
+    private struct SeededSidebarSource: LibraryDataSource {
+        var base: PreviewLibraryDataSource
+        var counts: SidebarCounts
+        var vault: VaultSourceCounts
+        func sidebarCounts(pace: PlayPace, style: PlayStyle) -> AsyncStream<SidebarCounts> { onceStream(counts) }
+        func vaultSourceCounts() -> AsyncStream<VaultSourceCounts> { onceStream(vault) }
+        func platformsInUse() -> AsyncStream<[PlatformInfo]> { base.platformsInUse() }
+        func tiers() -> AsyncStream<[TierInfo]> { base.tiers() }
+        func genresInUse() -> AsyncStream<[String]> { base.genresInUse() }
+        func decadesInUse() -> AsyncStream<[Int]> { base.decadesInUse() }
+        func games(filter: LibraryFilter) -> AsyncStream<[GameSummary]> { base.games(filter: filter) }
+        func gameDetail(id: Int64) async -> GameDetail? { await base.gameDetail(id: id) }
+        func gameDetailStream(id: Int64) -> AsyncStream<GameDetail?> { base.gameDetailStream(id: id) }
+    }
+
+    @Test func sidebarSeeded() async {
+        let counts = SidebarCounts(
+            all: 400, owned: 320, played: 300, backlog: 20, unranked: 40, duelQueue: 12,
+            perPlatform: [:],
+            lengthShelves: [.evening: 30, .weekend: 55, .fewWeeks: 40, .season: 22, .epic: 8],
+            unmeasured: 14, unlinked: 7, bundlesToExpand: 3)
+        let vault = VaultSourceCounts(batocera: 11834, psn: 42, gog: 18, delicious: 25)
+        let source = SeededSidebarSource(base: SnapSupport.bigLibrarySource(400),
+                                         counts: counts, vault: vault)
+        let vm = LibraryViewModel(dataSource: source)
+        vm.start()
+        await SnapshotHarness.settle(rounds: 8)
+        await SnapshotHarness.capture(group: group, "library-sidebar-seeded",
+                                      size: SnapSize(width: 260, height: 760)) {
+            SidebarView(vm: vm).frame(width: 240)
+        }
+    }
+
+    // MARK: Grid tile format badges
+
+    @Test func cellBadgeStates() async {
+        let variants: [GameSummary] = [
+            GameSummary(id: 101, title: "Physical", year: 2015, tierLetter: "S", tierColorHex: "#FF7F7F",
+                        played: true, owned: true, platformIDs: ["ps4"],
+                        physicalPlatformIDs: ["ps4"], singleCopyFormat: .physical),
+            GameSummary(id: 102, title: "Digital", year: 2022, played: true, owned: true,
+                        platformIDs: ["ps5"], digitalPlatformIDs: ["ps5"], singleCopyFormat: .digital),
+            GameSummary(id: 103, title: "ROM", year: 1998, played: true, owned: true,
+                        platformIDs: ["snes"], hasROM: true, romPlatformIDs: ["snes"]),
+            GameSummary(id: 104, title: "PS Plus only", year: 2020, played: false, owned: true,
+                        platformIDs: ["ps5"], ownedOnlyViaSubscription: true, subscriptionPlatformIDs: ["ps5"]),
+            GameSummary(id: 105, title: "Physical + ROM", year: 2004, played: true, owned: true,
+                        platformIDs: ["ps2"], hasROM: true, physicalPlatformIDs: ["ps2"], romPlatformIDs: ["ps2"]),
+            GameSummary(id: 106, title: "Digital + PS Plus", year: 2022, played: true, owned: true,
+                        platformIDs: ["ps5", "ps4"], digitalPlatformIDs: ["ps5"], subscriptionPlatformIDs: ["ps4"]),
+            GameSummary(id: 107, title: "Played, not owned", year: 1996, played: true, owned: false,
+                        platformIDs: ["pc"]),
+            GameSummary(id: 108, title: "Not owned", year: 2025, played: false, owned: false,
+                        platformIDs: ["pc"]),
+        ]
+        await SnapshotHarness.capture(group: group, "library-cell-badges",
+                                      size: SnapSize(width: 700, height: 420), settle: 4) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 180))], spacing: 14) {
+                ForEach(variants) { g in
+                    GameCell(model: GameCellModel(summary: g), coverLoader: NoopCoverLoader())
+                }
+            }
+            .padding()
+            .frame(width: 660)
+        }
+    }
+
     // MARK: Cells
 
     @Test func cellStates() async {
