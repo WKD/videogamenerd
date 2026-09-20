@@ -30,29 +30,11 @@ struct BatoceraClickProbeTests {
             .toolbar { Button("x") {} })
     }
 
-    /// One patient grid pass over a horizontal band measured from the top (`fromTop`) or the
-    /// bottom (`!fromTop`) of the window content, stopping as soon as `until` is true.
-    private func clickBand(_ w: ClickProbeWindow, top: CGFloat, height: CGFloat,
-                           rightToLeft: Bool, until: () -> Bool) async {
-        let width = w.window.frame.width
-        // ONLY the right half of the band: the action buttons sit right of the Spacer. The
-        // left half holds the "All Systems" and "Sort" `Menu`s — a synthetic click on a Menu
-        // pops a REAL menu on the owner's screen and blocks the whole test run until someone
-        // dismisses it (it happened, 2026-09-19). Never sweep over a Menu / menu-style Picker.
-        let xs = Array(stride(from: width * 0.55, through: width - 6, by: 11))
-        let ordered = rightToLeft ? xs.reversed() : Array(xs)
-        // Up to three passes, each more patient: under a loaded parallel run SwiftUI can
-        // need longer to process a click (one pass at 25 ms missed the button once).
-        for wait in [25, 60, 120] {
-            for y in stride(from: top, through: top - height, by: -9) {
-                for x in ordered {
-                    w.click(at: NSPoint(x: x, y: y))
-                    try? await Task.sleep(for: .milliseconds(wait))
-                    if until() { return }
-                }
-            }
-        }
-    }
+    /// Only the RIGHT half of the toolbar band: the action buttons sit right of the Spacer, while
+    /// the left half holds the "All Systems" and "Sort" `Menu`s. A synthetic click on a Menu pops
+    /// a REAL menu on the owner's screen and blocks the run until it is dismissed (it happened,
+    /// 2026-09-19) — never sweep over one. (Every click is pop-up guarded regardless.)
+    private func rightHalf(_ w: ClickProbeWindow) -> CGFloat { w.window.frame.width * 0.55 }
 
     @Test(.timeLimit(.minutes(3)))
     func addToLibraryButtonReceivesClicks() async throws {
@@ -63,9 +45,10 @@ struct BatoceraClickProbeTests {
         let window = hosted(RomCatalogueContent(env: env, model: model))
         defer { window.close() }
         try await window.settle()
-        #expect(window.hasToolbar)
-        await clickBand(window, top: window.contentTop - 2, height: 80, rightToLeft: false) { addCalls > 0 }
-        #expect(addCalls > 0, "the Add to Library… button never received a click")
+        #expect(await window.poll { window.hasToolbar })
+        let hit = await window.sweepBand(yTop: window.contentTop - 2, yBottom: window.contentTop - 82,
+                                         stepX: 11, stepY: 9, xMin: rightHalf(window)) { addCalls > 0 }
+        #expect(hit, "the Add to Library… button never received a click")
     }
 
     @Test(.timeLimit(.minutes(3)))
@@ -77,8 +60,10 @@ struct BatoceraClickProbeTests {
         defer { window.close() }
         try await window.settle()
         // "Not Interested" (rightmost of the two) clears the selection.
-        await clickBand(window, top: window.contentTop - 2, height: 80, rightToLeft: true) { model.selection.isEmpty }
-        #expect(model.selection.isEmpty, "the Not Interested button never received a click")
+        let hit = await window.sweepBand(yTop: window.contentTop - 2, yBottom: window.contentTop - 82,
+                                         stepX: 11, stepY: 9, xMin: rightHalf(window),
+                                         rightToLeft: true) { model.selection.isEmpty }
+        #expect(hit, "the Not Interested button never received a click")
     }
 
     @Test(.timeLimit(.minutes(3)))
@@ -91,7 +76,7 @@ struct BatoceraClickProbeTests {
         try await window.settle()
         #expect(vm.banner?.actionTitle == "Review…")
         // The banner pins to the bottom of the content, so click a band near the window bottom.
-        await clickBand(window, top: 100, height: 92, rightToLeft: false) { reviewed > 0 }
-        #expect(reviewed > 0, "the review banner's Review… button never received a click")
+        let hit = await window.sweepBottomBand(height: 100, stepX: 11, stepY: 9) { reviewed > 0 }
+        #expect(hit, "the review banner's Review… button never received a click")
     }
 }

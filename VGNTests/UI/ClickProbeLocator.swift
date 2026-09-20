@@ -106,37 +106,141 @@ extension ClickProbeWindow {
     /// picker from a menu-style one at a given width).
     func hasSegmentedControl() -> Bool { firstAppKitView(ofType: NSSegmentedControl.self) != nil }
 
-    // MARK: - Guarded band sweep
+    // MARK: - Run-loop pumping & readiness (no fixed-sleep tiers)
 
-    /// A patient, pop-up-guarded sweep of a horizontal band in **window** coordinates
-    /// (`yTop` down to `yBottom`), across the window width. Stops as soon as `until` is true.
-    /// Every click goes through `safeClick`, so it can never open a menu. Up to three passes,
-    /// each more patient (SwiftUI can need longer to process a click under parallel load).
+    /// Advance the main run loop one small slice so AppKit delivers queued mouse events and SwiftUI
+    /// flushes its transaction. This is the poll GRANULARITY — never a fixed per-click dwell: the
+    /// callers below poll the post-condition between pumps and stop the instant it holds.
+    func pump() async { try? await Task.sleep(for: .milliseconds(4)) }
+
+    /// Synchronously deliver every queued AppKit event — including the mouse-up our `click` posted —
+    /// so a click is FULLY processed before the next one is sent (no rapid-fire event pile-up, the
+    /// cause of the wave-19 dropped-click flake), and a synchronous button action has already run by
+    /// the time the post-condition is checked. Non-blocking: `.distantPast` returns at once when the
+    /// queue is empty, so a miss stays cheap.
+    func drainEvents(max: Int = 64) {
+        var n = 0
+        while n < max,
+              let e = NSApp.nextEvent(matching: .any, until: .distantPast, inMode: .default, dequeue: true) {
+            NSApp.sendEvent(e)
+            n += 1
+        }
+    }
+
+    /// Total NSView descendants of the content view — a cheap "has the SwiftUI tree finished
+    /// mounting?" proxy for the readiness wait.
+    private func descendantViewCount() -> Int {
+        guard let root = window.contentView else { return 0 }
+        var n = 0
+        var stack: [NSView] = [root]
+        while let v = stack.popLast() { n += 1; stack.append(contentsOf: v.subviews) }
+        return n
+    }
+
+    /// Wait for the hosted view to lay out: its descendant-view count settles (stable across two
+    /// run-loop turns, after a small floor of turns), the same "stable across two turns" idea
+    /// `SidebarJumpMatrixTests` uses on the sidebar frame. Replaces a fixed `settle` sleep —
+    /// returns as soon as the tree is quiet and only waits longer under load. Bounded.
+    func awaitReady(timeout: Duration = .milliseconds(1200)) async {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        var last = -1, stableTurns = 0, turns = 0
+        while ContinuousClock.now < deadline {
+            window.contentView?.layoutSubtreeIfNeeded()
+            let n = descendantViewCount()
+            stableTurns = (n == last && n > 1) ? stableTurns + 1 : 0
+            last = n
+            turns += 1
+            if turns >= 3 && stableTurns >= 2 { return }
+            await pump()
+        }
+    }
+
+    /// Poll `until` across run-loop turns until it holds or `budget` elapses. Returns the instant
+    /// the post-condition holds — no fixed dwell. The building block of every click helper.
+    @discardableResult
+    func awaitCondition(_ budget: Duration, until: () -> Bool) async -> Bool {
+        if until() { return true }
+        let deadline = ContinuousClock.now.advanced(by: budget)
+        while ContinuousClock.now < deadline {
+            await pump()
+            if until() { return true }
+        }
+        return until()
+    }
+
+    /// The robust single-click primitive: click a window-coordinate point (pop-up guarded), deliver
+    /// the click's queued events deterministically, then poll `until` across run-loop turns until it
+    /// holds or `timeout` elapses — never a fixed post-click sleep. Returns whether the
+    /// post-condition held.
+    @discardableResult
+    func clickAndAwait(at point: NSPoint, timeout: Duration = .seconds(1),
+                       until: () -> Bool) async -> Bool {
+        guard safeClick(atWindowPoint: point) else { return until() }
+        drainEvents()
+        return await awaitCondition(timeout, until: until)
+    }
+
+    // MARK: - Guarded sweep (poll the post-condition, stop at first success)
+
+    /// Click each point in order (pop-up guarded), checking `until` between clicks and stopping at
+    /// the first success. A MISS costs a single run-loop turn (cheap, so a wide sweep stays fast);
+    /// after each full pass a patient settle poll catches the RIGHT click still being processed
+    /// under heavy parallel load (where SwiftUI can lag a click by seconds — the click was still
+    /// delivered, so its effect surfaces and is caught here). No fixed-sleep tiers, and bounded —
+    /// a genuinely dead control returns in a few seconds, never a multi-minute hang.
+    @discardableResult
+    func clickUntil(points: [NSPoint], settle: Duration = .seconds(3), passes: Int = 2,
+                    doubleClick: Bool = false, until: () -> Bool) async -> Bool {
+        if until() { return true }
+        for _ in 0..<passes {
+            for p in points {
+                if popUpButton(atWindowPoint: p) != nil { continue }   // never open a real menu
+                if doubleClick { self.doubleClick(at: p) } else { click(at: p) }
+                drainEvents()                                           // deliver the click now
+                if until() { return true }
+                await pump()                                            // let async effects propagate
+                if until() { return true }
+            }
+            if await awaitCondition(settle, until: until) { return true }
+        }
+        return until()
+    }
+
+    /// A bounded region of the window in window coordinates (`yTop` above `yBottom`).
+    struct SweepRegion {
+        var xMin: CGFloat, xMax: CGFloat, yTop: CGFloat, yBottom: CGFloat
+    }
+
+    /// The canonical region sweep: click every grid point of a bounded region (pop-up guarded)
+    /// until `until` holds, polling the post-condition between clicks. `sweepBand`/`sweepTopBand`/
+    /// `sweepBottomBand` are thin wrappers over this. (Callers `settle()`/`settleShort()` for
+    /// layout before sweeping — the readiness wait is not repeated here.)
+    @discardableResult
+    func sweepUntil(region: SweepRegion, stepX: CGFloat = 16, stepY: CGFloat = 12,
+                    rightToLeft: Bool = false, doubleClick: Bool = false,
+                    maxClicks: Int = 900, until: () -> Bool) async -> Bool {
+        guard region.xMax > region.xMin, region.yTop > region.yBottom else { return until() }
+        let xsAsc = Array(stride(from: region.xMin, through: region.xMax, by: stepX))
+        let xs = rightToLeft ? Array(xsAsc.reversed()) : xsAsc
+        var points: [NSPoint] = []
+        for y in stride(from: region.yTop, through: region.yBottom, by: -stepY) {
+            for x in xs { points.append(NSPoint(x: x, y: y)) }
+        }
+        if points.count > maxClicks { points = Array(points.prefix(maxClicks)) }
+        return await clickUntil(points: points, doubleClick: doubleClick, until: until)
+    }
+
+    /// A pop-up-guarded sweep of a horizontal band in **window** coordinates (`yTop` down to
+    /// `yBottom`) across the window width. Stops as soon as `until` holds.
     @discardableResult
     func sweepBand(yTop: CGFloat, yBottom: CGFloat, stepX: CGFloat = 16, stepY: CGFloat = 12,
                    xMin: CGFloat? = nil, xMax: CGFloat? = nil, maxClicks: Int = 900,
                    rightToLeft: Bool = false, doubleClick: Bool = false, until: () -> Bool) async -> Bool {
-        let lo = xMin ?? 6
-        let hi = xMax ?? (window.frame.width - 6)
-        guard hi > lo, yTop > yBottom else { return until() }
-        let xs = Array(stride(from: lo, through: hi, by: stepX))
-        let ordered = rightToLeft ? xs.reversed() : Array(xs)
-        var clicks = 0
-        // Two passes, the second a little more patient (SwiftUI can lag a click under parallel
-        // load). Hard-capped so a genuine miss returns in bounded time — never a 3-minute hang.
-        for wait in [10, 45] {
-            for y in stride(from: yTop, through: yBottom, by: -stepY) {
-                for x in ordered {
-                    let p = NSPoint(x: x, y: y)
-                    _ = doubleClick ? safeDoubleClick(atWindowPoint: p) : safeClick(atWindowPoint: p)
-                    clicks += 1
-                    try? await Task.sleep(for: .milliseconds(wait))
-                    if until() { return true }
-                    if clicks >= maxClicks { return until() }
-                }
-            }
-        }
-        return until()
+        let region = SweepRegion(xMin: xMin ?? 6, xMax: xMax ?? (window.frame.width - 6),
+                                 yTop: yTop, yBottom: yBottom)
+        return await sweepUntil(region: region, stepX: stepX, stepY: stepY,
+                                rightToLeft: rightToLeft, doubleClick: doubleClick,
+                                maxClicks: maxClicks, until: until)
     }
 
     /// Sweep the band just under the toolbar down `height` points (the region most exposed to
@@ -158,19 +262,14 @@ extension ClickProbeWindow {
                         rightToLeft: rightToLeft, until: until)
     }
 
-    /// A short readiness wait for an isolated component (cheaper than the 1 s `settle()`); the
-    /// sweeps do their own patient retrying, so this only needs to let first layout land.
-    func settleShort() async { try? await Task.sleep(for: .milliseconds(250)) }
+    /// A readiness wait for an isolated component — the same layout-settle as `settle()`; the
+    /// sweeps do their own patient polling, so this only needs to let first layout land.
+    func settleShort() async { await awaitReady() }
 
     /// Poll a condition until true or a hard deadline (no wall-clock assertion; correctness
     /// only). Returns whether it became true.
     @discardableResult
     func poll(timeout: Duration = .seconds(4), until condition: () -> Bool) async -> Bool {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        while ContinuousClock.now < deadline {
-            if condition() { return true }
-            try? await Task.sleep(for: .milliseconds(30))
-        }
-        return condition()
+        await awaitCondition(timeout, until: condition)
     }
 }

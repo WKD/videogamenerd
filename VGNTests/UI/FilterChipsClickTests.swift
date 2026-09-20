@@ -30,7 +30,7 @@ struct FilterChipsClickTests {
         let window = ClickProbeWindow(RootView(vm: vm).frame(minWidth: 900, minHeight: 600))
         defer { window.close() }
         try await window.settle()
-        #expect(window.hasToolbar, "the probe must reproduce the real window: a bridged toolbar")
+        #expect(await window.poll { window.hasToolbar }, "the probe must reproduce the real window: a bridged toolbar")
 
         // Sweep the band just under the toolbar; every click that lands on a ✕ (or on
         // "Clear all") removes chips.
@@ -94,7 +94,7 @@ final class ClickProbeWindow {
     /// Top of the content area below the toolbar, in window coordinates.
     var contentTop: CGFloat { window.contentLayoutRect.maxY }
 
-    func settle() async throws { try await Task.sleep(for: .milliseconds(1000)) }
+    func settle() async throws { await awaitReady() }
     func close() { window.orderOut(nil); window.close() }
 
     func click(at point: NSPoint) {
@@ -111,24 +111,33 @@ final class ClickProbeWindow {
     }
 
     /// Click a grid of points in the `band` points under the toolbar; returns how many
-    /// clicks changed `observe()`. Stops as soon as `until()` is true.
+    /// clicks changed `observe()`. Stops as soon as `until()` is true. Every click is pop-up
+    /// guarded, and after each click the post-condition is polled across run-loop turns rather
+    /// than slept on for a fixed tier (so a hit returns at once and a miss stays cheap).
     func sweep(band: CGFloat, stepX: CGFloat, stepY: CGFloat, rightToLeft: Bool = false,
                observe: () -> Int, until: () -> Bool) async throws -> Int {
+        let xsAsc = Array(stride(from: CGFloat(4), through: window.frame.width - 4, by: stepX))
+        let xs = rightToLeft ? Array(xsAsc.reversed()) : xsAsc
         var changes = 0
-        // Up to three passes, each more patient: under a loaded test run SwiftUI may
-        // need longer to lay the window out and to process a click.
-        for wait in [6, 15, 40] {
-            let xs = Array(stride(from: CGFloat(4), through: window.frame.width - 4, by: stepX))
+        // Two passes; each click's queued events are delivered at once (`drainEvents`), so a
+        // synchronous effect is visible immediately, and the per-pass settle poll catches an async
+        // one that lagged under parallel load. No fixed-sleep tier. `until` holding but `changes`
+        // still 0 (the effect surfaced in the settle poll, not inline) still counts as a hit.
+        for _ in 0..<2 {
             for y in stride(from: contentTop - 2, through: contentTop - band, by: -stepY) {
-                for x in (rightToLeft ? xs.reversed() : xs) {
+                for x in xs {
+                    let p = NSPoint(x: x, y: y)
+                    if popUpButton(atWindowPoint: p) != nil { continue }
                     let before = observe()
-                    click(at: NSPoint(x: x, y: y))
-                    try await Task.sleep(for: .milliseconds(wait))
-                    if observe() != before { changes += 1 }
-                    if until() { return changes }
+                    click(at: p)
+                    drainEvents()
+                    var changed = observe() != before          // synchronous effect: visible now
+                    if !changed && !until() { await pump(); changed = observe() != before }
+                    if changed { changes += 1 }
+                    if until() { return max(changes, 1) }
                 }
             }
-            try await Task.sleep(for: .milliseconds(500))
+            if await awaitCondition(.seconds(3), until: until) { return max(changes, 1) }
         }
         return changes
     }

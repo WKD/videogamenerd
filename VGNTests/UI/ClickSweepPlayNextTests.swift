@@ -30,7 +30,7 @@ struct ClickSweepPlayNextTests {
                                       size: NSSize(width: 1100, height: 280))
         defer { window.close() }
         await window.settleShort()
-        #expect(window.hasSegmentedControl(), "wide Play Next bar should use a segmented picker")
+        #expect(await window.poll { window.hasSegmentedControl() }, "wide Play Next bar should use a segmented picker")
 
         let clicked = await window.clickSegment(0, of: LengthShelf.allCases.count + 1)
         #expect(clicked, "the bracket segmented control was not located")

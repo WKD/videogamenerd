@@ -93,7 +93,7 @@ struct EmptyStateClickTests {
         f.searchText = "zzzznomatch4242"
         f.genres = ["RPG"]
         vm.setFilter(f)
-        try await Task.sleep(for: .milliseconds(800))
+        await poll(until: { vm.isEmptyFilterResult })   // the search evaluates asynchronously
         #expect(!vm.isEmptyLibrary)
         #expect(vm.isEmptyFilterResult)
         #expect(vm.filter.hasActiveFacets)
