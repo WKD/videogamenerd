@@ -133,7 +133,11 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`
   (backup + `restore`).
 - `VGN/Services/` — everything with I/O, behind protocols where PLAN names one:
-  `IGDB/` (token actor, rate limiter, Apicalypse), `Covers/` (`CoverStore` actor +
+  `IGDB/` (token actor, rate limiter, Apicalypse; **caching (W19): a read-through
+  `catalog_cache` for id-keyed reads — shape-checked via `_vgn_fields` — plus a
+  short-lived in-session search LRU with in-flight coalescing; the cache is for speed
+  and to avoid re-asking IGDB, never a way around the rate limit — a miss still goes
+  through the one `RateLimiter`**), `Covers/` (`CoverStore` actor +
   `CoverProvider` chain), `Enrichment/` (`EnrichmentCoordinator` actor + job queue),
   `TimeToBeat/`, `Keychain/`, `Networking/` (transport, `RateLimiter`, `Retry`,
   monotonic `ServiceClock`, `AsyncSemaphore`), `ClaudeCLI/` (`ClaudeProcessRunner`),
