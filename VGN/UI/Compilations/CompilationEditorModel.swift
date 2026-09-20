@@ -77,6 +77,10 @@ final class CompilationEditorModel {
 
     var onSelectGame: (Int64) -> Void = { _ in }
     var onClose: () -> Void = {}
+    /// The window's undo manager (set by the sheet from `@Environment(\.undoManager)`),
+    /// so removing a member registers a "Remove from Compilation" undo step. Weak +
+    /// main-isolated; nil in previews / headless tests that don't wire one.
+    weak var undoManager: UndoManager?
 
     // Search bookkeeping
     private var searchGeneration = 0
@@ -254,10 +258,11 @@ final class CompilationEditorModel {
 
     func removeMember(_ gameID: Int64) async {
         do {
-            let outcome = try await writer.removeCompilationMember(
+            let (outcome, undo) = try await writer.removeCompilationMemberCapturingUndo(
                 productID: productID, gameID: gameID, confirmOrphanDelete: false)
             switch outcome {
             case .ok:
+                registerRemoveUndo(undo)
                 await reload()
             case .wouldOrphan(let ids):
                 let title = members.first { ids.contains($0.gameID) }?.title
@@ -273,12 +278,30 @@ final class CompilationEditorModel {
     func confirmOrphanRemoval() async {
         guard let confirm = orphanConfirm else { return }
         orphanConfirm = nil
-        _ = try? await writer.removeCompilationMember(
-            productID: productID, gameID: confirm.gameID, confirmOrphanDelete: true)
+        if let (_, undo) = try? await writer.removeCompilationMemberCapturingUndo(
+            productID: productID, gameID: confirm.gameID, confirmOrphanDelete: true) {
+            registerRemoveUndo(undo)
+        }
         await reload()
     }
 
     func cancelOrphanRemoval() { orphanConfirm = nil }
+
+    /// Register one undo step for a member removal (owner: "Remove from Compilation").
+    /// `UndoManager.undo()` hangs headless, so the restore is driven directly in tests.
+    private func registerRemoveUndo(_ undo: ReconcileUndo?) {
+        guard let undo, let um = undoManager else { return }
+        um.registerUndo(withTarget: self) { target in
+            Task { @MainActor in await target.undoRemoveMember(undo) }
+        }
+        um.setActionName(undo.actionName)
+    }
+
+    /// Restore a member-removal snapshot (undo). `internal` so a test drives it directly.
+    func undoRemoveMember(_ undo: ReconcileUndo) async {
+        do { try await writer.restoreReconcile(undo); await reload() }
+        catch { errorMessage = "Couldn't undo." }
+    }
 
     // MARK: - Reorder
 

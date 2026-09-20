@@ -14,9 +14,36 @@ struct ScanMatch: Sendable, Equatable, Codable {
     /// compilation. `nil` for matches built before the type was known (e.g. an explicit
     /// inline "Find…" pick) — the caller then re-checks on demand.
     var gameType: IGDBGameType? = nil
+    /// When the match is a **port** (11), the id of its parent game (`version_parent` /
+    /// `parent_game`), so the sync can fold it onto the original in ONE batched
+    /// `games(ids:)` per sync (PLAN §5.1 D4). `nil` when unknown / not a port.
+    var foldParentID: Int64? = nil
+    /// Set when this match IS a parent game a **port** match was redirected onto — the
+    /// review row then shows "links to the original" (PLAN §5.1 D4).
+    var resolvedFromPortID: Int64? = nil
 
     /// The matched candidate is a bundle/pack whose members VGN can expand (PLAN §5.1).
     var isBundle: Bool { gameType?.isCompilation ?? false }
+    /// A port with a resolvable parent (PLAN §5.1 D4).
+    var isResolvablePort: Bool { gameType == .port && foldParentID != nil }
+}
+
+extension ScanMatch {
+    /// Build the match a resolvable **port** is redirected onto: its parent game, keeping
+    /// the port's score / matched name and remembering the port id (PLAN §5.1 D4).
+    init(resolvingPort port: ScanMatch, to parent: IGDBGameMetadata) {
+        self.init(
+            igdbID: parent.id,
+            name: parent.name,
+            releaseYear: parent.releaseYear,
+            coverImageID: parent.coverImageID,
+            platformSlugs: parent.platformSlugs,
+            score: port.score,
+            matchedName: port.matchedName,
+            gameType: parent.gameType,
+            foldParentID: nil,
+            resolvedFromPortID: port.igdbID)
+    }
 }
 
 /// Confidence bucket for the review sheet (PLAN §6.2 step 5).
@@ -97,7 +124,8 @@ enum ScanMatching {
                 platformSlugs: candidate.platformSlugs,
                 score: best,
                 matchedName: bestName,
-                gameType: candidate.gameType
+                gameType: candidate.gameType,
+                foldParentID: candidate.foldParentID
             ))
         }
 

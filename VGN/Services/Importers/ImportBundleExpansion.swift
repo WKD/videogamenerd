@@ -53,6 +53,16 @@ protocol ImportBundleExpanding: Sendable {
     /// content dropped and ports folded onto their parent, with the ``BundleMemberResult/leftOut``
     /// notes. Returns an empty result on imperfect coverage — never fails the whole sync.
     func members(ofBundleIGDBID igdbID: Int64) async throws -> BundleMemberResult
+
+    /// Redirect every **port** best-match onto its parent game (PLAN §5.1 D4 — "a port is
+    /// the same game"), so a Switch/PS4 port of an older game imports as a copy on the one
+    /// game. Resolves all ports' parents in ONE batched read-through `games(ids:)` (cache
+    /// hit ⇒ zero requests). Default: return the matches unchanged (fakes / no IGDB).
+    func resolvingPortParents(_ matches: [ScanMatch]) async -> [ScanMatch]
+}
+
+extension ImportBundleExpanding {
+    func resolvingPortParents(_ matches: [ScanMatch]) async -> [ScanMatch] { matches }
 }
 
 /// Production expander: reuses ``IGDBClient/bundleMembers(ofBundleID:)`` — the exact
@@ -62,6 +72,21 @@ struct IGDBImportBundleExpander: ImportBundleExpanding {
 
     func members(ofBundleIGDBID igdbID: Int64) async throws -> BundleMemberResult {
         try await client.bundleMembers(ofBundleID: igdbID)
+    }
+
+    func resolvingPortParents(_ matches: [ScanMatch]) async -> [ScanMatch] {
+        // One batched lookup of every port's parent (read-through: cache hit = 0 requests,
+        // a miss = one paced batched request through the unchanged limiter).
+        let parentIDs = Array(Set(matches.filter { $0.gameType == .port }.compactMap(\.foldParentID)))
+        guard !parentIDs.isEmpty else { return matches }
+        let parents = (try? await client.games(ids: parentIDs)) ?? []
+        let byID = Dictionary(parents.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return matches.map { match in
+            guard match.gameType == .port, let pid = match.foldParentID, let parent = byID[pid],
+                  GameTypePolicy.isStandaloneGame(parent.gameType)
+            else { return match }   // no id / unresolved / parent not standalone → keep the port
+            return ScanMatch(resolvingPort: match, to: parent)
+        }
     }
 }
 

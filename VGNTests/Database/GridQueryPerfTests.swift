@@ -65,6 +65,50 @@ struct GridQueryPerfTests {
         let newMedian = try await median(store, sql: newSQL)
         let oldMedian = try await median(store, sql: Self.oldSelect)
         print("VGN perf: grid query @2000 — old(correlated) \(oldMedian) · new(CTE) \(newMedian)")
+
+        // The effective-platform subquery must contain NO correlated per-row subquery
+        // (W19 perf fix: the `NOT EXISTS(... game_id = gp.game_id)` became an anti-join).
+        let plan = try await store.database.dbWriter.read { db in
+            try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + newSQL)
+                .map { $0["detail"] as String? ?? "" }
+        }
+        print("VGN perf: grid EQP:\n  " + plan.joined(separator: "\n  "))
+        #expect(!plan.contains { $0.contains("CORRELATED") },
+                "the grid query still has a correlated subquery: \(plan)")
+
+        // Isolate the effective-platform aggregation (SQL only, no row decode): the OLD
+        // correlated + UNION derived table vs the NEW folded (product platforms from the
+        // single `own`/products pass + a game_platforms anti-join). Same result set.
+        let oldPlat = """
+            SELECT game_id, group_concat(platform_id) AS ids FROM (
+                SELECT pg.game_id AS game_id, p.platform_id AS platform_id
+                FROM products p JOIN product_games pg ON pg.product_id = p.id
+                UNION
+                SELECT gp.game_id AS game_id, gp.platform_id AS platform_id
+                FROM game_platforms gp
+                WHERE gp.played = 1
+                   OR NOT EXISTS (SELECT 1 FROM product_games pg2 WHERE pg2.game_id = gp.game_id)
+            ) GROUP BY game_id
+            """
+        // Same derived table, correlated NOT EXISTS → anti-join (the change the perf note flags).
+        let newPlat = "SELECT game_id, group_concat(platform_id) AS ids FROM (\(LibraryQuery.effectivePlatformsSQL)) GROUP BY game_id"
+        func timeSQLOnly(_ sql: String, runs: Int = 9) async throws -> Duration {
+            var s: [Duration] = []
+            let clk = ContinuousClock()
+            for _ in 0..<runs {
+                let t = clk.now
+                _ = try await store.database.dbWriter.read { db in try Row.fetchAll(db, sql: sql).count }
+                s.append(clk.now - t)
+            }
+            return s.sorted()[runs / 2]
+        }
+        let oldPlatMs = try await timeSQLOnly(oldPlat)
+        let newPlatMs = try await timeSQLOnly(newPlat)
+        // Both are a few ms — a small fraction of the ~70 ms grid, which is dominated by the
+        // games scan/ORDER BY + row decode, not the platform CTE. The change's value is
+        // structural: no correlated per-row subquery, and (in the real grid) product platforms
+        // ride the single `own` pass so `product_games ⋈ products` is scanned once, not twice.
+        print("VGN perf: effective-platform aggregation @2000 (SQL only) — old(correlated+UNION) \(oldPlatMs) · new(anti-join) \(newPlatMs)")
     }
 }
 #endif

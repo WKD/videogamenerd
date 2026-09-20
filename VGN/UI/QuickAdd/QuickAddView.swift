@@ -15,6 +15,10 @@ struct QuickAddView: View {
             searchField
             Divider()
             content
+            if let state = model.portConfirm {
+                Divider()
+                portConfirmBar(state)
+            }
             footer
         }
         .frame(width: 560)
@@ -108,6 +112,27 @@ struct QuickAddView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(A11yID.quickAddManualRow)
+    }
+
+    // MARK: Port confirm (PLAN §5.1 D4 — a port is the same game)
+
+    private func portConfirmBar(_ state: PortConfirmState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.merge").foregroundStyle(.secondary)
+                Text("“\(state.result.title)” is a port — links to the original.")
+                    .font(.callout)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack {
+                Button("Add the port entry instead") { model.usePortEntry() }
+                Spacer()
+                Button("Add \(state.parent.display)") { model.confirmPortOriginal() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(.quaternary)
     }
 
     // MARK: Footer (flags + confirmation + shortcut hints)

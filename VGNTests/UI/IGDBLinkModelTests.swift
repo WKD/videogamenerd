@@ -54,6 +54,20 @@ struct IGDBLinkModelTests {
         for _ in 0..<500 { if condition() { return }; await Task.yield() }
     }
 
+    @Test func choosingAPortResultCarriesTheParentForRedirection() async {
+        let model = makeModel(searcher: RecordingSearcher())
+        var captured: IGDBLinkChoice?
+        model.onChoose = { captured = $0 }
+        let port = IGDBSearchResult(
+            id: 20, name: "Super Mario Galaxy", releaseYear: 2020, coverImageID: nil,
+            platformIGDBIDs: [], platformAbbreviations: [], platformSlugs: ["switch"],
+            genres: [], alternativeNames: [], gameType: .port, versionParentID: 10)
+        model.choose(IGDBLinkResult(result: port, existingGameID: nil, isCurrentGame: false))
+        #expect(captured?.isPort == true)          // the action layer offers "link to the original"
+        #expect(captured?.portParentID == 10)
+        #expect(captured?.igdbID == 20)
+    }
+
     @Test func searchesPrefillAndPopulatesResults() async {
         let searcher = RecordingSearcher(results: [result(10, "Super Mario"), result(11, "Mario Kart")])
         let model = makeModel(searcher: searcher)

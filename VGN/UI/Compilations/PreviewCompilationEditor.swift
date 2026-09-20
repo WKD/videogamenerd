@@ -30,6 +30,13 @@ actor PreviewCompilationWriter: CompilationWriting {
         return .ok
     }
 
+    func removeCompilationMemberCapturingUndo(productID: Int64, gameID: Int64, confirmOrphanDelete: Bool) async throws -> (outcome: WriteOutcome, undo: ReconcileUndo?) {
+        product.members.removeAll { $0.gameID == gameID }
+        return (.ok, nil)   // preview: no real snapshot
+    }
+
+    func restoreReconcile(_ undo: ReconcileUndo) async throws {}
+
     func reorderCompilationMembers(productID: Int64, orderedGameIDs: [Int64]) async throws {
         product.members.sort { a, b in
             (orderedGameIDs.firstIndex(of: a.gameID) ?? 0) < (orderedGameIDs.firstIndex(of: b.gameID) ?? 0)

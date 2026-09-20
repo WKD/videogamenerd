@@ -149,6 +149,28 @@ struct ImportSyncCoordinator: Sendable {
             if let bundle { bundleExpansions[title.externalID] = bundle }
         }
 
+        // 3c. Fold every port best-match onto its parent game (PLAN §5.1 D4 — "a port is
+        // the same game"), in ONE batched `games(ids:)` for the whole sync. Applies to
+        // reused and freshly-queried matches; each resolved port re-persists the parent so a
+        // later sync reuses it and never re-resolves.
+        if let bundleExpander {
+            let indexed: [(Int, ScanMatch)] = matches.enumerated().compactMap { idx, m in
+                (m.outcome.best?.gameType == .port) ? (idx, m.outcome.best!) : nil
+            }
+            if !indexed.isEmpty {
+                let resolved = await bundleExpander.resolvingPortParents(indexed.map(\.1))
+                for ((idx, _), newBest) in zip(indexed, resolved) where newBest.resolvedFromPortID != nil {
+                    var outcome = matches[idx].outcome
+                    outcome.best = newBest
+                    matches[idx].outcome = outcome
+                    let externalID = matches[idx].externalID
+                    try? await staging.recordMatchOutcome(
+                        source: importer.source, externalID: externalID,
+                        PersistedImportMatch(outcome: outcome, bundle: bundleExpansions[externalID]), now: now)
+                }
+            }
+        }
+
         // 4. Summary.
         let buckets = Dictionary(grouping: titles, by: \.bucket)
         let summary = ImportSyncSummary(

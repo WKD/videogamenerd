@@ -24,6 +24,14 @@ struct LiveCatalogSearcher: CatalogSearching {
         try await client.bundleMembers(ofBundleID: bundleIGDBID)
     }
 
+    func portParent(parentID: Int64) async -> PortParentInfo? {
+        // One read-through games(ids:) for the parent (cache hit = 0 requests). The parent
+        // must itself be a standalone game (PLAN §5.1 D4) — else the port stands on its own.
+        guard let parent = try? await client.games(ids: [parentID]).first,
+              GameTypePolicy.isStandaloneGame(parent.gameType) else { return nil }
+        return PortParentInfo(id: parent.id, name: parent.name, year: parent.releaseYear)
+    }
+
     func hasCredentials() async -> Bool { await credentials() != nil }
 }
 
