@@ -61,6 +61,13 @@ struct ImportTitleRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
     var lastPlayedAt: Date?
     var matchedGameID: Int64?
     var ignored: Bool
+    /// The explicit "Send to the Vault" fate (PLAN §16, v13) — a vaulted row leaves the
+    /// importable buckets and never re-proposes.
+    var vaulted: Bool = false
+    /// When the IGDB match was last attempted (v13, resume-after-cancel §5.1); NULL = never.
+    var matchAttemptedAt: Date?
+    /// The persisted per-title match outcome JSON (v13) — restored on a resumed sync.
+    var matchJSON: String?
 
     static let databaseTableName = "import_titles"
 
@@ -76,6 +83,9 @@ struct ImportTitleRecord: Codable, FetchableRecord, MutablePersistableRecord, Se
         case lastPlayedAt = "last_played_at"
         case matchedGameID = "matched_game_id"
         case ignored
+        case vaulted
+        case matchAttemptedAt = "match_attempted_at"
+        case matchJSON = "match_json"
     }
 
     typealias Columns = CodingKeys

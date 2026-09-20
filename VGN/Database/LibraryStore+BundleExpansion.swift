@@ -127,11 +127,45 @@ extension LibraryStore {
         }
     }
 
+    /// `app_state` key holding the JSON array of game ids the owner dismissed as **"not a
+    /// bundle"** from the Bundles-to-Expand list (PLAN §5.1) — persisted so a game that turned
+    /// out not to be a bundle on IGDB never returns to the list.
+    static let notBundleStateKey = "reconcile.notBundle"
+
+    /// The dismissed-as-not-a-bundle game ids (persisted in `app_state`).
+    func dismissedBundleCandidateIDs() async throws -> Set<Int64> {
+        try await dbReader.read(Self.readDismissedBundleIDs)
+    }
+
+    static func readDismissedBundleIDs(_ db: Database) throws -> Set<Int64> {
+        guard let json = try String.fetchOne(
+                db, sql: "SELECT json FROM app_state WHERE key = ?", arguments: [notBundleStateKey]),
+              let data = json.data(using: .utf8),
+              let ids = try? JSONDecoder().decode([Int64].self, from: data) else { return [] }
+        return Set(ids)
+    }
+
+    /// Persist a "not a bundle" dismissal so the game leaves the Bundles-to-Expand list for good
+    /// (PLAN §5.1). Idempotent.
+    func dismissBundleCandidate(gameID: Int64) async throws {
+        try await dbWriter.write { db in
+            var ids = try Self.readDismissedBundleIDs(db)
+            ids.insert(gameID)
+            let json = (try? JSONEncoder().encode(ids.sorted())).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            try db.execute(sql: """
+                INSERT INTO app_state (key, json, updated_at) VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at
+                """, arguments: [Self.notBundleStateKey, json, Date()])
+        }
+    }
+
     /// Library games whose title looks like an unexpanded bundle and that sit alone in a
     /// single product (or are linked, played-only) — repair-path candidates (PLAN §5.1).
-    /// A loose heuristic; the real bundle check happens on click, per game.
+    /// A loose heuristic; the real bundle check happens on click, per game. Games the owner
+    /// dismissed as "not a bundle" are excluded.
     func bundleExpansionCandidates() async throws -> [BundleExpansionCandidate] {
         try await dbReader.read { db in
+            let dismissed = try Self.readDismissedBundleIDs(db)
             let rows = try Row.fetchAll(db, sql: """
                 SELECT g.id AS id, g.title AS title, g.igdb_id AS igdb_id,
                        (SELECT COUNT(*) FROM product_games pg WHERE pg.game_id = g.id) AS product_count,
@@ -142,6 +176,8 @@ extension LibraryStore {
                 ORDER BY g.sort_title
                 """)
             return rows.compactMap { row in
+                let gameID: Int64 = row["id"]
+                guard !dismissed.contains(gameID) else { return nil }
                 let title: String = row["title"]
                 guard Self.looksLikeBundleTitle(title) else { return nil }
                 let productCount: Int = row["product_count"] ?? 0

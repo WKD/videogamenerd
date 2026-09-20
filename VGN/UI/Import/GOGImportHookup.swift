@@ -33,6 +33,9 @@ final class GOGImportPresenter {
     private(set) var isSyncing = false
 
     private let onLibraryChanged: () -> Void
+    /// Selects the GOG Vault sidebar row and closes the review sheet ("Show in the Vault",
+    /// PLAN §16). Wired in ``AppEnvironment``; a no-op offline.
+    @ObservationIgnored var onShowInVault: () -> Void = {}
     @ObservationIgnored private var syncTask: Task<Void, Never>?
 
     init(backend: any ImportBackend, onLibraryChanged: @escaping () -> Void = {}) {
@@ -63,10 +66,12 @@ final class GOGImportPresenter {
                     Task { @MainActor in self.progress = p }
                 })
                 if Task.isCancelled { self.reset(); return }
-                self.reviewModel = ImportReviewModel(
+                let review = ImportReviewModel(
                     source: backend.source, sourceLabel: backend.sourceLabel,
                     staging: backend.staging, result: result,
                     showsPlatformPolicy: true, onLibraryChanged: onLibraryChanged)
+                review.onShowInVault = self.onShowInVault
+                self.reviewModel = review
                 self.progress = nil
                 self.isSyncing = false
                 await self.account?.refresh()

@@ -98,7 +98,7 @@ struct BatchCopySpec: Sendable, Equatable {
 }
 
 /// One member game of a compilation, with its position in the product.
-struct CompilationMemberDraft: Sendable, Equatable {
+struct CompilationMemberDraft: Sendable, Equatable, Codable {
     var title: String
     var igdbID: Int64?
     var releaseDate: Date?

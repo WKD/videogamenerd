@@ -482,11 +482,7 @@ struct RomCatalogStore: Sendable {
             SELECT source, COUNT(*) AS n FROM rom_catalog WHERE removed_at IS NULL GROUP BY source
             """) {
             let n: Int = row["n"]
-            switch VaultSource(storage: row["source"]) {
-            case .batocera: out.batocera = n
-            case .psn: out.psn = n
-            case nil: break
-            }
+            if let source = VaultSource(storage: row["source"]) { out.setCount(n, for: source) }
         }
         return out
     }
@@ -644,6 +640,7 @@ struct RomCatalogStore: Sendable {
                   AND (
                         (source = 'batocera' AND game_time_s = 0 AND play_count = 0)
                      OR (source = 'psn' AND match_state = 'matched')
+                     OR source IN ('gog', 'delicious')
                   )
                 ORDER BY sort_title ASC LIMIT ?
                 """, arguments: [limit])
@@ -724,6 +721,18 @@ struct RomCatalogStore: Sendable {
                 }
             }
             return result
+        }
+    }
+
+    /// Hard-delete the Vault row for one `(source, external id)` — the "Bring back" action that
+    /// reverses a manual "Send to the Vault" for a row that already existed (PLAN §16). Matches on
+    /// the external id column or the mirrored relative_path.
+    func deleteVaultEntry(source: String, externalID: String) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                DELETE FROM rom_catalog
+                WHERE source = ? AND (external_id = ? OR relative_path = ?)
+                """, arguments: [source, externalID, externalID])
         }
     }
 

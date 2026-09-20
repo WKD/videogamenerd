@@ -171,6 +171,8 @@ final class AppEnvironment {
                     if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
                 })
             settings.gogAccount = gogWiring.account
+            // "Show in the Vault" from the GOG review sheet selects the GOG Vault row (PLAN §16).
+            gogWiring.presenter.onShowInVault = { [weak vm] in vm?.select(.vault(.gog)) }
 
             // PSN import (PLAN §13): live builds the real PSN objects (DEBUG also passes the
             // dev cache + account label); other modes get an inert backend that never
@@ -194,6 +196,8 @@ final class AppEnvironment {
                 onLibraryChanged: {
                     if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
                 })
+            // "Show in the Vault" from the Delicious review sheet selects the Delicious Vault row.
+            deliciousImport.onShowInVault = { [weak vm] in vm?.select(.vault(.delicious)) }
 
             // Batocera ROM collection (PLAN §15): live builds the real sync + share access;
             // other modes get an inert backend that never touches `/Volumes`. The Settings

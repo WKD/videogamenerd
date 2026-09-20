@@ -14,6 +14,9 @@ final class IGDBLinkPresenter {
     var merge: IGDBMergeModel?
     /// The active bundle-expansion confirm sheet, or nil (PLAN §5.1).
     var bundleExpansion: BundleExpansionModel?
+    /// Notified after a bundle expansion or a "not a bundle" dismissal, so a live
+    /// Bundles-to-Expand list (PLAN §5.1) can reload. A no-op unless a list is showing.
+    var onBundleCandidatesChanged: () -> Void = {}
 
     private let store: LibraryStore
     private weak var vm: LibraryViewModel?
@@ -106,6 +109,9 @@ final class IGDBLinkPresenter {
         let members = ImportBundleMapping.members(from: raw)
         guard !members.isEmpty else {
             link = nil
+            // Remember it is not a bundle so it leaves the Bundles-to-Expand list for good (§5.1).
+            try? await store.dismissBundleCandidate(gameID: gameID)
+            onBundleCandidatesChanged()
             vm?.showBanner("That’s not a bundle on IGDB — nothing to expand.", kind: .info)
             return
         }
@@ -133,6 +139,7 @@ final class IGDBLinkPresenter {
                     playDataTargetIndex: targetIndex)
                 for memberID in result.memberGameIDs { onEnrich(memberID, false) }
                 vm?.showBanner("Expanded into \(result.memberGameIDs.count) games.", kind: .info)
+                onBundleCandidatesChanged()
                 registerBundleUndo(result.undo)
             } catch {
                 vm?.showBanner("Couldn't expand the bundle.", kind: .error)

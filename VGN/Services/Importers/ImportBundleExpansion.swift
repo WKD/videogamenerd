@@ -9,7 +9,7 @@ import Foundation
 ///
 /// `members` empty ⇒ IGDB had no member list for this bundle: the caller falls back to
 /// today's single-game behaviour and flags the row, never blocking the import.
-struct ImportBundleExpansion: Sendable, Equatable {
+struct ImportBundleExpansion: Sendable, Equatable, Codable {
     /// The bundle's own IGDB id (the game a single would otherwise link to).
     var bundleIGDBID: Int64
     /// The bundle's title — used as the compilation Product's title.

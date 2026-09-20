@@ -316,6 +316,23 @@ struct ImportStagedTitle: Sendable, Hashable, Codable, Identifiable {
     var signals: ImportSignals
     var matchedGameID: Int64?
     var ignored: Bool
+    /// The explicit "Send to the Vault" fate (PLAN §16 — the fourth fate of a review row).
+    /// A vaulted title leaves the importable buckets; a later sync neither re-proposes nor
+    /// re-lists it. Persisted in `import_titles.vaulted` (v13).
+    var vaulted: Bool = false
+
+    init(id: Int64, source: String, externalID: String, name: String, platform: String?,
+         signals: ImportSignals, matchedGameID: Int64?, ignored: Bool, vaulted: Bool = false) {
+        self.id = id
+        self.source = source
+        self.externalID = externalID
+        self.name = name
+        self.platform = platform
+        self.signals = signals
+        self.matchedGameID = matchedGameID
+        self.ignored = ignored
+        self.vaulted = vaulted
+    }
 
     var bucket: ImportReviewBucket {
         if ignored { return .ignored }
@@ -324,7 +341,7 @@ struct ImportStagedTitle: Sendable, Hashable, Codable, Identifiable {
 }
 
 /// A user (or auto-match) decision on one staged title (PLAN §14.3 — decisions persist
-/// in `import_titles.matched_game_id / ignored`).
+/// in `import_titles.matched_game_id / ignored / vaulted`).
 enum ImportDecision: Sendable, Hashable, Codable {
     /// Tie to an existing library game (also un-ignores).
     case match(gameID: Int64)
@@ -334,6 +351,20 @@ enum ImportDecision: Sendable, Hashable, Codable {
     case ignore
     /// Restore from *Ignored* (back to *New* / *Already matched*).
     case restore
+    /// Send to the Vault — the fourth fate (PLAN §16). Leaves the importable buckets; a later
+    /// sync neither re-proposes nor re-lists it.
+    case vault
+    /// Bring back from the Vault (reverses ``vault``) — the title returns to its bucket.
+    case unvault
+}
+
+/// A per-title match outcome persisted so a cancelled-then-restarted (or a second) sync can
+/// resume without re-querying IGDB (PLAN §5.1). Stored as JSON in `import_titles.match_json`
+/// alongside `match_attempted_at`; a bundle expansion is carried so a skipped bundle row still
+/// restores its members and commits as a compilation.
+struct PersistedImportMatch: Sendable, Equatable, Codable {
+    var outcome: ScanMatchOutcome
+    var bundle: ImportBundleExpansion?
 }
 
 /// The result of one sync (PLAN §14.2 summary line "n from cache · m from network").
