@@ -96,6 +96,14 @@ struct LibraryFilter: Hashable, Sendable {
     /// (PLAN §5.3). OR-combines with `playtimes` within the playtime facet.
     var includeNoTimeEstimate: Bool
 
+    /// Match only games with a **suspicious time estimate** — implausible / out-of-order
+    /// completion times worth refreshing from HowLongToBeat (PLAN §5.3, owner request
+    /// 2026-09-20; the rule is ``EstimateSanity``). Its **own** facet, ANDed across kinds
+    /// (like ``multipleCopies``), even though it lives in the Playtime menu next to
+    /// "No Estimate": a game whose times come from HLTB or that the owner dismissed
+    /// ("Estimate Looks Right") is never flagged.
+    var includeSuspiciousEstimate: Bool
+
     /// A single explicit platform facet (slug), independent of the scope.
     /// (Legacy single facet; the multi-select facet below is `platforms`.)
     var platform: String?
@@ -147,6 +155,7 @@ struct LibraryFilter: Hashable, Sendable {
         includeSubscriptionOnly: Bool = false,
         playtimes: Set<PlaytimeBucket> = [],
         includeNoTimeEstimate: Bool = false,
+        includeSuspiciousEstimate: Bool = false,
         platform: String? = nil,
         platforms: Set<String> = [],
         scope: SidebarSelection = .all,
@@ -169,6 +178,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.includeSubscriptionOnly = includeSubscriptionOnly
         self.playtimes = playtimes
         self.includeNoTimeEstimate = includeNoTimeEstimate
+        self.includeSuspiciousEstimate = includeSuspiciousEstimate
         self.platform = platform
         self.platforms = platforms
         self.scope = scope
@@ -185,7 +195,7 @@ struct LibraryFilter: Hashable, Sendable {
             || !tierIDs.isEmpty || includeUnrated
             || !statuses.isEmpty || includeNotPlayed || includeNoStatus
             || !formats.isEmpty || includeNotOwned || multipleCopies || includeSubscriptionOnly
-            || !playtimes.isEmpty || includeNoTimeEstimate
+            || !playtimes.isEmpty || includeNoTimeEstimate || includeSuspiciousEstimate
             || platform != nil || !platforms.isEmpty
     }
 }

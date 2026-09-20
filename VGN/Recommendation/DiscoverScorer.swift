@@ -151,7 +151,14 @@ enum DiscoverScorer {
 
         // Time fit — only when a length is known (matched PS Plus entries usually have IGDB
         // times; ROMs do not, so the term is neutral, never a penalty). PLAN §16.
-        let personal = entry.personalLength(style: options.playStyle)
+        // Ignore a suspicious (out-of-scale) completionist for the Vault time fit too
+        // (PLAN §5.3, D5). Vault entries carry no rushed time / source / dismissal, so only
+        // the completionist side can ever be rewritten (`completionist ≥ 4× main`).
+        let vaultLength = EstimateSanity.lengthInputs(
+            rushed: nil, main: entry.lengthMainSeconds, completionist: entry.lengthCompleteSeconds,
+            sourceIsHLTB: false, dismissed: false)
+        let personal = PersonalLength.compute(
+            normallyS: vaultLength.main, completelyS: vaultLength.completionist, style: options.playStyle)
         var timeTerm = 0.0
         var timeFit: TimeFit.Result?
         if let bracket = options.bracket, let personal {

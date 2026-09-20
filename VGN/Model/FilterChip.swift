@@ -15,7 +15,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         case tier, unrated
         case status, notPlayed, noStatus
         case format, notOwned, multipleCopies, subscriptionOnly
-        case playtime, noEstimate, platform
+        case playtime, noEstimate, suspiciousEstimate, platform
 
         var label: String {
             switch self {
@@ -33,6 +33,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .subscriptionOnly: return "PS Plus"
             case .playtime: return "Playtime"
             case .noEstimate: return "No Estimate"
+            case .suspiciousEstimate: return "Suspicious Estimate"
             case .platform: return "Platform"
             }
         }
@@ -41,7 +42,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         /// "Kind: value" split.
         var isStandalone: Bool {
             switch self {
-            case .unrated, .notPlayed, .noStatus, .notOwned, .multipleCopies, .subscriptionOnly, .noEstimate: return true
+            case .unrated, .notPlayed, .noStatus, .notOwned, .multipleCopies, .subscriptionOnly, .noEstimate, .suspiciousEstimate: return true
             default: return false
             }
         }
@@ -122,6 +123,7 @@ enum LibraryFilterChips {
             .map { ($0.rawValue, $0.label) }
         add(.playtime, playtimePairs)
         if filter.includeNoTimeEstimate { add(.noEstimate, [("true", "No Estimate")]) }
+        if filter.includeSuspiciousEstimate { add(.suspiciousEstimate, [("true", "Suspicious Estimate")]) }
 
         add(.platform, filter.platforms.sorted().map { ($0, platformShort($0)) })
 
@@ -147,6 +149,7 @@ enum LibraryFilterChips {
         case .subscriptionOnly: f.includeSubscriptionOnly = false
         case .playtime: if let b = PlaytimeBucket(rawValue: chip.value) { f.playtimes.remove(b) }
         case .noEstimate: f.includeNoTimeEstimate = false
+        case .suspiciousEstimate: f.includeSuspiciousEstimate = false
         case .platform: f.platforms.remove(chip.value)
         }
         return f

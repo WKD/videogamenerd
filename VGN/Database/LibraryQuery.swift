@@ -286,6 +286,10 @@ enum LibraryQuery {
         }
         appendPlaytimeFacet(filter.playtimes, includeNoEstimate: filter.includeNoTimeEstimate,
                             style: filter.playStyle, into: &wheres, args: &args)
+        // Playtime ▸ "Suspicious Estimate" — its own facet, ANDed across kinds (PLAN §5.3).
+        if filter.includeSuspiciousEstimate {
+            wheres.append(suspiciousEstimatePredicate())
+        }
         if let match = ftsMatch(filter.searchText) {
             wheres.append("g.id IN (SELECT rowid FROM games_fts WHERE games_fts MATCH ?)")
             args.append(match)
@@ -313,7 +317,20 @@ enum LibraryQuery {
     static func lengthEstimateExpr(style: PlayStyle, r: Double = PlayStyle.sidesRatio) -> String {
         let t = sqlLiteral(style.t)
         let rl = sqlLiteral(r)
+        let ratio = sqlLiteral(EstimateSanity.completionistRatio)
+        // A flagged (suspicious & not hltb-sourced & not dismissed) game with a
+        // completionist ≥ 4× main has its completionist ignored for planning (PLAN §5.3,
+        // D5 — the SQL mirror of ``EstimateSanity/lengthInputs``): it falls back to
+        // `main × r`, so the blend equals the main-only estimate. The **main**-implausible
+        // cases (`rushed > main`, `main > completionist`) and a lone completionist fall
+        // through to the normal branches, where the `completely < normally` clamp already
+        // collapses a dirty completionist to the main story. `hltb`/dismissed games skip
+        // the guard entirely.
+        let guardSQL = suspiciousLengthGuardSQL()
         return "CAST(ROUND(CASE"
+            + " WHEN \(guardSQL) AND g.ttb_normally_s IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
+            + " AND g.ttb_completely_s >= \(ratio) * g.ttb_normally_s"
+            + " THEN g.ttb_normally_s + \(t) * (ROUND(g.ttb_normally_s * \(rl)) - g.ttb_normally_s)"
             + " WHEN g.ttb_normally_s IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
             + " THEN g.ttb_normally_s + \(t) * (CASE WHEN g.ttb_completely_s < g.ttb_normally_s"
             + " THEN 0 ELSE g.ttb_completely_s - g.ttb_normally_s END)"
@@ -322,6 +339,48 @@ enum LibraryQuery {
             + " WHEN g.ttb_completely_s IS NOT NULL"
             + " THEN g.ttb_completely_s * (1 + \(t) * (\(rl) - 1)) / \(rl)"
             + " ELSE NULL END) AS INTEGER)"
+    }
+
+    // MARK: - Suspicious estimates (PLAN §5.3)
+
+    /// SQL that yields the game ids the owner dismissed as "Estimate Looks Right"
+    /// (persisted as a JSON array in `app_state`, mirroring `reconcile.notBundle`). A
+    /// missing row decodes to the empty array, so nothing is excluded. Referencing
+    /// `app_state` makes every query that uses the length expression / the suspicious
+    /// facet re-run when a game is dismissed or flagged again (live, no timer).
+    private static func dismissedEstimateSubquery() -> String {
+        let key = sqlStringLiteral(LibraryStore.estimateLooksRightStateKey)
+        return "SELECT value FROM json_each(COALESCE((SELECT json FROM app_state WHERE key = \(key)), '[]'))"
+    }
+
+    /// The guard shared by the length-expression fallback: a game is eligible to be
+    /// treated as flagged only when its times are **not** from HowLongToBeat (the
+    /// reference) and it was **not** dismissed.
+    private static func suspiciousLengthGuardSQL() -> String {
+        "(g.ttb_source IS NULL OR g.ttb_source <> 'hltb') AND g.id NOT IN (\(dismissedEstimateSubquery()))"
+    }
+
+    /// The **one** SQL mirror of ``EstimateSanity/isFlagged`` (D1): true for a game whose
+    /// stored times are suspicious *and* that is neither hltb-sourced nor dismissed. Built
+    /// from the same thresholds as the Swift rule, and proven to agree with it
+    /// (`EstimateSanityTests`). A comparison against a NULL time is never true, exactly as
+    /// the Swift rule only compares present values.
+    static func suspiciousEstimatePredicate() -> String {
+        let ratio = sqlLiteral(EstimateSanity.completionistRatio)
+        let frac = sqlLiteral(EstimateSanity.rushedFraction)
+        let core = [
+            "g.ttb_hastily_s > g.ttb_normally_s",
+            "g.ttb_normally_s > g.ttb_completely_s",
+            "g.ttb_completely_s >= \(ratio) * g.ttb_normally_s",
+            "g.ttb_hastily_s < \(frac) * g.ttb_normally_s",
+            "(g.ttb_normally_s IS NULL AND g.ttb_completely_s IS NOT NULL)",
+        ].joined(separator: " OR ")
+        return "(\(suspiciousLengthGuardSQL()) AND (\(core)))"
+    }
+
+    /// A single-quoted SQL string literal for an app constant (no user input).
+    private static func sqlStringLiteral(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "''") + "'"
     }
 
     /// The seconds a game is bucketed on for the playtime filter: effective playtime

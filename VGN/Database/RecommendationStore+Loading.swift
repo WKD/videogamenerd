@@ -47,7 +47,8 @@ extension RecommendationStore {
     static func loadCandidates(db: Database) throws -> [Candidate] {
         let rows = try Row.fetchAll(db, sql: """
             SELECT g.id, g.igdb_id, g.title, g.year, g.played, g.status,
-                   g.my_playtime_s, g.ttb_normally_s, g.ttb_completely_s,
+                   g.my_playtime_s, g.ttb_hastily_s, g.ttb_normally_s, g.ttb_completely_s,
+                   g.ttb_source,
                    g.igdb_rating, g.igdb_rating_count, g.cover_file,
                    NOT EXISTS (
                        SELECT 1 FROM product_games pgx JOIN products px ON px.id = pgx.product_id
@@ -66,6 +67,9 @@ extension RecommendationStore {
         let ids = rows.map { $0["id"] as Int64 }
         let features = try loadFeatures(ids: ids, db: db)
         let formats = try loadFormats(ids: ids, db: db)
+        // A flagged completionist is ignored for the length input (PLAN §5.3, D5): the
+        // engine's time fit sees the same fallback the BY LENGTH shelves use.
+        let dismissedEstimates = try LibraryStore.readDismissedEstimateIDs(db)
 
         return rows.compactMap { row -> Candidate? in
             let id: Int64 = row["id"]
@@ -74,12 +78,17 @@ extension RecommendationStore {
             guard let status = recStatus(played: played, statusRaw: statusRaw) else { return nil }
             let igdbID: Int64? = row["igdb_id"]
             let feature = features[id]
+            let length = EstimateSanity.lengthInputs(
+                rushed: row["ttb_hastily_s"], main: row["ttb_normally_s"],
+                completionist: row["ttb_completely_s"],
+                sourceIsHLTB: (row["ttb_source"] as String?) == HLTBSource.id,
+                dismissed: dismissedEstimates.contains(id))
             return Candidate(
                 id: id,
                 igdbID: igdbID,
                 traits: feature?.traits ?? [],
-                estimateSeconds: row["ttb_normally_s"],
-                completionistSeconds: row["ttb_completely_s"],
+                estimateSeconds: length.main,
+                completionistSeconds: length.completionist,
                 myPlaytimeSeconds: row["my_playtime_s"],
                 status: status,
                 igdbRating: row["igdb_rating"],
