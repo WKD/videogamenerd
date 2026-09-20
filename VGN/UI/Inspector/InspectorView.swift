@@ -425,6 +425,7 @@ private struct SingleGameInspector: View {
                 mainS: detail.ttbNormallyS, completionistS: detail.ttbCompletelyS,
                 rushedS: detail.ttbHastilyS,
                 sourceLabel: Self.sourceLabel(detail.ttbSource), showEstimates: hasAverages)
+            estimateWarning
             if hasAverages {
                 MeVsAverageBar(bar: bar)
             } else {
@@ -432,6 +433,26 @@ private struct SingleGameInspector: View {
                     .font(.caption).foregroundStyle(.tertiary)
             }
             hltbActions
+        }
+    }
+
+    /// The suspicious-estimate warning (PLAN §5.3, D3): a ⚠︎ with the reason on hover and
+    /// two menu-free actions (Refresh from HowLongToBeat · Estimate Looks Right), or, once
+    /// dismissed, a subdued note with "Flag again" in the same place. Shown only when the
+    /// raw times trip ``EstimateSanity`` and are not already from HowLongToBeat.
+    @ViewBuilder
+    private var estimateWarning: some View {
+        if detail.ttbSource != HLTBSource.id,
+           let reason = EstimateSanity.isSuspicious(
+               rushed: detail.ttbHastilyS, main: detail.ttbNormallyS, completionist: detail.ttbCompletelyS) {
+            PlaytimeEstimateWarning(
+                reason: reason.sentence,
+                dismissed: hltbFetch?.isEstimateDismissed(detail.id) ?? false,
+                isRefreshing: hltbFetch?.isFetchingOne ?? false,
+                onRefresh: { hltbFetch?.refreshOne(gameID: detail.id) },
+                onDismissToggle: { dismissed in
+                    hltbFetch?.setEstimateLooksRight(gameID: detail.id, dismissed: dismissed)
+                })
         }
     }
 
@@ -769,6 +790,46 @@ struct PlaytimeEstimatesTable: View {
         }
         .font(.caption)
         .opacity(secondary ? 0.85 : 1)
+    }
+}
+
+/// The suspicious-estimate warning row (PLAN §5.3, D3): a small ⚠︎ carrying the reason as
+/// a tooltip, plus two menu-free actions — "Refresh from HowLongToBeat" (replaces the three
+/// times) and "Estimate Looks Right" (dismiss). Once dismissed, the same place shows a
+/// subdued note and "Flag again". Wrapped so the labels never squeeze at the 300 pt minimum
+/// inspector width (they stack instead). Never a `Menu` (a synthetic click must not open one).
+struct PlaytimeEstimateWarning: View {
+    let reason: String
+    let dismissed: Bool
+    var isRefreshing: Bool = false
+    let onRefresh: () -> Void
+    let onDismissToggle: (Bool) -> Void
+
+    var body: some View {
+        InspectorWrappingRow(spacing: 10) {
+            if dismissed {
+                Label("Estimate marked OK", systemImage: "checkmark.seal")
+                    .lineLimit(1).fixedSize()
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Flag again") { onDismissToggle(false) }
+                    .buttonStyle(.borderless).font(.caption).fixedSize()
+                    .accessibilityIdentifier("inspector.estimate.flagAgain")
+            } else {
+                Label("Suspicious estimate", systemImage: "exclamationmark.triangle.fill")
+                    .lineLimit(1).fixedSize()
+                    .font(.caption).foregroundStyle(.orange)
+                    .appKitTooltip(reason)
+                    .accessibilityLabel("Suspicious estimate: \(reason)")
+                Button("Refresh from HowLongToBeat") { onRefresh() }
+                    .buttonStyle(.borderless).font(.caption).fixedSize()
+                    .disabled(isRefreshing)
+                    .accessibilityIdentifier("inspector.estimate.refresh")
+                Button("Estimate Looks Right") { onDismissToggle(true) }
+                    .buttonStyle(.borderless).font(.caption).fixedSize()
+                    .accessibilityIdentifier("inspector.estimate.looksRight")
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 

@@ -158,6 +158,27 @@ struct FilterChipTests {
         #expect(!cleared.hasActiveFacets)
     }
 
+    @Test func suspiciousEstimateChipIsStandaloneAndRemovableAndClears() {
+        var f = LibraryFilter(scope: .all)
+        f.includeSuspiciousEstimate = true
+        #expect(f.hasActiveFacets)
+        let chips = LibraryFilterChips.chips(for: f, tiers: tiers)
+        let chip = try! #require(chips.first { $0.kind == .suspiciousEstimate })
+        #expect(chip.text == "Suspicious Estimate")       // standalone facet
+        #expect(chip.fullLabel == "Suspicious Estimate")
+        let removed = LibraryFilterChips.removing(chip, from: f)
+        #expect(removed.includeSuspiciousEstimate == false)
+        #expect(!removed.hasActiveFacets)
+        // Composes with the playtime bands and No Estimate without swallowing them.
+        var mix = LibraryFilter(scope: .all)
+        mix.playtimes = [.h10to40]
+        mix.includeNoTimeEstimate = true
+        mix.includeSuspiciousEstimate = true
+        let kinds = LibraryFilterChips.chips(for: mix, tiers: tiers).map(\.kind)
+        #expect(kinds == [.playtime, .noEstimate, .suspiciousEstimate])
+        #expect(!LibraryFilterChips.cleared(mix).includeSuspiciousEstimate)
+    }
+
     @Test func multipleCopiesChipIsStandaloneAndRemovable() {
         var f = LibraryFilter(scope: .all)
         f.multipleCopies = true

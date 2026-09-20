@@ -65,6 +65,27 @@ struct InspectorLayoutTests {
         #expect(narrow == wide, "table wrapped: \(narrow) vs \(wide)")
     }
 
+    /// The suspicious-estimate warning (PLAN §5.3, D3) survives the 300 pt minimum column:
+    /// its ⚠︎ + two action labels stack rather than squeezing letter-by-letter, so the row
+    /// lays out with a finite, bounded height in both the flagged and dismissed states.
+    @Test func estimateWarningSurvivesMinimumWidth() {
+        let width = Self.inner(300)
+        let flagged = PlaytimeEstimateWarning(
+            reason: "Completionist (1000 h) is more than 4× the main story (54 h).",
+            dismissed: false, isRefreshing: false, onRefresh: {}, onDismissToggle: { _ in })
+        let dismissed = PlaytimeEstimateWarning(
+            reason: "Completionist (1000 h) is more than 4× the main story (54 h).",
+            dismissed: true, isRefreshing: false, onRefresh: {}, onDismissToggle: { _ in })
+        let hFlagged = fittingHeight(flagged, width: width)
+        let hDismissed = fittingHeight(dismissed, width: width)
+        #expect(hFlagged > 0 && hFlagged.isFinite)
+        #expect(hDismissed > 0 && hDismissed.isFinite)
+        // Three stacked caption rows are the worst case — well under this bound; a
+        // letter-by-letter squeeze of the long "Refresh from HowLongToBeat" label would
+        // blow far past it.
+        #expect(hFlagged < 160, "warning too tall at 300 pt: \(hFlagged)")
+    }
+
     /// The one-line me-vs-average summary stays one line (it scales down before wrapping).
     @Test func playtimeComparisonStaysOneLine() {
         let bar = PlaytimeBar.make(mineSeconds: 2310 * 3600 + 5 * 60,

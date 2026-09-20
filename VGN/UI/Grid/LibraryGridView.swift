@@ -211,6 +211,14 @@ struct LibraryGridView: View {
             if !vm.selectedGameIDs.contains(game.id) { vm.selectOnly(game.id) }
             vm.showInspector()
         }
+        // Replace-from-HowLongToBeat on the selection (PLAN §5.3): unlike the gap-fill,
+        // this overwrites the three estimates for the flagged games. Confirms first.
+        if let hltb = hltbPresenter, hltb.canRunBulk {
+            Divider()
+            Button("Refresh Time Estimates from HowLongToBeat…") {
+                act(on: game) { _ in hltb.presentRefresh() }
+            }
+        }
         Divider()
         Button("Delete…", role: .destructive) { act(on: game) { vm.actions?.requestDelete(ids: $0) } }
     }

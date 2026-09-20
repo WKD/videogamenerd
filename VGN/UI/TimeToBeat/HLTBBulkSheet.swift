@@ -12,9 +12,11 @@ struct HLTBBulkSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Fetch Missing Time Estimates").font(.title3.bold())
+            Text(model.sheetTitle).font(.title3.bold())
 
-            if model.isRunning {
+            if model.needsConfirmation {
+                confirmBody
+            } else if model.isRunning {
                 runningBody
             } else {
                 summaryBody
@@ -31,6 +33,23 @@ struct HLTBBulkSheet: View {
                     pickFor = nil
                 },
                 onCancel: { pickFor = nil })
+        }
+    }
+
+    // MARK: Confirm (replace mode only)
+
+    private var confirmBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(model.confirmationMessage).font(.callout).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { onClose() }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("hltb.bulk.cancelConfirm")
+                Button("Replace") { model.confirmAndRun() }
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("hltb.bulk.confirmReplace")
+            }
         }
     }
 

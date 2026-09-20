@@ -348,6 +348,8 @@ struct RootView: View {
             Divider()
             Toggle("No Estimate", isOn: flag(\.includeNoTimeEstimate))
                 .help("Games with no completion time at all — nothing to fetch — which impairs Play Next.")
+            Toggle("Suspicious Estimate", isOn: flag(\.includeSuspiciousEstimate))
+                .help("Games whose completion times look wrong — out of order, or a completionist far longer than the main story — worth refreshing from HowLongToBeat.")
             Divider()
             Text("Uses your time, or the IGDB estimate when unplayed.")
             if playtimeFacetActive {
@@ -361,7 +363,7 @@ struct RootView: View {
     }
 
     private var playtimeFacetActive: Bool {
-        !vm.filter.playtimes.isEmpty || vm.filter.includeNoTimeEstimate
+        !vm.filter.playtimes.isEmpty || vm.filter.includeNoTimeEstimate || vm.filter.includeSuspiciousEstimate
     }
 
     // Platform multi-filter, usable from any scope incl. "All" (in-use platforms).
@@ -459,6 +461,7 @@ struct RootView: View {
         var f = vm.filter
         f.playtimes.removeAll()
         f.includeNoTimeEstimate = false
+        f.includeSuspiciousEstimate = false
         vm.setFilter(f)
     }
 }

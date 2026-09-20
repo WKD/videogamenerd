@@ -111,6 +111,19 @@ and bump the "verified <date>" notes here and in the file header. If the token s
 (e.g. moves back to no-auth, or gains a challenge), the client's `ensureSession` in
 `HLTBClient.swift` is the only other place that touches the flow.
 
+## Fill vs. replace (PLAN §5.3)
+
+The same client, pacing, per-run cap, matcher and stop-on-first-unexpected-response serve two
+writes, selected by a `mode`:
+- **`.fillGaps`** — "Fetch Missing Time Estimates…": fills only empty `ttb_*` columns
+  (`LibraryStore.applyHLTBTimes`), never overwriting an IGDB / hand-typed value.
+- **`.replace`** — "Refresh Time Estimates from HowLongToBeat…" (the suspicious-estimate repair):
+  overwrites all three times with HLTB's and stamps `ttb_source = 'hltb'`
+  (`LibraryStore.replaceHLTBTimes`), so the game becomes the reference and leaves the
+  Suspicious-Estimate filter. A game HLTB doesn't know is left untouched (stays flagged). The
+  owner's own playtime columns are never touched. One `HLTBTimeSnapshot` per game is collected so
+  the whole batch is a single Undo. The replace bulk sheet confirms the count first.
+
 ## Fixtures / recording
 
 `scripts/record-hltb-fixtures.swift` — bounded (≤ 25 requests, ≥ 2 s apart, serial, stop on the
