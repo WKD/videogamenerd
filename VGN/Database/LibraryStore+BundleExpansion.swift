@@ -1,0 +1,292 @@
+import Foundation
+import GRDB
+
+// MARK: - Bundle expansion (PLAN §5.1 "Reconciling unlinked games" — the bundle rule)
+
+/// Errors specific to expanding a placeholder game that is linked to (or matched with) an
+/// IGDB bundle into a compilation of its member games.
+enum BundleExpansionError: Error, Sendable, Equatable {
+    case notFound
+    /// The bundle had no member games to expand into (imperfect IGDB coverage) — the
+    /// caller keeps the single game unchanged.
+    case noMembers
+    /// The placeholder game owns nothing and lists no platform, so there is nowhere to
+    /// anchor the compilation copy.
+    case noPlatform
+}
+
+/// The play data a placeholder game carries that must **not** be silently dropped when it
+/// is expanded into a compilation (PLAN §5.1). When non-empty the confirm step offers a
+/// member to move it onto; when empty the placeholder is simply deleted after re-pointing.
+struct BundlePlaceholderData: Sendable, Equatable {
+    var played: Bool
+    var hasTier: Bool
+    var hasRank: Bool
+    var hasStatus: Bool
+    var hasPlaytime: Bool
+    var hasPlayDates: Bool
+    var userEdited: Bool
+
+    /// Nothing worth keeping → the placeholder can be deleted without asking.
+    var isEmpty: Bool {
+        !(played || hasTier || hasRank || hasStatus || hasPlaytime || hasPlayDates || userEdited)
+    }
+
+    init(_ g: GameRecord) {
+        played = g.played
+        hasTier = g.tierID != nil
+        hasRank = g.rankKey != nil
+        hasStatus = g.status != nil
+        hasPlaytime = g.myPlaytimeS != nil || g.psnPlaytimeS != nil
+        hasPlayDates = g.firstPlayedAt != nil || g.lastPlayedAt != nil
+        userEdited = !UserEditedFields(raw: g.userEdited).isEmpty
+    }
+}
+
+/// What the confirm sheet needs before expanding a linked/matched placeholder game
+/// (PLAN §5.1). `igdbID` nil ⇒ the game is unlinked and no bundle can be resolved.
+struct BundleExpansionPreview: Sendable, Equatable {
+    var gameID: Int64
+    var title: String
+    var igdbID: Int64?
+    var platformIDs: [String]
+    /// Whether the game sits alone in a `single` product (the repair-path candidate shape).
+    var isLoneSingle: Bool
+    var placeholder: BundlePlaceholderData
+    /// True when the placeholder carries play data the expansion must move to a member.
+    var carriesPlayData: Bool { !placeholder.isEmpty }
+}
+
+/// A library game that *looks* like an unexpanded bundle (PLAN §5.1 repair path). The
+/// title heuristic is deliberately loose — the real check is an on-demand IGDB lookup when
+/// the owner clicks, never a bulk verification on launch.
+struct BundleExpansionCandidate: Sendable, Equatable, Identifiable {
+    var gameID: Int64
+    var title: String
+    var igdbID: Int64?
+    var id: Int64 { gameID }
+}
+
+/// An in-memory record of everything a bundle expansion touched, so it is reversible
+/// through `UndoManager` (PLAN §5.1). Restores the pre-existing games verbatim and deletes
+/// the member games that were created fresh.
+struct BundleExpansionUndo: Sendable {
+    var actionName: String
+    /// Pre-existing games captured before the expansion (placeholder + any members already
+    /// in the library + the play-data target when it was an existing member).
+    var involvedGameIDs: [Int64]
+    var snapshot: ReconcileSnapshot
+    /// Member games created fresh during the expansion — deleted on undo.
+    var createdGameIDs: [Int64]
+}
+
+/// The outcome of an expansion (PLAN §5.1).
+struct BundleExpansionResult: Sendable {
+    var productIDs: [Int64]
+    var memberGameIDs: [Int64]
+    var createdCount: Int
+    var undo: BundleExpansionUndo
+}
+
+extension LibraryStore {
+
+    /// A title heuristic for the repair-path candidate list (PLAN §5.1) — loose on purpose,
+    /// verified against IGDB only on click. Case-insensitive, word-boundary-ish.
+    static func looksLikeBundleTitle(_ title: String) -> Bool {
+        let lower = title.lowercased()
+        let words = ["trilogy", "collection", "anthology", "compilation", "pack",
+                     "hd classics", "classics collection", "the orange box", "the master chief collection"]
+        if words.contains(where: { lower.contains($0) }) { return true }
+        // "N in 1" / "3-in-1".
+        if lower.range(of: #"\b\d+\s*[- ]?in[- ]?1\b"#, options: .regularExpression) != nil { return true }
+        return false
+    }
+
+    /// Preview info for expanding one game (the inspector / reconcile confirm step).
+    func bundleExpansionPreview(gameID: Int64) async throws -> BundleExpansionPreview {
+        try await dbReader.read { db in
+            guard let g = try GameRecord.fetchOne(db, key: gameID) else { throw BundleExpansionError.notFound }
+            let platformIDs = try String.fetchAll(
+                db, sql: "SELECT platform_id FROM game_platforms WHERE game_id = ? ORDER BY platform_id",
+                arguments: [gameID])
+            // Lone single: exactly one product, kind single, and this game its only member.
+            let productIDs = try Int64.fetchAll(
+                db, sql: "SELECT product_id FROM product_games WHERE game_id = ?", arguments: [gameID])
+            var isLoneSingle = false
+            if productIDs.count == 1, let pid = productIDs.first {
+                let members = try Int.fetchOne(
+                    db, sql: "SELECT COUNT(*) FROM product_games WHERE product_id = ?", arguments: [pid]) ?? 0
+                let kind = try String.fetchOne(db, sql: "SELECT kind FROM products WHERE id = ?", arguments: [pid])
+                isLoneSingle = members == 1 && kind == "single"
+            } else if productIDs.isEmpty {
+                isLoneSingle = true    // played-only placeholder; nothing owned yet
+            }
+            return BundleExpansionPreview(
+                gameID: gameID, title: g.title, igdbID: g.igdbID, platformIDs: platformIDs,
+                isLoneSingle: isLoneSingle, placeholder: BundlePlaceholderData(g))
+        }
+    }
+
+    /// Library games whose title looks like an unexpanded bundle and that sit alone in a
+    /// single product (or are linked, played-only) — repair-path candidates (PLAN §5.1).
+    /// A loose heuristic; the real bundle check happens on click, per game.
+    func bundleExpansionCandidates() async throws -> [BundleExpansionCandidate] {
+        try await dbReader.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT g.id AS id, g.title AS title, g.igdb_id AS igdb_id,
+                       (SELECT COUNT(*) FROM product_games pg WHERE pg.game_id = g.id) AS product_count,
+                       (SELECT MAX(mc) FROM (
+                            SELECT (SELECT COUNT(*) FROM product_games pg2 WHERE pg2.product_id = pg.product_id) AS mc
+                            FROM product_games pg WHERE pg.game_id = g.id)) AS max_members
+                FROM games g
+                ORDER BY g.sort_title
+                """)
+            return rows.compactMap { row in
+                let title: String = row["title"]
+                guard Self.looksLikeBundleTitle(title) else { return nil }
+                let productCount: Int = row["product_count"] ?? 0
+                let maxMembers: Int = row["max_members"] ?? 0
+                // Skip games that are already a compilation member (max_members > 1).
+                guard productCount == 0 || maxMembers <= 1 else { return nil }
+                return BundleExpansionCandidate(gameID: row["id"], title: title, igdbID: row["igdb_id"])
+            }
+        }
+    }
+
+    /// Expand a placeholder game into a compilation of `members` in one transaction
+    /// (PLAN §5.1). Each of the game's product(s) becomes a `compilation` titled
+    /// `bundleTitle`; the members are upserted/deduped (a member already in the library is
+    /// linked, never duplicated) and attached; the placeholder is removed from those
+    /// products. When it carries no play data it is deleted; when it does, its
+    /// played/status/tier/rank/playtime/dates are moved to `playDataTargetIndex`'s member
+    /// (default the first) before it is deleted — respecting *only played games carry a
+    /// tier/rank* and rank-order consistency (the placeholder is deleted, freeing its
+    /// rank_key). Returns an undo record.
+    @discardableResult
+    func expandBundle(gameID: Int64, bundleTitle: String,
+                      members: [CompilationMemberDraft],
+                      playDataTargetIndex: Int? = 0) async throws -> BundleExpansionResult {
+        guard !members.isEmpty else { throw BundleExpansionError.noMembers }
+        return try await dbWriter.write { db in
+            guard let g = try GameRecord.fetchOne(db, key: gameID) else { throw BundleExpansionError.notFound }
+            let placeholder = BundlePlaceholderData(g)
+
+            // Existing library games among the members (for the undo snapshot) — before mutation.
+            var existingMemberIDs: [Int64] = []
+            for member in members {
+                guard let igdbID = member.igdbID,
+                      let id = try Int64.fetchOne(
+                        db, sql: "SELECT id FROM games WHERE igdb_id = ?", arguments: [igdbID]) else { continue }
+                if !existingMemberIDs.contains(id) { existingMemberIDs.append(id) }
+            }
+            var involved = [gameID]
+            for id in existingMemberIDs where !involved.contains(id) { involved.append(id) }
+            let snapshot = try Self.captureSnapshot(involved, db)
+
+            // The products to convert. If the placeholder owns nothing, anchor one new
+            // compilation product on its first platform.
+            var productIDs = try Int64.fetchAll(
+                db, sql: "SELECT product_id FROM product_games WHERE game_id = ? ORDER BY product_id",
+                arguments: [gameID])
+            let platforms = try String.fetchAll(
+                db, sql: "SELECT platform_id FROM game_platforms WHERE game_id = ? ORDER BY platform_id",
+                arguments: [gameID])
+            if productIDs.isEmpty {
+                guard let platform = platforms.first else { throw BundleExpansionError.noPlatform }
+                let now = Date()
+                try db.execute(sql: """
+                    INSERT INTO products (title, platform_id, kind, format, source, created_at, updated_at)
+                    VALUES (?, ?, 'compilation', ?, ?, ?, ?)
+                    """, arguments: [bundleTitle, platform, ProductFormat.physical.rawValue,
+                                     ProductSource.manual.rawValue, now, now])
+                productIDs = [db.lastInsertedRowID]
+            }
+
+            // Convert each product and attach every member; map member index → game id
+            // (stable across products because upsert dedupes by igdb id).
+            var memberGameIDByIndex: [Int: Int64] = [:]
+            var createdGameIDs: [Int64] = []
+            var allMemberGameIDs: [Int64] = []
+            for pid in productIDs {
+                guard let prow = try Row.fetchOne(
+                    db, sql: "SELECT platform_id, source FROM products WHERE id = ?", arguments: [pid])
+                else { continue }
+                let productPlatform: String = prow["platform_id"]
+                let productSource = ProductSource(rawValue: prow["source"]) ?? .manual
+                try db.execute(sql: "UPDATE products SET kind = 'compilation', title = ?, updated_at = ? WHERE id = ?",
+                               arguments: [bundleTitle, Date(), pid])
+                for (index, member) in members.enumerated() {
+                    let outcome = try Self.upsertCompilationMember(
+                        member, productID: pid, platformID: productPlatform, source: productSource, db: db)
+                    if memberGameIDByIndex[index] == nil { memberGameIDByIndex[index] = outcome.gameID }
+                    if case .created = outcome, !createdGameIDs.contains(outcome.gameID) {
+                        createdGameIDs.append(outcome.gameID)
+                    }
+                    if !allMemberGameIDs.contains(outcome.gameID) { allMemberGameIDs.append(outcome.gameID) }
+                }
+                // The placeholder is no longer a member of this product.
+                try db.execute(sql: "DELETE FROM product_games WHERE product_id = ? AND game_id = ?",
+                               arguments: [pid, gameID])
+            }
+
+            // Move the placeholder's play data onto the chosen member, then delete it.
+            if !placeholder.isEmpty {
+                let index = playDataTargetIndex ?? 0
+                if let targetID = memberGameIDByIndex[index] ?? memberGameIDByIndex[0] {
+                    try Self.transferPlayData(from: g, to: targetID, db: db)
+                }
+            }
+            try Self.deleteGameRow(gameID, db)
+
+            let undo = BundleExpansionUndo(
+                actionName: "Expand Bundle", involvedGameIDs: involved,
+                snapshot: snapshot, createdGameIDs: createdGameIDs)
+            return BundleExpansionResult(
+                productIDs: productIDs, memberGameIDs: allMemberGameIDs,
+                createdCount: createdGameIDs.count, undo: undo)
+        }
+    }
+
+    /// Undo a bundle expansion: delete the freshly-created member games, then restore the
+    /// pre-existing games (placeholder + existing members) verbatim (PLAN §5.1).
+    func restoreBundleExpansion(_ undo: BundleExpansionUndo) async throws {
+        try await dbWriter.write { db in
+            for id in undo.createdGameIDs {
+                if try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM games WHERE id = ?)",
+                                     arguments: [id]) ?? false {
+                    try Self.deleteGameRow(id, db)
+                }
+            }
+            try Self.applySnapshot(undo.snapshot, gameIDs: undo.involvedGameIDs, db)
+        }
+    }
+
+    /// Move the placeholder's played state / status / tier / rank / playtime / dates onto a
+    /// member (PLAN §5.1). Merge rules mirror ``performMerge``: the member keeps its own
+    /// scalar when set, otherwise adopts the placeholder's; the tier/rank carries only when
+    /// the member is unranked (the placeholder is deleted right after, freeing its
+    /// `rank_key`, so uniqueness holds). Invariant 2 ("only played games carry a tier/rank")
+    /// is preserved because a tiered placeholder is always played, so `played` is OR-ed on.
+    private static func transferPlayData(from source: GameRecord, to targetID: Int64, db: Database) throws {
+        guard var target = try GameRecord.fetchOne(db, key: targetID) else { return }
+        target.played = target.played || source.played
+        target.status = target.status ?? source.status
+        target.myPlaytimeS = target.myPlaytimeS ?? source.myPlaytimeS
+        target.psnPlaytimeS = target.psnPlaytimeS ?? source.psnPlaytimeS
+        if target.tierID == nil, let tier = source.tierID {
+            target.tierID = tier                  // played already 1 above (invariant 2 holds)
+            target.rankKey = source.rankKey
+        }
+        target.updatedAt = Date()
+        try target.update(db)
+        // Earliest / latest known play date (monotonic; nil never overwrites).
+        try setPSNPlayedDates(gameID: targetID, first: source.firstPlayedAt, last: source.lastPlayedAt, db: db)
+        // Reflect the played flag on the member's platform rows.
+        if target.played {
+            for platform in try String.fetchAll(
+                db, sql: "SELECT platform_id FROM game_platforms WHERE game_id = ?", arguments: [targetID]) {
+                try ensureGamePlatform(gameID: targetID, platformID: platform, played: true, db: db)
+            }
+        }
+    }
+}

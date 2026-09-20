@@ -16,6 +16,13 @@ struct ReconcileCommands: Commands {
                 if let single { library?.requestLinkToIGDB(gameID: single) }
             }
             .disabled(single == nil)
+            // Repair path (PLAN §5.1): expand a game linked to an IGDB bundle into its
+            // member games. Enabled for a single linked selection; the presenter verifies
+            // against IGDB on click and no-ops when it is not a bundle.
+            Button("Expand Bundle into Games…") {
+                if let single { library?.requestExpandBundle(gameID: single) }
+            }
+            .disabled(single == nil || !isLinked)
         }
     }
 }

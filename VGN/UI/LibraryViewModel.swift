@@ -126,6 +126,9 @@ final class LibraryViewModel {
     /// "Link to IGDB…" / "Change IGDB Match…" for one game (wired by the app to the
     /// reconcile presenter — PLAN §5.1).
     var onLinkToIGDB: (Int64) -> Void = { _ in }
+    /// "Expand Bundle into Games…" for one game linked to an IGDB bundle (wired to the
+    /// reconcile presenter — PLAN §5.1 repair path).
+    var onExpandBundle: (Int64) -> Void = { _ in }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.
@@ -895,6 +898,11 @@ final class LibraryViewModel {
     /// Called from the inspector, grid context menu and Game menu — never a body/menu
     /// *builder* (a Button action).
     func requestLinkToIGDB(gameID: Int64) { onLinkToIGDB(gameID) }
+
+    /// Open the "Expand Bundle into Games…" confirm flow for one game (PLAN §5.1 repair
+    /// path). The presenter verifies against IGDB on demand and no-ops when it is not a
+    /// bundle. Called from the inspector / grid context menu — never a menu *builder*.
+    func requestExpandBundle(gameID: Int64) { onExpandBundle(gameID) }
 
     /// After a mutation that may drop `ids` from the current scope (e.g. a link that
     /// leaves the "Unlinked" list, or a merge that deletes a game), plan a sensible
