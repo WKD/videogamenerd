@@ -125,22 +125,47 @@ the join **and** for the IGDB match title (`matchTitle`); the shown `name` keeps
 `npServiceName` filter and returns every title of the account; each title carries its own
 `npServiceName` (`trophy` = PS3/PS4/Vita sets, `trophy2` = PS5 sets). VGN fetches it once (no
 `npServiceName`, as psn-api's `getUserTitles` does). `trophyTitlePlatform` values, including
-combined ones, map to slugs: `PS5`→ps5, `PS4`→ps4, `PS3`→ps3, `PSVITA`→vita, `PS4,PS5`→ps5,
-`PS3,PSVITA`→vita (the newest generation of a combined string wins). The same
-`npCommunicationId` never double-counts.
+combined ones, map to slugs: `PS5`→ps5, `PS4`→ps4, `PS3`→ps3, `PSVITA`→vita. The pick for a
+combined string is the **newest generation** and is **order-independent** — the real strings
+arrive oldest-first, `"PSVITA,PS4"` (10 titles) and `"PS3,PSVITA,PS4"` (4 titles, live
+2026-09-20), yet both resolve to **ps4**; `"PS4,PS5"`→ps5, `"PS3,PSVITA"`→vita. The row keeps
+the newest slug and gets a review note **"also on …"** listing the other platforms of the
+string. The same `npCommunicationId` never double-counts. (`generationRank` orders strictly by
+release, PS5 > PS4 > Vita > PS3 > PSP > PS2 > PS1, so any real combined string resolves cleanly.)
 
 **Game list — `service`** tells how a game was accessed:
 
 | `service` | Meaning | Becomes |
 |---|---|---|
-| `none(purchased)` | a digital purchase | **owned digital**, even if the purchases list misses it |
-| `ps_plus` | played through PS Plus | if a `PS_PLUS` entitlement exists → owned-via-subscription; else **played, not owned**, note "played via PS Plus" |
-| `other` | neither (the owner's disc games) | **played, not owned**, note "probably a disc — not a digital licence" → *Played — no purchase found* group; "Own the ticked rows as ▸" **defaults to Physical** |
-| unknown | kept raw and shown | played (per play time), not owned |
+| `none(purchased)` (100) · `none_purchased` (67) | a digital purchase — **two spellings of the same value** | **owned digital**, even if the purchases list misses it |
+| `ps_plus` (27) | played through PS Plus | if a `PS_PLUS` entitlement exists → owned-via-subscription; else **played, not owned**, note "played via PS Plus" |
+| `other` (37) | neither (the owner's disc games) | **played, not owned**, note "probably a disc — not a digital licence" → *Played — no purchase found* group; "Own the ticked rows as ▸" **defaults to Physical** |
+| any other string | kept raw and shown | played (per play time), not owned |
 
-**Game list — `category`** gives the platform (the list has no platform field): `ps5_…`→ps5,
-`ps4_…`→ps4. A category that does **not** end in `_game` (`ps5_native_media_app`,
-`ps5_web_based_media_app`: Netflix, Plex…) is a **media app → Ignored** ("media app").
+Parsing is **tolerant**: `service` is normalised by dropping case, spaces, underscores, hyphens
+and parentheses before matching (`classifyService`), so `none(purchased)`, `none_purchased`,
+`None (Purchased)`, `none-purchased` all fold to *purchased*, and `ps_plus` / `PS Plus` to *PS
+Plus*. The two purchase spellings mean the same thing (`none_purchased` is only ever seen on
+`CUSA…` = PS4-generation records — never on a `ps5_native_game` / `PPSA…` title; `none(purchased)`
+covers both generations); a genuinely unknown value stays raw, shown, and **never asserts
+ownership**.
+
+**Game list — `category`** gives the platform (the list has no platform field) and flags
+non-games. Real values (231-title fetch): `ps4_game` 158, `ps5_native_game` 47,
+`ps5_native_media_app` 6, `unknown` 6, `ps4_videoservice_web_app` 5, `ps4_nongame_mini_app` 4,
+`ps5_web_based_media_app` 3, `not_found` 2.
+
+- **Apps → Ignored** ("media app"): any category containing `media_app`, `videoservice`,
+  `web_app`, `nongame` or `mini_app` (Netflix, Plex, YouTube, Media Player, Headset Companion…).
+- **Games**: a category ending in `_game`; platform from the `ps5_…`/`ps4_…` prefix.
+- **`unknown` / `not_found` are NOT apps** — they are delisted/old **games** (Resident Evil
+  Director's Cut, Return of the Obra Dinn, Undertale, Back to the Future: The Game, Game of
+  Thrones…; all `CUSA…` = PS4 in the owner's data, all with real play time). Kept as games with
+  a **"category unknown"** review note; platform from the **title-id prefix** (`slug(fromTitleId:)`:
+  `PPSA…`→ps5, `CUSA…`→ps4, `PCSA…`→vita best-effort) since the category can't give it. When the
+  prefix is unrecognised the platform is left **nil for the owner to pick** in the review row.
+- **Any future unseen value** follows the same ladder: `…_game` → game, an app-keyword → app,
+  otherwise kept as a game with the "category unknown" note — **never silently dropped**.
 
 **Purchases — `membership`.** `NONE` = a bought copy I really own (never vaulted). `PS_PLUS`
 = a subscription claim, gated by play time (below). Unknown values are kept raw and shown.
@@ -278,3 +303,4 @@ importer with `includePurchases: false` until S6 passes.
 - **2026-09-20 — w14/a landed all of the above offline** (no new Sony traffic; all on synthetic fixtures with the same shapes). Panel steps are now S2 · S3a · S5 · S6 · three full fetches; estimates 1 / 2 / 6. Whole suite green (1494 tests). Not yet exercised against the real account beyond the probes above: the **full** real fetches (trophy 265, game list, purchases 581) and the first real review sheet — first run should watch the cross-gen merge and the Vault counts on real names.
 - **2026-09-20 — real-account full-fetch confirm did nothing — fixed (w14/c), no Sony traffic.** On the `real` label, pressing a **Fetch all …** button showed "up to N — continue?", but after the owner confirmed, nothing happened (no request, no dialog, no row change). Root cause: `confirmPending()` set `pendingConfirm = nil` (dismissing the one shared `confirmationDialog`) and, on the real account, *synchronously reassigned* it to `.realFullFetch` to request a **second** dialog — macOS silently drops a presentation requested while another is dismissing, so the second confirm never appeared and `perform` was never reached. On `test` the first confirm called `perform` directly, so it worked. Fix: dropped the chained second dialog and the `confirmationDialog` entirely; the confirmation is now an **inline confirm row inside the panel** (click-testable, no double-presentation trap) — exactly **one** confirm per full fetch, a single stronger one on `real` (title "… — REAL ACCOUNT", "with your real account (k / 40 used this session)", button "Fetch (N request(s))"). The confirm button starts the step through the same `perform` path as the probe buttons; a start that can't proceed now leaves a visible `lastActionNote` in the row instead of failing silently. Same pattern removed from Wipe / Try again / Acknowledge. All `#if DEBUG`; Release still has no `PSNBuildSteps` symbols. New tests: single-confirm on both labels for all three full fetches, cancel-runs-nothing, blocked-confirm-leaves-a-note, and a `ClickProbeWindow` test that clicks Fetch → inline confirm → confirm → exactly one runner call.
 - **2026-09-20 — REAL account, full trophy-titles fetch OK, 1 request** (after the inline-confirm fix). 265 / 265 items, `nextOffset` null, 0 duplicate ids. Platforms: PS4 146 · PS3 59 · PS5 46 · `PSVITA,PS4` 10 · `PS3,PSVITA,PS4` 4 (combined values come in this order — check the platform pick rule on them at the first review). `npServiceName`: trophy 219, trophy2 46. Progress: 31 at 0 % (the "Launched" group), 187 in between, 47 at 100 % (status pre-fill). 5 hidden titles. Activity from 2009-12 to 2026-09. 51 names carry ™/®.
+- **2026-09-20 — REAL account, full game-list (231) + purchases (581) fetches, values the mapping did not know — landed offline (w14/d), no new Sony traffic.** **Game list, 231 titles.** `service` has **four** values, not three: `none(purchased)` 100 · `none_purchased` 67 · `other` 37 · `ps_plus` 27. `none_purchased` is a **second spelling of the same digital-purchase value** — it appears **only** on `CUSA…` (PS4-generation) records (all 67), never on a `PPSA…`/`ps5_native_game` title, while `none(purchased)` covers both generations; both fold to *purchased*. Parsing is now tolerant (case/space/underscore/hyphen/paren-insensitive, `classifyService`); unknown strings stay raw and never assert ownership. `category` has more values than assumed: `ps4_game` 158 · `ps5_native_game` 47 · `ps5_native_media_app` 6 · **`unknown` 6** · **`ps4_videoservice_web_app` 5** · **`ps4_nongame_mini_app` 4** · `ps5_web_based_media_app` 3 · **`not_found` 2**. Rule: any category with `media_app`/`videoservice`/`web_app`/`nongame`/`mini_app` → *Ignored* ("media app") — the four app categories are Netflix, Plex, YouTube, Disney+, Prime Video, Apple TV, Twitch, SONY PICTURES CORE, Dailymotion, OCS, Media Player, Headset Companion, Spider-Man: Homecoming VR…; `…_game` → a game (platform from the prefix). **`unknown` (6) and `not_found` (2) are NOT apps — they are delisted/old games** (unknown: Resident Evil Director's Cut, Return of the Obra Dinn, DRAGON BALL FighterZ, Undertale, Resident Evil, Endless Fables: Dark Moor; not_found: Back to the Future: The Game, Game of Thrones) — all `CUSA…` (PS4), all with real play time; kept as **games** with a "category unknown" note, platform from the title-id prefix (`CUSA…`→ps4, `PPSA…`→ps5; nil ⇒ owner picks). Only two prefixes appear in the real data: CUSA 175, PPSA 56. Play: **27 titles ≤ 10 min**; ≈ 4 200 h across the 213 game titles (≈ 4 900 h counting the media apps). **Purchases, 581 entitlements** (page size 100, 6 requests, `pageInfo` ended paging): `membership` NONE 352 · PS_PLUS 229; platform PS4 462 · PS5 119; **all `isActive: true`, no pre-orders, `conceptId` null on every row**; ~70 names present on both PS4 and PS5 (68 by exact name / 75 by folded name). Combined trophy platform strings `"PSVITA,PS4"` (10) and `"PS3,PSVITA,PS4"` (4) confirmed; the platform pick is now order-independent (newest generation wins → **ps4** for both) and the row carries an "also on …" note. Whole unit suite green (1511 tests). Not yet exercised: the first real review sheet on these values (watch the `unknown`/`not_found` games land as PS4 with the "category unknown" note, and the Vault counts).

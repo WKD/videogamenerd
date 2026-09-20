@@ -108,10 +108,10 @@ import Testing
     }
 
     @Test func combinedPlatformNote() throws {
-        // Dummy Dungeon is "PS4,PS5" → newest slug + a combined-platform note.
+        // Dummy Dungeon is "PS4,PS5" → newest slug + an "also on PS4" note.
         let dungeon = try rowsByName()["Dummy Dungeon"]!
         #expect(dungeon.platform == "ps5")
-        #expect(dungeon.reviewNote?.contains("multiple platforms") == true)
+        #expect(dungeon.reviewNote?.contains("also on PS4") == true)
     }
 
     @Test func neverProducesAPhysicalCopySignal() throws {

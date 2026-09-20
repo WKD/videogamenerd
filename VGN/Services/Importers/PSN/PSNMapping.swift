@@ -30,14 +30,16 @@ enum PSNMapping {
 
         // 1) Trophy titles — the whole launch history (one list; PS3/PS4/PS5/Vita mixed).
         for title in trophyTitles {
-            let (slug, combined) = platformSlug(title.trophyTitlePlatform)
+            let p = platformSlugs(title.trophyTitlePlatform)
             let m = index.upsert(concept: nil, title: nil, name: title.trophyTitleName)
-            m.absorbTrophy(title, slug: slug, combined: combined)
+            m.absorbTrophy(title, slugs: p.all, combined: p.combined)
         }
 
-        // 2) Game list — play time / first-last / ids + `service`/`category` (PS4/PS5).
+        // 2) Game list — play time / first-last / ids + `service`/`category` (PS4/PS5). The
+        //    platform is the category's generation, falling back to the title-id prefix for
+        //    `unknown` / `not_found` categories (live 2026-09-20).
         for title in gameList {
-            let slug = slug(fromCategory: title.category)
+            let slug = slug(fromCategory: title.category) ?? slug(fromTitleId: title.titleId)
             let m = index.upsert(concept: title.concept?.id, title: title.titleId, name: title.name)
             m.absorbGameList(title, slug: slug)
         }
@@ -86,16 +88,25 @@ enum PSNMapping {
 
     /// A VGN platform slug for a trophy/purchase platform string, plus whether it was a
     /// **combined** string (e.g. `"PS4,PS5"`, `"PS3,PSVITA"`). Pick rule for a combined
-    /// string: the **newest** platform, since VGN models one copy per platform.
+    /// string: the **newest** platform, since VGN models one copy per platform. The pick is
+    /// **order-independent** — the real combined strings arrive oldest-first (`"PSVITA,PS4"`,
+    /// `"PS3,PSVITA,PS4"`, live 2026-09-20) yet still resolve to the newest console.
     static func platformSlug(_ raw: String) -> (slug: String?, combined: Bool) {
+        let p = platformSlugs(raw)
+        return (p.best, p.combined)
+    }
+
+    /// Every recognised slug in a (possibly combined) platform string, plus the newest one
+    /// (`best`) and whether the string listed more than one. Used to record *all* platforms of
+    /// a combined trophy title so the review note can say "also on …".
+    static func platformSlugs(_ raw: String) -> (best: String?, all: [String], combined: Bool) {
         let parts = raw.split(whereSeparator: { $0 == "," || $0 == " " || $0 == "/" })
             .map { $0.trimmingCharacters(in: .whitespaces).uppercased() }
             .filter { !$0.isEmpty }
         let slugs = parts.compactMap(Self.slug(fromToken:))
-        guard let best = slugs.max(by: { generationRank($0) < generationRank($1) }) else {
-            return (nil, parts.count > 1)
-        }
-        return (best, Set(slugs).count > 1)
+        let best = slugs.max(by: { generationRank($0) < generationRank($1) })
+        let combined = slugs.isEmpty ? parts.count > 1 : Set(slugs).count > 1
+        return (best, slugs, combined)
     }
 
     private static func slug(fromToken token: String) -> String? {
@@ -112,7 +123,8 @@ enum PSNMapping {
     }
 
     /// The game list has no platform field; the **`category`** (`ps4_game`, `ps5_native_game`,
-    /// `ps5_native_media_app`) gives it (live, 2026-09-20).
+    /// `ps5_native_media_app`) gives it (live, 2026-09-20). Returns nil when the category does
+    /// not name a generation (`unknown` / `not_found`) — the caller falls back to the title id.
     static func slug(fromCategory raw: String?) -> String? {
         guard let s = raw?.lowercased() else { return nil }
         if s.contains("ps5") { return "ps5" }
@@ -123,20 +135,88 @@ enum PSNMapping {
         return nil
     }
 
-    /// A category that does not end in `_game` is a media app (Netflix, Plex…) → *Ignored*
-    /// with reason "media app" (PLAN §13.3, live 2026-09-20).
-    static func categoryIsApp(_ category: String?) -> Bool {
-        guard let c = category?.lowercased(), !c.isEmpty else { return false }
-        return !c.hasSuffix("_game")
+    /// A VGN slug from the leading format code of a PSN `titleId`, used when the game-list
+    /// `category` cannot give the platform (`unknown` / `not_found`). In the owner's real data
+    /// (live 2026-09-20) only two prefixes appear: `PPSA…` = PS5, `CUSA…` = PS4 (all six
+    /// `unknown` and both `not_found` rows were `CUSA…`, i.e. PS4). The other well-known Sony
+    /// codes are mapped best-effort; anything unrecognised returns nil so the owner picks the
+    /// platform in the review row.
+    static func slug(fromTitleId titleId: String?) -> String? {
+        guard let id = titleId, id.count >= 4 else { return nil }
+        switch id.prefix(4).uppercased() {
+        case "PPSA", "PPSE": return "ps5"                                   // PS5 (seen: PPSA)
+        case "CUSA", "CUSE": return "ps4"                                   // PS4 (seen: CUSA)
+        case "PCSA", "PCSB", "PCSC", "PCSD", "PCSE", "PCSF", "PCSG":
+            return "vita"                                                   // PS Vita (best-effort)
+        default: return nil
+        }
     }
 
+    /// How the game-list `category` classifies a title (PLAN §13.3, live 2026-09-20).
+    enum CategoryKind: Equatable {
+        /// A game — `category` ends in `_game`, or is absent (a trophy/purchase-only title).
+        case game
+        /// A non-game app (Netflix, Plex, YouTube, Media Player…) → *Ignored* ("media app").
+        case app
+        /// `unknown` / `not_found` (delisted/old games) or any future non-game, non-app value
+        /// → kept as a **game** with a "category unknown" review note; platform from the id.
+        case unknownCategory
+    }
+
+    /// Category keywords that mark a non-game app, matched anywhere in the value:
+    /// `ps5_native_media_app`, `ps5_web_based_media_app`, `ps4_videoservice_web_app`,
+    /// `ps4_nongame_mini_app` (live 2026-09-20).
+    private static let appCategoryKeywords = ["media_app", "videoservice", "web_app",
+                                              "nongame", "mini_app"]
+
+    /// Classify a game-list `category`. Unseen future values fall through the same ladder:
+    /// a `…_game` is a game, an app-keyword value is an app, everything else is kept as a
+    /// game flagged "category unknown" — **never silently dropped**.
+    static func classifyCategory(_ raw: String?) -> CategoryKind {
+        guard let c = raw?.lowercased(), !c.isEmpty else { return .game }
+        if appCategoryKeywords.contains(where: { c.contains($0) }) { return .app }
+        if c.hasSuffix("_game") { return .game }
+        return .unknownCategory
+    }
+
+    /// The game-list `service` normalised to how a title was accessed. Two spellings of a
+    /// digital purchase are seen live (2026-09-20): `none(purchased)` (both generations) and
+    /// `none_purchased` (only ever on `CUSA…` = PS4-generation records — the underscore form
+    /// never appears on a PS5 / `ps5_native_game` title); both fold to ``ServiceAccess/purchased``.
+    /// Normalisation drops case, spaces, underscores, hyphens and parentheses, so
+    /// `None (Purchased)`, `none-purchased`, `PS Plus`, `ps_plus` … all map to one case;
+    /// genuinely unknown strings are kept **raw and shown** and never assert ownership.
+    enum ServiceAccess: Equatable {
+        case purchased                 // none(purchased) / none_purchased → owned digital
+        case psPlus                    // ps_plus → played through PS Plus
+        case other                     // other → neither (the owner's disc games)
+        case unknown(String)           // kept raw and shown
+    }
+
+    static func classifyService(_ raw: String?) -> ServiceAccess? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        switch trimmed.lowercased().filter({ $0.isLetter }) {
+        case "nonepurchased": return .purchased
+        case "psplus": return .psPlus
+        case "other": return .other
+        default: return .unknown(trimmed)
+        }
+    }
+
+    /// Generation ordering for the combined-platform pick, strictly decreasing by release
+    /// (PS5 > PS4 > Vita > PS3 > PSP > PS2 > PS1). The newest wins; for the real trophy
+    /// strings `"PSVITA,PS4"` / `"PS3,PSVITA,PS4"` this is PS4 regardless of the listed order.
     private static func generationRank(_ slug: String) -> Int {
         switch slug {
-        case "ps5": return 9
-        case "ps4", "vita": return 8
-        case "ps3", "psp": return 7
-        case "ps2": return 6
-        case "ps1": return 5
+        case "ps5": return 7
+        case "ps4": return 6
+        case "vita": return 5
+        case "ps3": return 4
+        case "psp": return 3
+        case "ps2": return 2
+        case "ps1": return 1
         default: return 0
         }
     }
@@ -239,14 +319,16 @@ enum PSNMapping {
 
         init(name: String) { self.name = name }
 
-        func absorbTrophy(_ t: PSNTrophyTitle, slug: String?, combined: Bool) {
+        func absorbTrophy(_ t: PSNTrophyTitle, slugs: [String], combined: Bool) {
             hasTrophy = true
             npCommunicationId = npCommunicationId ?? t.npCommunicationId
             progress = max(progress ?? 0, t.progress)
             if let last = t.lastUpdatedDateTime, last != .distantPast {
                 lastPlayedAt = maxDate(lastPlayedAt, last)
             }
-            if let slug { platforms.insert(slug) }
+            // Record every platform of a combined string so the note can say "also on …";
+            // `bestSlug` still picks the newest for the row's own platform.
+            for s in slugs { platforms.insert(s) }
             combinedPlatform = combinedPlatform || combined
         }
 
@@ -317,8 +399,8 @@ enum PSNMapping {
             let played = (progress ?? 0) > 0 || promoted
             let launchedNotPlayed = !played && hasTrophy && (progress ?? 0) == 0
 
-            let svc = service?.lowercased()
-            let servicePurchased = svc?.contains("purchased") == true
+            let serviceAccess = PSNMapping.classifyService(service)
+            let servicePurchased = serviceAccess == .purchased
 
             // Ownership + subscription + Vault (PLAN §13.3 / §16).
             var owned = false
@@ -347,9 +429,11 @@ enum PSNMapping {
             if played { signals.insert(.played) }
             if owned { signals.insert(.owned) }
 
-            // Noise, in priority order.
+            // Noise, in priority order. `unknown` / `not_found` are NOT apps — they stay games
+            // (flagged "category unknown"); only app-keyword categories are ignored.
+            let categoryKind = PSNMapping.classifyCategory(category)
             var ignore: ImportIgnoreReason?
-            if PSNMapping.categoryIsApp(category) { ignore = .mediaApp }
+            if categoryKind == .app { ignore = .mediaApp }
             if ignore == nil { ignore = PSNMapping.nameNoise(name) }
             if ignore == nil, purchaseSeen, isPreOrder { ignore = .preOrder }
             if ignore == nil, purchaseSeen, !isActive { ignore = .inactiveEntitlement }
@@ -360,10 +444,18 @@ enum PSNMapping {
             let clean = PSNMapping.cleanMatchTitle(name)
             let matchTitle = (clean != name && !clean.isEmpty) ? clean : nil
 
+            // Other platforms of a combined trophy string, newest-first, for the "also on" note.
+            let alsoOn: [String] = combinedPlatform
+                ? platforms.subtracting([slug].compactMap { $0 })
+                    .sorted { PSNMapping.generationRankPublic($0) > PSNMapping.generationRankPublic($1) }
+                    .map { $0.uppercased() }
+                : []
+
             let note = PSNMapping.reviewNote(
                 owned: owned, played: played, launchedNotPlayed: launchedNotPlayed,
-                subscription: subscription, service: svc, purchasePlatforms: purchasePlatforms,
-                combinedPlatform: combinedPlatform, crossGen: crossGen)
+                subscription: subscription, service: serviceAccess,
+                purchasePlatforms: purchasePlatforms, crossGen: crossGen,
+                otherPlatforms: alsoOn, categoryUnknown: categoryKind == .unknownCategory)
 
             return ImportStagingRow(
                 source: ImportSourceID.psn,
@@ -391,19 +483,17 @@ enum PSNMapping {
     // MARK: - Review note (copy-format rules 1–4 + service rules, PLAN §13.3)
 
     static func reviewNote(owned: Bool, played: Bool, launchedNotPlayed: Bool,
-                           subscription: ProductSubscription?, service: String?,
-                           purchasePlatforms: Set<String>,
-                           combinedPlatform: Bool, crossGen: Bool) -> String? {
+                           subscription: ProductSubscription?, service: ServiceAccess?,
+                           purchasePlatforms: Set<String>, crossGen: Bool,
+                           otherPlatforms: [String], categoryUnknown: Bool) -> String? {
         var note: String?
         if let subscription {
             note = subscription.isPSPlus ? "PS Plus" : subscription.rawValue
         } else if played, !owned {
-            if service == "ps_plus" {
-                note = "played via PS Plus"                                   // item 2, catalogue
-            } else if service == "other" {
-                note = "probably a disc — not a digital licence"             // item 2, disc
-            } else {
-                note = "Played — no purchase found"                          // rule 3
+            switch service {
+            case .psPlus: note = "played via PS Plus"                        // item 2, catalogue
+            case .other:  note = "probably a disc — not a digital licence"   // item 2, disc
+            default:      note = "Played — no purchase found"                // rule 3
             }
         } else if launchedNotPlayed {
             note = "Launched, 0 %"
@@ -416,9 +506,16 @@ enum PSNMapping {
                 .map { $0.uppercased() }
             let platformNote = names.joined(separator: " & ") + " versions"
             note = note.map { "\($0) · \(platformNote)" } ?? platformNote
-        } else if combinedPlatform {
-            let platformNote = "listed on multiple platforms"
+        } else if !otherPlatforms.isEmpty {
+            let platformNote = "also on " + otherPlatforms.joined(separator: ", ")
             note = note.map { "\($0) · \(platformNote)" } ?? platformNote
+        }
+
+        // A game whose category we don't recognise (`unknown` / `not_found`): kept as a game,
+        // flagged so the owner can confirm the platform.
+        if categoryUnknown {
+            let n = "category unknown"
+            note = note.map { "\($0) · \(n)" } ?? n
         }
         return note
     }
