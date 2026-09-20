@@ -102,6 +102,7 @@ final class PSNImportPresenter {
                     staging: backend.staging, result: result,
                     productFormat: .digital,
                     platformChoices: Self.platformChoices,
+                    rematchMatcher: backend.rematchMatcher,
                     onLibraryChanged: onLibraryChanged)
                 review.onShowInVault = self.onShowInVault
                 self.reviewModel = review

@@ -69,7 +69,8 @@ final class GOGImportPresenter {
                 let review = ImportReviewModel(
                     source: backend.source, sourceLabel: backend.sourceLabel,
                     staging: backend.staging, result: result,
-                    showsPlatformPolicy: true, onLibraryChanged: onLibraryChanged)
+                    showsPlatformPolicy: true,
+                    rematchMatcher: backend.rematchMatcher, onLibraryChanged: onLibraryChanged)
                 review.onShowInVault = self.onShowInVault
                 self.reviewModel = review
                 self.progress = nil

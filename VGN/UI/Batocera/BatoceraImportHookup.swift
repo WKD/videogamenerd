@@ -91,8 +91,19 @@ final class BatoceraImportPresenter {
         } else if reviewCount > 0 {
             message += " · \(reviewCount) to review"
         }
-        library.showBanner(message, actionTitle: "Undo") { [weak self] in
-            self?.undoAutoAdd()
+        // Undo stays the primary action; when there are candidates to review, offer "Review…" as a
+        // secondary action so the owner is never stranded (D6, PLAN §15). Both live on the banner
+        // API (additive secondary action) rather than being lost behind the Undo-only banner.
+        if reviewCount > 0 {
+            library.showBanner(
+                message, actionTitle: "Undo",
+                action: { [weak self] in self?.undoAutoAdd() },
+                secondaryActionTitle: "Review…",
+                secondaryAction: { [weak self] in self?.reviewCandidates() })
+        } else {
+            library.showBanner(message, actionTitle: "Undo") { [weak self] in
+                self?.undoAutoAdd()
+            }
         }
     }
 

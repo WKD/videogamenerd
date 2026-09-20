@@ -176,6 +176,10 @@ struct LibraryGridView: View {
         // sheet adapts its own title. Selection/state changes happen in the action.
         if ids.count == 1 {
             Button(linkMenuLabel(for: game)) { act(on: game) { _ in vm.requestLinkToIGDB(gameID: game.id) } }
+            // "Expand Bundle into Games…" (PLAN §5.1 repair path): the on-demand IGDB check +
+            // confirm runs in the presenter. Offered here so the "Bundles to Expand" smart list
+            // and any single selection can expand from the grid, matching the inspector / File menu.
+            Button("Expand Bundle into Games…") { act(on: game) { _ in vm.requestExpandBundle(gameID: game.id) } }
         }
         // Cover is per-game: only offered for a single target (not a multi-selection),
         // and only when the loader can browse candidates. PURE — reads only.

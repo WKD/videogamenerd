@@ -41,6 +41,17 @@ struct SidebarView: View {
                     .appKitTooltip("Games not matched to an IGDB entry — no metadata, "
                                    + "time estimates or recommendations. Link them here.")
                 }
+                // "Bundles to Expand" — games whose title looks like an unexpanded bundle
+                // (PLAN §5.1). Right under Unlinked, shown ONLY when it has games.
+                if (vm.counts.count(for: .bundlesToExpand) ?? 0) > 0 {
+                    taggedRow(.bundlesToExpand) {
+                        Label(Self.title(for: .bundlesToExpand), systemImage: Self.icon(for: .bundlesToExpand))
+                            .badge(badge(for: .bundlesToExpand))
+                    }
+                    .appKitTooltip("Games that look like a Trilogy / Collection / Pack imported "
+                                   + "as one game. Expand one into its member games — IGDB is "
+                                   + "checked when you click.")
+                }
             }
 
             Section("Rankings") {
@@ -199,6 +210,7 @@ struct SidebarView: View {
         case .unranked: return "Unranked"
         case .playNext: return "Play Next"
         case .unlinked: return "Unlinked"
+        case .bundlesToExpand: return "Bundles to Expand"
         case .tierBoard: return "Tier Board"
         case .theTop: return "The Top"
         case .duel: return "Duel"
@@ -218,6 +230,7 @@ struct SidebarView: View {
         case .unranked: return "questionmark.circle"
         case .playNext: return "sparkles"
         case .unlinked: return "link.badge.plus"
+        case .bundlesToExpand: return "square.stack.3d.up.fill"
         case .tierBoard: return "square.stack.3d.up"
         case .theTop: return "trophy"
         case .duel: return "flag.2.crossed"

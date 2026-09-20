@@ -35,6 +35,10 @@ struct GRDBLibraryDataSource: LibraryDataSource {
                 counts.lengthShelves = lengths.shelves
                 counts.unmeasured = lengths.unmeasured
                 counts.unlinked = try LibraryQuery.fetchUnlinkedCount(db)
+                // "Bundles to Expand" (PLAN §5.1) rides the SAME single observation — the shared
+                // candidate rule, so a dismissal (app_state) or an expansion (games/products)
+                // re-runs this stream and the badge follows. No timer, no second observation.
+                counts.bundlesToExpand = try LibraryStore.fetchBundleExpansionCandidates(db).count
                 return counts
             }
             .values(in: store.dbReader)

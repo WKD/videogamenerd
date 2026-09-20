@@ -217,8 +217,10 @@ final class PSNAccountModel {
     private func exchange(npsso: String) {
         isBusy = true
         Task {
+            // A failure here is a *sign-in* failure (NPSSO → code → token exchange), not a sync —
+            // surface it as one (PLAN §13, D3 wave 16).
             do { try await backend.completeSignIn(code: npsso) }
-            catch { pendingError = ImportErrorSurface.make(from: error, sourceLabel: sourceLabel) }
+            catch { pendingError = signInErrorSurface(error) }
             await refresh()
             isBusy = false
         }
@@ -228,7 +230,27 @@ final class PSNAccountModel {
 
     func loginFailed(_ reason: String) {
         showLogin = false
-        pendingError = ImportErrorSurface(title: "\(sourceLabel) sign-in failed", message: reason)
+        pendingError = signInErrorSurface(reason: reason)
+    }
+
+    /// Map a **sign-in** failure to a sign-in-flavoured surface so it never reads as a *sync*
+    /// failure (PLAN §13, D3). Presentation only — `PSNAuth` / `PSNClient` / `PSNTokenStore` /
+    /// the login URL and the safety latch are untouched.
+    func signInErrorSurface(_ error: Error) -> ImportErrorSurface {
+        if let importError = error as? ImportError, case .notAuthenticated = importError {
+            return ImportErrorSurface(
+                title: "Couldn't sign in to \(sourceLabel)",
+                message: "That sign-in didn't go through. Try signing in again.")
+        }
+        let base = ImportErrorSurface.make(from: error, sourceLabel: sourceLabel)
+        return ImportErrorSurface(
+            title: "Couldn't sign in to \(sourceLabel)",
+            message: base.message, stoppedNote: nil, excerpt: base.excerpt)
+    }
+
+    /// A sign-in failure carrying a ready reason (the login sheet's own message).
+    func signInErrorSurface(reason: String) -> ImportErrorSurface {
+        ImportErrorSurface(title: "Couldn't sign in to \(sourceLabel)", message: reason)
     }
 
     func requestSignOut() { signOutConfirming = true }

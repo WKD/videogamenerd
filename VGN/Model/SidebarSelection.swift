@@ -24,6 +24,13 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     /// LIBRARY row shown **only when its count > 0** (like "Unmeasured").
     case unlinked
 
+    /// Library games whose title looks like an unexpanded bundle/pack (Trilogy, Collection,
+    /// "3-in-1"…) imported as one game — the repair-path candidate list (PLAN §5.1). A LIBRARY
+    /// row placed right under Unlinked, shown **only when its count > 0** (like Unlinked). The
+    /// candidate rule lives in ``LibraryStore/fetchBundleExpansionCandidates(_:)``; selecting
+    /// this scopes the grid to those game ids so the owner can expand them into their members.
+    case bundlesToExpand
+
     // Ranking views (PLAN §7)
     case tierBoard
     case theTop
@@ -54,6 +61,7 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
         case .unranked: return "unranked"
         case .playNext: return "playNext"
         case .unlinked: return "unlinked"
+        case .bundlesToExpand: return "bundlesToExpand"
         case .tierBoard: return "tierBoard"
         case .theTop: return "theTop"
         case .duel: return "duel"

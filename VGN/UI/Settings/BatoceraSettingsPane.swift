@@ -36,6 +36,11 @@ final class BatoceraSettingsModel {
     @ObservationIgnored var now: () -> Date = { Date() }
     /// Called after a sync finishes (the container wires the review banner to this).
     @ObservationIgnored var onSyncFinished: (BatoceraSyncSummary) -> Void = { _ in }
+    /// Bring the main window forward and open the Batocera promotion review — the same
+    /// `reviewCandidates()` path as File ▸ Import from Batocera… (wired by the container; inert
+    /// in sample/test). Surfaced from the "Review…" button so a sync in Settings has an obvious
+    /// next step (D6, PLAN §15).
+    @ObservationIgnored var onReviewRequested: () -> Void = {}
 
     @ObservationIgnored private var syncTask: Task<Void, Never>?
 
@@ -50,6 +55,14 @@ final class BatoceraSettingsModel {
     var shareFolderURL: URL? { shareFolderPath.map { URL(fileURLWithPath: $0) } }
     var isConfigured: Bool { shareFolderPath != nil }
     var threshold: String { "played more than 5 minutes, or favourite" }
+
+    /// Games waiting in the promotion review (played/favourited, not yet reviewed).
+    var candidatesWaiting: Int { status.candidatesWaiting }
+    /// Whether a "Review…" affordance should be shown (there is something to review).
+    var canReview: Bool { candidatesWaiting > 0 }
+
+    /// Open the promotion review (D6). No-op until the container wires ``onReviewRequested``.
+    func requestReview() { onReviewRequested() }
 
     /// Refresh the catalogue status + mount state. Called from the pane's `.task` and after a
     /// sync. Never polls (no timer) — the idle-CPU rule (PLAN §8).
@@ -248,8 +261,15 @@ struct BatoceraSettingsPane: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Text("\(model.status.systemsCount) systems · \(model.status.totalEntries) games in the catalogue · \(model.status.candidatesWaiting) waiting to review")
-                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text("\(model.status.systemsCount) systems · \(model.status.totalEntries) games in the catalogue · \(model.status.candidatesWaiting) waiting to review")
+                    .font(.caption).foregroundStyle(.secondary)
+                if model.canReview {
+                    Button("Review…") { model.requestReview() }
+                        .controlSize(.small)
+                        .accessibilityIdentifier("batocera.review")
+                }
+            }
         }
     }
 
@@ -267,6 +287,12 @@ struct BatoceraSettingsPane: View {
                 Button("Cancel") { model.cancelSync() }.controlSize(.small)
             } else if let summary = model.lastSummary, !summary.shareUnavailable {
                 Text(Self.summaryLine(summary)).font(.caption).foregroundStyle(.secondary)
+                // Right after a sync, "· 283 to review" now has an obvious next step (D6, PLAN §15).
+                if model.canReview {
+                    Button("Review…") { model.requestReview() }
+                        .controlSize(.small)
+                        .accessibilityIdentifier("batocera.reviewAfterSync")
+                }
             }
         }
     }

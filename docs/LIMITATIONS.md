@@ -350,6 +350,20 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
 - **First-run batch cap is a constant [owner].** One pass caps at
   `BatoceraFavouriteAutoAdd.batchCap = 60`; the owner's ~247 favourites take ~4 syncs to fully
   match. Tunable in one place if that feels slow.
+- **Finding the review after a Settings sync [done, wave 16].** Settings ▸ Batocera now shows a
+  **Review…** button on the status line (next to "N waiting to review", when N > 0) and next to
+  the post-sync "· N to review" summary; it brings the main window forward and opens the same
+  review as File ▸ Import from Batocera… (`BatoceraSettingsModel.onReviewRequested` →
+  `BatoceraImportPresenter.reviewCandidates()`, wired in `BatoceraBuilder`; inert in
+  sample/test). The favourites-added banner keeps **Undo** and now also offers **Review…** as a
+  **secondary** banner action when there are candidates (additive `LibraryBanner.secondaryActionTitle`
+  + `LibraryViewModel.performBannerSecondaryAction()`), so the owner is never stranded behind an
+  Undo-only banner. **Not done (D6 point 3): a "Matching favourites… 12 of 60" progress line in
+  the Settings status area during the background auto-add pass** — that pass runs in
+  `BatoceraImportPresenter` (a different object) and exposes no cheap progress to
+  `BatoceraSettingsModel`, so wiring it would be non-trivial; skipped this wave as the brief
+  allowed. **[eyeball: the Settings Review… button fronts the window and opens the review; the
+  banner shows both Undo and Review…]**
 
 ## 5b. The Vault (PLAN §16, wave 14)
 
@@ -421,24 +435,41 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   re-querying IGDB), restores their alternatives and bundle members, and re-queries only
   never-attempted titles and no-match ones older than 30 days (or on a per-row Re-match via
   `ImportStagingStore.clearMatchAttempt`). Bundle expansions are **persisted** in the same blob
-  (not recomputed). The progress detail shows "… · N already matched". **Not wired to the UI:**
-  a per-row "Re-match" button in the review sheet (the store method exists; the review row action
-  is a follow-up). **[follow-up]**
+  (not recomputed). The progress detail shows "… · N already matched".
+- **Per-row "Re-match" in the review sheet [done, wave 16].** A New row now has a **Re-match**
+  affordance (a small button + a row-menu item) that calls `ImportStagingStore.clearMatchAttempt`
+  and re-runs matching for **just that title** through the injected `ImportMatcher` seam — the row
+  shows a cancellable spinner (click it to cancel), never a whole-sheet re-match; the fresh
+  outcome is persisted so a later sync reuses it. Wired for **GOG / Delicious / PSN** (the live
+  backends expose their matcher via `ImportBackend.rematchMatcher`; a no-match matcher — IGDB
+  unconfigured — hides it). **Hidden for Batocera** (`romPromotion`): its ROM rows match by
+  libretro filename, not the IGDB title ladder, so a title re-query is meaningless there.
+  Model + seam are unit-tested; the button/spinner rendering is window-only. **[eyeball: the
+  Re-match button + spinner in the GOG/PSN/Delicious review sheet]**
 - **Committed compilation rows no longer re-list as New [done].** The compilation commit path now
   marks the staging row matched (to the first member), so a re-sync lands it under *Already
   matched* (D4, §5.1); re-import stays idempotent on `(source, external_id)`.
-- **Bundles-to-Expand list [partial].** `LibraryStore.bundleExpansionCandidates()` now excludes
-  games the owner dismissed as "not a bundle" (persisted in `app_state`, key
-  `reconcile.notBundle`; `dismissBundleCandidate` / `dismissedBundleCandidateIDs`), and the
-  reconcile presenter auto-dismisses a game that turns out not to be a bundle on IGDB (and
-  notifies `onBundleCandidatesChanged`). A self-contained `BundlesToExpandModel` +
-  `BundlesToExpandView` (`VGN/UI/Reconcile/`) render the list with per-row "Expand…" (via the
-  shared `IGDBLinkPresenter.presentBundleExpansion`) and a dismiss affordance. **Not wired:**
-  the view is **not yet mounted** as a segmented switch next to the Unlinked list — the
-  "Unlinked" list is a *sidebar smart-list rendered in the grid*, not a reconcile panel, so
-  where the two lists sit together is a shell decision left to a UI lane. The model + store +
-  dismissal are unit-tested and the view is ready to mount. **[follow-up: mount + wire
-  `onExpand`/`onBundleCandidatesChanged` in AppEnvironment]**
+- **Bundles-to-Expand list [done, wave 16].** Now a **sidebar smart list** exactly like Unlinked
+  (orchestrator decision: consistency beats a separate panel). `SidebarSelection.bundlesToExpand`
+  is a LIBRARY row right under Unlinked, shown only when its count > 0, with a live count badge;
+  selecting it renders the normal grid scoped to the candidate game ids, under a slim explanatory
+  header. The candidate rule lives in **one place** — `LibraryStore.fetchBundleExpansionCandidates(_:)`
+  (the title heuristic `looksLikeBundleTitle` + the "not already a compilation member" guard +
+  the persisted "not a bundle" dismissals) — shared by the count (in the single sidebar-counts
+  observation), the grid scope (`LibraryStore.fetchGames` computes the ids and passes them to
+  `LibraryQuery.gamesSQL(_:restrictToIDs:)`) and the async `bundleExpansionCandidates()` API. The
+  heuristic is a Swift regex + keyword list SQL can't express cheaply, so the ids are computed in
+  Swift once per relevant DB change (the observation reads `games`/`product_games`/`app_state`, so
+  an expansion or a dismissal re-runs it and the badge + grid follow — no timer, no callback).
+  Cost printed, not asserted: ~a few ms to scan 2 000 titles (see `BundlesToExpandScopeTests`).
+  "Expand Bundle into Games…" is in the grid context menu (single selection) as well as the
+  inspector + File menu. The never-mounted `BundlesToExpandModel`/`BundlesToExpandView` were
+  **deleted** (no dead code); the file now holds only `BundlesToExpandHeader`. **[eyeball: the
+  sidebar row + count, the grid header, and Expand from the grid context menu]**
+- **Stale sidebar snapshot references [watch].** Snapshot tests under `VGNTests/Snapshots/**` that
+  render the sidebar do not yet include the "Bundles to Expand" row (it only appears when the
+  sample library has a candidate, which the current sample data has none of). No snapshot needed
+  re-baselining this wave; a future sidebar snapshot that seeds a bundle candidate should add it.
 
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
