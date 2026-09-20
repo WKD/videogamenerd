@@ -141,9 +141,11 @@ struct SidebarView: View {
         } header: {
             HStack {
                 Text(LengthShelf.sectionHeader)
+                    .appKitTooltip(vm.paceModel.styleTooltip)
                 Spacer(minLength: 4)
-                PaceHeaderButton(label: vm.paceModel.headerLabelWithStyle,
-                                 compactLabel: vm.paceModel.headerLabel,
+                // Only the pace ("6 h / week") — the play style got too long in the title and
+                // now lives in the popover + tooltip (owner request, wave 17).
+                PaceHeaderButton(label: vm.paceModel.headerLabel,
                                  isCTA: !vm.hasChosenPace) {
                     showPacePopover = true
                 }

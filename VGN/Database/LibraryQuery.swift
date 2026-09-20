@@ -26,7 +26,20 @@ enum LibraryQuery {
                    MAX(p.format = 'rom')            AS has_rom,
                    MIN(p.subscription IS NOT NULL)  AS sub_only,
                    MAX(CASE WHEN p.kind = 'compilation' THEN p.id END)    AS comp_id,
-                   MAX(CASE WHEN p.kind = 'compilation' THEN p.title END) AS comp_title
+                   MAX(CASE WHEN p.kind = 'compilation' THEN p.title END) AS comp_title,
+                   -- Per-format platform lists for the grid badges + tooltips (PLAN §8):
+                   -- one grouped pass, group_concat skips NULLs so each list holds only the
+                   -- matching copies' platforms. "Really owned" = subscription IS NULL; a
+                   -- PS Plus claim is the sub_plats list, drawn as its own badge.
+                   group_concat(CASE WHEN p.format = 'physical' AND p.subscription IS NULL THEN p.platform_id END) AS physical_plats,
+                   group_concat(CASE WHEN p.format = 'digital'  AND p.subscription IS NULL THEN p.platform_id END) AS digital_plats,
+                   group_concat(CASE WHEN p.format = 'rom'       AND p.subscription IS NULL THEN p.platform_id END) AS rom_plats,
+                   group_concat(CASE WHEN p.subscription IS NOT NULL THEN p.platform_id END) AS sub_plats,
+                   -- The "Change Copy Format" acting set (PLAN §13.3): non-subscription,
+                   -- single-kind copies. count = 1 ⇒ that copy's format is reformat-able;
+                   -- count ≥ 2 ⇒ ambiguous (skipped, banner footer).
+                   SUM(CASE WHEN p.subscription IS NULL AND p.kind = 'single' THEN 1 ELSE 0 END) AS changeable_count,
+                   MAX(CASE WHEN p.subscription IS NULL AND p.kind = 'single' THEN p.format END) AS changeable_format
             FROM product_games pg JOIN products p ON p.id = pg.product_id
             GROUP BY pg.game_id
         ),
@@ -55,6 +68,12 @@ enum LibraryQuery {
             COALESCE(own.sub_only, 0)                        AS sub_only,
             own.comp_id                                      AS comp_id,
             own.comp_title                                   AS comp_title,
+            own.physical_plats                               AS physical_plats,
+            own.digital_plats                                AS digital_plats,
+            own.rom_plats                                    AS rom_plats,
+            own.sub_plats                                    AS sub_plats,
+            COALESCE(own.changeable_count, 0)                AS changeable_count,
+            own.changeable_format                            AS changeable_format,
             plat.ids                                         AS platform_ids
         FROM games g
         LEFT JOIN tiers t ON t.id = g.tier_id
@@ -454,11 +473,14 @@ enum LibraryQuery {
 
     // MARK: - Row mapping
 
-    /// Map a grid result row to the slim ``GameSummary``.
+    /// Map a grid result row to the slim ``GameSummary``. Reads the per-format facts with
+    /// optional subscripts so a query that omits them (e.g. the perf baseline) still maps.
     static func gameSummary(from row: Row) -> GameSummary {
         let statusRaw: String? = row["status"]
-        let csv: String? = row["platform_ids"]
-        let platformIDs = csv?.split(separator: ",").map(String.init) ?? []
+        let platformIDs = dedupedList(row["platform_ids"])
+        let changeableCount: Int = row["changeable_count"] ?? 0
+        let changeableFormat: String? = row["changeable_format"]
+        let singleCopyFormat = changeableCount == 1 ? changeableFormat.flatMap(ProductFormat.init(rawValue:)) : nil
         return GameSummary(
             id: row["id"],
             title: row["title"],
@@ -476,7 +498,26 @@ enum LibraryQuery {
             platformIDs: platformIDs,
             status: statusRaw.flatMap(PlayStatus.init(rawValue:)),
             hasROM: row["has_rom"],
-            ownedOnlyViaSubscription: row["sub_only"]
+            ownedOnlyViaSubscription: row["sub_only"],
+            physicalPlatformIDs: dedupedList(row["physical_plats"]),
+            digitalPlatformIDs: dedupedList(row["digital_plats"]),
+            romPlatformIDs: dedupedList(row["rom_plats"]),
+            subscriptionPlatformIDs: dedupedList(row["sub_plats"]),
+            singleCopyFormat: singleCopyFormat,
+            hasSeveralChangeableCopies: changeableCount >= 2
         )
+    }
+
+    /// Split a `group_concat` CSV into a deduped list preserving first-seen order (a game
+    /// with two physical copies on the same platform names the platform once).
+    private static func dedupedList(_ csv: String?) -> [String] {
+        guard let csv, !csv.isEmpty else { return [] }
+        var seen = Set<String>()
+        var out: [String] = []
+        for piece in csv.split(separator: ",") {
+            let s = String(piece)
+            if seen.insert(s).inserted { out.append(s) }
+        }
+        return out
     }
 }

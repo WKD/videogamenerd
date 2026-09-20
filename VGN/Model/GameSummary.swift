@@ -37,9 +37,40 @@ struct GameSummary: Hashable, Sendable, Identifiable {
     var hasROM: Bool
 
     /// True when the game is owned but **every** owned copy is a subscription copy
-    /// (PLAN §13.3 — "a game I own only through PS Plus"). Drives the grid cell's yellow
-    /// "+" badge and the Format ▸ "PS Plus" facet. A copy also owned on disc ⇒ false.
+    /// (PLAN §13.3 — "a game I own only through PS Plus"). Drives the Format ▸ "PS Plus"
+    /// facet and the a11y state. A copy also owned on disc ⇒ false.
     var ownedOnlyViaSubscription: Bool
+
+    // MARK: Per-format ownership facts (PLAN §8 grid badges — one badge per distinct
+    // format among the *really-owned* copies; a subscription/PS Plus claim is drawn
+    // separately). The platform-id lists (deduped, source order) drive each badge's
+    // tooltip "Physical · PS3" / "Digital · PS5, PC" (owner request, wave 17).
+
+    /// Platforms of the game's really-owned **physical** copies (`subscription IS NULL`).
+    var physicalPlatformIDs: [String]
+    /// Platforms of the game's really-owned **digital** copies (`subscription IS NULL`).
+    var digitalPlatformIDs: [String]
+    /// Platforms of the game's **ROM** copies.
+    var romPlatformIDs: [String]
+    /// Platforms of the game's **subscription** (PS Plus) copies.
+    var subscriptionPlatformIDs: [String]
+
+    /// The format of the game's *sole* reformat-able copy (exactly one non-subscription,
+    /// single-kind product — the set ``LibraryStore/changeCopyFormat(gameIDs:to:)`` acts
+    /// on), or nil when the game has zero or several such copies. Lets a "Change Copy
+    /// Format" menu show ✓/– without a DB round-trip (PLAN §13.3).
+    var singleCopyFormat: ProductFormat?
+    /// True when the game owns **several** reformat-able copies (≥ 2 non-subscription
+    /// single copies) — the ambiguous set "Change Copy Format" skips (banner footer).
+    var hasSeveralChangeableCopies: Bool
+
+    /// A really-owned physical copy exists.
+    var hasPhysical: Bool { !physicalPlatformIDs.isEmpty }
+    /// A really-owned digital copy exists.
+    var hasDigital: Bool { !digitalPlatformIDs.isEmpty }
+    /// A subscription (PS Plus) claim exists — drives the PS Plus badge. A game with a
+    /// real digital copy **and** a PS Plus claim shows both (PLAN §13.3).
+    var hasSubscription: Bool { !subscriptionPlatformIDs.isEmpty }
 
     init(
         id: Int64,
@@ -58,7 +89,13 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         platformIDs: [String] = [],
         status: PlayStatus? = nil,
         hasROM: Bool = false,
-        ownedOnlyViaSubscription: Bool = false
+        ownedOnlyViaSubscription: Bool = false,
+        physicalPlatformIDs: [String] = [],
+        digitalPlatformIDs: [String] = [],
+        romPlatformIDs: [String] = [],
+        subscriptionPlatformIDs: [String] = [],
+        singleCopyFormat: ProductFormat? = nil,
+        hasSeveralChangeableCopies: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -77,6 +114,12 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         self.status = status
         self.hasROM = hasROM
         self.ownedOnlyViaSubscription = ownedOnlyViaSubscription
+        self.physicalPlatformIDs = physicalPlatformIDs
+        self.digitalPlatformIDs = digitalPlatformIDs
+        self.romPlatformIDs = romPlatformIDs
+        self.subscriptionPlatformIDs = subscriptionPlatformIDs
+        self.singleCopyFormat = singleCopyFormat
+        self.hasSeveralChangeableCopies = hasSeveralChangeableCopies
     }
 
     /// Derived Backlog membership (PLAN §4 invariant 2): owned but not played.
@@ -93,18 +136,23 @@ extension GameSummary {
         GameSummary(
             id: 1, title: "Bloodborne", year: 2015, coverFile: nil,
             tierID: 1, tierLetter: "S", tierColorHex: "#FF3B30", rankKey: 1000,
-            played: true, owned: true, platformIDs: ["ps4"], status: .completed
+            played: true, owned: true, platformIDs: ["ps4"], status: .completed,
+            physicalPlatformIDs: ["ps4"], singleCopyFormat: .physical
         ),
         GameSummary(
             id: 2, title: "Elden Ring", year: 2022,
             tierID: 1, tierLetter: "S", tierColorHex: "#FF3B30", rankKey: 2000,
-            played: true, owned: true, platformIDs: ["ps5", "ps4"], status: .finished
+            played: true, owned: true, platformIDs: ["ps5", "ps4"], status: .finished,
+            digitalPlatformIDs: ["ps5"], subscriptionPlatformIDs: ["ps4"],
+            singleCopyFormat: .digital
         ),
         GameSummary(
             id: 3, title: "Metal Gear Solid 3: Snake Eater", year: 2004,
             tierID: 2, tierLetter: "A", tierColorHex: "#FF9500", rankKey: 1500,
             played: true, owned: true, isCompilationMember: true,
-            platformIDs: ["ps2"], status: .finished, hasROM: true
+            platformIDs: ["ps2"], status: .finished, hasROM: true,
+            physicalPlatformIDs: ["ps2"], romPlatformIDs: ["ps2"],
+            hasSeveralChangeableCopies: true
         ),
         GameSummary(
             id: 4, title: "Broken Sword", year: 1996,
@@ -112,7 +160,8 @@ extension GameSummary {
         ),
         GameSummary(
             id: 5, title: "Silksong", year: 2025,
-            played: false, owned: true, platformIDs: ["ps5"]
+            played: false, owned: true, platformIDs: ["ps5"],
+            digitalPlatformIDs: ["ps5"], singleCopyFormat: .digital
         ),
     ]
 }

@@ -18,7 +18,7 @@ struct BundlesToExpandHeader: View {
                  + "IGDB is checked when you click.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)

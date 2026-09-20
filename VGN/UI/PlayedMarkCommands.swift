@@ -17,18 +17,19 @@ struct PlayedMarkCommands: Commands {
         CommandMenu("Game") {
             let enabled = library?.canMarkSelectionPlayed ?? false
             let last = library?.lastPlayedMark ?? .played
+            // The selection's already-loaded summaries drive every mixed-state mark: ✓ (all)
+            // / – (mixed) / nothing (none), same computation as the grid context menu (wave 17).
+            let selection = library?.selectedGames ?? []
 
-            Button("\(last.menuTitle)   ⇧M") { library?.applyLastPlayedMark() }
+            StateMenuButton(title: "\(last.menuTitle)   ⇧M",
+                            state: selection.playedMarkState(last)) { library?.applyLastPlayedMark() }
                 .disabled(!enabled)
 
             Menu("Mark Played As") {
                 ForEach(PlayedMark.allCases) { mark in
-                    Button {
+                    StateMenuButton(title: mark.label, state: selection.playedMarkState(mark)) {
                         guard let library else { return }
                         library.markPlayed(library.selectedGameIDs, as: mark)
-                    } label: {
-                        if mark == last { Label(mark.label, systemImage: "checkmark") }
-                        else { Text(mark.label) }
                     }
                     .disabled(!enabled)
                 }
@@ -36,12 +37,20 @@ struct PlayedMarkCommands: Commands {
             .disabled(!enabled)
 
             // Change Copy Format ▸ Physical / Digital / ROM (PLAN §13.3). Acts on the
-            // selection's single-copy games; several-copy games are skipped (banner).
+            // selection's single-copy games; several-copy games are skipped (banner + footer).
             let canFormat = library?.canChangeSelectionCopyFormat ?? false
             Menu("Change Copy Format") {
                 ForEach(ProductFormat.allCases, id: \.self) { format in
-                    Button(format.label) { library?.changeCopyFormat(to: format) }
-                        .disabled(!canFormat)
+                    StateMenuButton(title: format.label, state: selection.copyFormatState(format)) {
+                        library?.changeCopyFormat(to: format)
+                    }
+                    .disabled(!canFormat)
+                }
+                let several = selection.severalCopiesCount
+                if several > 0 {
+                    Divider()
+                    Button { } label: { Text("^[\(several) game](inflect: true) with several copies not changed") }
+                        .disabled(true)
                 }
             }
             .disabled(!canFormat)

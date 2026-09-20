@@ -130,10 +130,11 @@ struct GameCell: View {
     private var a11yStateValue: String {
         var parts: [String] = []
         if let letter = game.tierLetter { parts.append("Tier \(letter)") }
-        if game.owned { parts.append("Owned") }
-        if game.played { parts.append("Played") }
+        if game.hasPhysical { parts.append("Physical") }
+        if game.hasDigital { parts.append("Digital") }
         if game.hasROM { parts.append("ROM") }
-        if game.ownedOnlyViaSubscription { parts.append("PS Plus") }
+        if game.hasSubscription { parts.append("PS Plus") }
+        if game.played { parts.append("Played") }
         return parts.isEmpty ? "Unranked" : parts.joined(separator: ", ")
     }
 
@@ -193,23 +194,51 @@ struct GameCell: View {
                 }
             }
             Spacer()
+            // How I own this game (PLAN §8, wave 17): one badge per distinct format among
+            // the really-owned copies — physical (disc) → digital (download) → ROM (chip) →
+            // PS Plus (the asset) — then the played controller. Any format badge means owned,
+            // so the old generic "Owned" box is gone.
             HStack(spacing: 4) {
-                if game.owned {
-                    statusBadge(system: "shippingbox.fill", tint: .blue, help: "Owned")
+                ForEach(FormatBadges.badges(for: game)) { badge in
+                    formatBadge(badge)
                 }
                 if game.played {
                     statusBadge(system: "gamecontroller.fill", tint: .green, help: "Played")
-                }
-                if game.hasROM {
-                    statusBadge(system: "memorychip.fill", tint: .purple, help: "Owned as a ROM")
-                }
-                if game.ownedOnlyViaSubscription {
-                    psPlusBadge
                 }
                 Spacer(minLength: 0)
             }
         }
         .padding(6)
+    }
+
+    @ViewBuilder
+    private func formatBadge(_ badge: FormatBadge) -> some View {
+        switch badge.kind {
+        case .physical:
+            statusBadge(system: "opticaldisc.fill", tint: .blue, help: Self.badgeTooltip(badge))
+        case .digital:
+            statusBadge(system: "arrow.down.circle.fill", tint: .teal, help: Self.badgeTooltip(badge))
+        case .rom:
+            statusBadge(system: "memorychip.fill", tint: .purple, help: Self.badgeTooltip(badge))
+        case .psPlus:
+            PSPlusBadgeView(size: 17).help(Self.badgeTooltip(badge))
+        }
+    }
+
+    /// A format badge's tooltip: format name + the platform(s) of those copies
+    /// ("Physical · PS3", "Digital · PS5, PC"); PS Plus adds the expiry note.
+    static func badgeTooltip(_ badge: FormatBadge) -> String {
+        let name: String
+        switch badge.kind {
+        case .physical: name = "Physical"
+        case .digital: name = "Digital"
+        case .rom: name = "ROM"
+        case .psPlus: name = "PS Plus"
+        }
+        let plats = badge.platformIDs.map(PlatformLabels.short).joined(separator: ", ")
+        var text = plats.isEmpty ? name : "\(name) · \(plats)"
+        if badge.kind == .psPlus { text += " — expires with the subscription" }
+        return text
     }
 
     private func statusBadge(system: String, tint: Color, help: String) -> some View {
@@ -219,18 +248,6 @@ struct GameCell: View {
             .padding(4)
             .background(tint.opacity(0.9), in: Circle())
             .help(help)
-    }
-
-    /// PS Plus badge (PLAN §13.3): a PlayStation-blue heavy-rounded "+" in a yellow circle,
-    /// the owned/played badge family's size, shown only for a game owned solely through PS
-    /// Plus (at risk when the subscription lapses). `appKitTooltip` so the note is visible.
-    private var psPlusBadge: some View {
-        Text("+")
-            .font(.system(size: 11, weight: .heavy, design: .rounded))
-            .foregroundStyle(Color(hex: "#0070D1") ?? .blue)
-            .frame(width: 17, height: 17)
-            .background(Color(hex: "#FFC300") ?? .yellow, in: Circle())
-            .appKitTooltip("PS Plus — expires with the subscription")
     }
 }
 
