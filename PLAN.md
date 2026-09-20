@@ -92,6 +92,10 @@ games          id · igdb_id? · title · sort_title · release_date · year · 
                my_playtime_s? · psn_playtime_s? · ttb_hastily_s? · ttb_normally_s? · ttb_completely_s? · ttb_source
                cover_file? · added_at · updated_at
 game_platforms game_id · platform_id · played             -- where I played it (not owned case)
+                                                   -- a row added by a copy (played=0) is pruned when that copy is
+                                                   -- removed and no other copy is on it (bug 2026-09-20 — a deleted
+                                                   -- Mac copy left a stale "Mac" pill); a played=1 row and a game's
+                                                   -- last platform are always kept (`pruneCopyOnlyPlatforms`, §4 inv.)
 genres / game_genres
 products       id · title · platform_id · kind(single|compilation) · format(physical|digital|rom)
                edition? · region? · igdb_id? · cover_file? · source(manual|photo|psn) · psn_entitlement? · acquired_at?
@@ -121,6 +125,7 @@ Invariants (enforced in `VGNCore`, unit-tested):
 1. A game must be **played or owned** (≥ 1 product). Removing the last of the two asks to delete the game.
 2. Only **played** games can have a tier / rank. Owned-unplayed = **Backlog**.
 3. Rank order is always consistent with tiers (§7).
+4. A `game_platforms` row a copy alone put there (`played = 0`, no remaining copy on that platform) is dropped when the copy is removed/re-pointed, so a deleted copy's platform stops showing in the grid pills / inspector / sidebar — **but** a `played = 1` row (the owner's "played on" statement) and a game's *last* platform are never removed. One rule (`LibraryStore.pruneCopyOnlyPlatforms`), run in the copy-removal transactions; a launch-once repair (`repair.copyOnlyPlatforms.v1`) applies it to pre-fix leftovers.
 
 ---
 
