@@ -6,7 +6,8 @@ import Foundation
 protocol DiscoverBackend: Sendable {
     /// The owner's ranked games as the taste profile (tiers → 0…1 scores + traits).
     func rankedGames() async throws -> [RankedGame]
-    /// The never-played, not-promoted, not-dismissed catalogue pool to score.
+    /// The "From the vault" candidate pool over BOTH sources (PLAN §16): never-played Batocera
+    /// ROMs + matched PS Plus entries, not promoted, not dismissed.
     func pool(limit: Int) async throws -> [RomCatalogEntry]
     /// Systems the owner has real play time on (the small affinity nudge).
     func playedSystems() async throws -> Set<String>
@@ -24,7 +25,7 @@ struct LiveDiscoverBackend: DiscoverBackend {
 
     func rankedGames() async throws -> [RankedGame] { try await recommendation.rankedGames() }
     func pool(limit: Int) async throws -> [RomCatalogEntry] {
-        try await catalog.neverPlayedPool(limit: limit)
+        try await catalog.vaultPool(limit: limit)
     }
     func playedSystems() async throws -> Set<String> { try await catalog.playedSystems() }
     func setNotInterested(catalogID: Int64) async throws {
