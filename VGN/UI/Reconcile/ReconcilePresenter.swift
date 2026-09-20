@@ -54,6 +54,19 @@ final class IGDBLinkPresenter {
         Task { await beginLink(gameID) }
     }
 
+    /// "Merge into the Original…" (PLAN §5.1 "Same Game, Two Entries"): find the library
+    /// original of this port and open the existing merge confirm sheet with it as target.
+    /// No new merge code — reuses ``beginMerge`` (rules + sheet + undo).
+    func presentMergeIntoOriginal(for portGameID: Int64) {
+        Task {
+            guard let target = try? await store.originalGameID(forPort: portGameID) else {
+                vm?.showBanner("Couldn't find the original in your library.", kind: .error); return
+            }
+            let title = (try? await store.gameDetail(id: target))?.title ?? "the original"
+            beginMerge(source: portGameID, target: target, targetTitle: title)
+        }
+    }
+
     private func beginLink(_ gameID: Int64) async {
         guard let detail = try? await store.gameDetail(id: gameID) else {
             vm?.showBanner("Couldn't open the game.", kind: .error); return

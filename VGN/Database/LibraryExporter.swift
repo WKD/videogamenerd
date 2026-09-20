@@ -254,13 +254,11 @@ struct LibraryExporter: Sendable {
         var tierLetter: [Int64: String] = [:]
         for r in try Row.fetchAll(db, sql: "SELECT id, letter FROM tiers") { tierLetter[r["id"]] = r["letter"] }
 
-        // Per-game platforms (game_platforms ∪ product platforms), formats, ownership,
-        // compilation membership — grouped, no N+1.
+        // Per-game platforms — the ONE effective-platform rule (PLAN §4), i.e. exactly what
+        // the grid/inspector show — formats, ownership, compilation membership; grouped, no N+1.
         var platformsByGame: [Int64: Set<String>] = [:]
         for r in try Row.fetchAll(db, sql: """
-            SELECT game_id AS gid, platform_id AS pid FROM game_platforms
-            UNION
-            SELECT pg.game_id, p.platform_id FROM products p JOIN product_games pg ON pg.product_id = p.id
+            SELECT game_id AS gid, platform_id AS pid FROM (\(LibraryQuery.effectivePlatformsSQL))
             """) {
             platformsByGame[r["gid"], default: []].insert(r["pid"])
         }

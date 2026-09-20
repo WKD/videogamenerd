@@ -208,6 +208,12 @@ struct LibraryGridView: View {
             // confirm runs in the presenter. Offered here so the "Bundles to Expand" smart list
             // and any single selection can expand from the grid, matching the inspector / File menu.
             Button("Expand Bundle into Games…") { act(on: game) { _ in vm.requestExpandBundle(gameID: game.id) } }
+            // "Merge into the Original…" (PLAN §5.1 "Same Game, Two Entries"): offered in that
+            // scoped list, where every game is a port whose original is also in the library. Runs
+            // the existing reconcile merge (parent as target) with its confirm sheet + undo.
+            if vm.selection == .sameGameTwoEntries {
+                Button("Merge into the Original…") { act(on: game) { _ in vm.requestMergePortIntoOriginal(gameID: game.id) } }
+            }
         }
         // Cover is per-game: only offered for a single target (not a multi-selection),
         // and only when the loader can browse candidates. PURE — reads only.

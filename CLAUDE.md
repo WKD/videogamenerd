@@ -150,6 +150,11 @@ played-or-owned (removing the last leaves a game orphaned → `.wouldOrphan`, ne
 silent delete); only played games carry a tier/rank; rank order is consistent with
 tiers. Enrichment honours the `games.user_edited` marker and only fills empty fields
 (unless an explicit refresh). Every write method is one transaction.
+**No launch-time, background or bulk "repair" may ever modify or delete the owner's
+library data** (owner decision 2026-09-20). Inconsistencies are surfaced as review lists
+and fixed only by an explicit, undoable owner action; display quirks are fixed by *read*
+rules (e.g. the effective-platform rule, PLAN §4 inv. 4 — platforms come from a game's
+copies, so a deleted/re-platformed copy corrects the display without touching any row).
 
 ## On-disk layout
 

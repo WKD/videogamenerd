@@ -136,6 +136,9 @@ final class LibraryViewModel {
     /// "Expand Bundle into Games…" for one game linked to an IGDB bundle (wired to the
     /// reconcile presenter — PLAN §5.1 repair path).
     var onExpandBundle: (Int64) -> Void = { _ in }
+    /// "Merge into the Original…" for a port whose original is also in the library (wired to
+    /// the reconcile presenter — PLAN §5.1 "Same Game, Two Entries"). Opens the merge sheet.
+    var onMergePortIntoOriginal: (Int64) -> Void = { _ in }
     /// "Expand All Unplayed…" for the Bundles-to-Expand header (wired to the reconcile
     /// presenter — PLAN §13.3 / §5.1 D4b). Batch-expands every unplayed candidate.
     var onExpandAllUnplayedBundles: () -> Void = {}
@@ -939,6 +942,10 @@ final class LibraryViewModel {
     /// path). The presenter verifies against IGDB on demand and no-ops when it is not a
     /// bundle. Called from the inspector / grid context menu — never a menu *builder*.
     func requestExpandBundle(gameID: Int64) { onExpandBundle(gameID) }
+
+    /// Open the merge sheet to fold a port into its library original (PLAN §5.1 "Same Game,
+    /// Two Entries"). Called from the grid context menu of the "Same Game, Two Entries" list.
+    func requestMergePortIntoOriginal(gameID: Int64) { onMergePortIntoOriginal(gameID) }
 
     /// After a mutation that may drop `ids` from the current scope (e.g. a link that
     /// leaves the "Unlinked" list, or a merge that deletes a game), plan a sensible

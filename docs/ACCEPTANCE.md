@@ -411,6 +411,21 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 - [ ] **Inspector actions read as buttons (D6).** Change IGDB Match… / Refresh metadata / Choose
   Cover… / Add copy… / Edit compilation… / trash all look like real (bordered) buttons; the inspector
   still lays out correctly at its narrowest width (they stack, each with a visible button shape).
+- [ ] **Deleting a copy updates the platform pills (wave 19, lane C).** Take a game owned on **Mac + PC**
+  (two digital copies). Delete the **Mac** copy (⇧O, pick the Mac copy — or the inspector). The **"Mac"
+  pill under the title disappears**, leaving only "PC"; the **Digital** badge stays, and its tooltip now
+  reads "Digital · PC" (was "Digital · Mac, PC"). The inspector's platform list and the sidebar Mac count
+  drop Mac too. **Nothing is deleted from the database** — this is a display rule (copies are the source of
+  truth), so it also fixes the known stale cases already in your library without any clean-up ever running.
+  Then **⌘Z** brings the Mac copy back (copy removal is undoable, wave 19).
+- [ ] **Existing stale platform rows show correctly with nothing deleted.** These 12 games each list a
+  platform they have no copy on (and never marked played-on): **Baldur's Gate I** & **II** (pc listed,
+  copies on mac), **StarCraft II** ×2, **Final Fantasy VIII** & **IX** (ps3/ps1), **Castlevania: SotN**
+  (ps3/ps1), **Luigi's Mansion** (3ds/gamecube), **Myst** (ps3/mac), **Rayman Raving Rabbids** (wiiu/wii),
+  **Super Mario Galaxy 2** (wiiu/wii), **Bart vs. the Space Mutants** (genesis/nes). Each now shows **only
+  its copies' platform(s)** in the grid, inspector and platform filter — but the raw rows are untouched, so
+  if any is actually a real second copy you simply haven't catalogued, add that copy and the platform
+  returns. You decide each; nothing was changed for you.
 
 ## Sidebar never jumps (wave 19, lane D) — needs owner eyes
 - [ ] Make the window **short** (drag it down so the sidebar list only just fits, or less). Click **every**

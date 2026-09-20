@@ -92,6 +92,13 @@ games          id · igdb_id? · title · sort_title · release_date · year · 
                my_playtime_s? · psn_playtime_s? · ttb_hastily_s? · ttb_normally_s? · ttb_completely_s? · ttb_source
                cover_file? · added_at · updated_at
 game_platforms game_id · platform_id · played             -- where I played it (not owned case)
+                                                   -- EFFECTIVE-PLATFORM READ RULE (inv. 4): the platforms a game
+                                                   -- SHOWS / is counted / filtered under are — for an OWNED game
+                                                   -- (≥1 copy): its copies' platforms ∪ its played=1 rows; for a
+                                                   -- played-not-owned game: all its rows. A played=0 row of an owned
+                                                   -- game (a copy's echo, or a deleted/re-platformed copy's leftover)
+                                                   -- is ignored on read but never deleted. One SQL fragment
+                                                   -- (`LibraryQuery.effectivePlatformsSQL`) shared by every reader.
 genres / game_genres
 products       id · title · platform_id · kind(single|compilation) · format(physical|digital|rom)
                edition? · region? · igdb_id? · cover_file? · source(manual|photo|psn) · psn_entitlement? · acquired_at?
@@ -121,6 +128,8 @@ Invariants (enforced in `VGNCore`, unit-tested):
 1. A game must be **played or owned** (≥ 1 product). Removing the last of the two asks to delete the game.
 2. Only **played** games can have a tier / rank. Owned-unplayed = **Backlog**.
 3. Rank order is always consistent with tiers (§7).
+4. **Effective-platform read rule** (owner decision 2026-09-20): the platforms a game shows / is counted / filtered under are, for an owned game (≥ 1 copy), its copies' platforms ∪ its `played = 1` rows; for a played-not-owned game, all its `game_platforms` rows. A `played = 0` row of an owned game (a copy's echo, or the leftover of a deleted / re-platformed copy) is ignored on read but **never deleted**. Deleting or re-platforming a copy therefore corrects the display for free — old cases and new alike. One SQL fragment (`LibraryQuery.effectivePlatformsSQL`) is shared by every reader (grid pills, platform filter, sidebar counts, `platformsInUse`, inspector, Stats, CSV export) so they cannot drift.
+5. **No launch-time, background or bulk "repair" ever modifies or deletes library data** (owner decision 2026-09-20, after a one-shot platform clean-up was reverted before it ran). A detected inconsistency is surfaced as a **review list** (Unlinked, Bundles to Expand, DLC & Expansions, Same Game Two Entries) and changed only by an explicit, undoable owner action.
 
 ---
 

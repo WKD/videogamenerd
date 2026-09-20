@@ -52,6 +52,26 @@ struct SidebarView: View {
                                    + "as one game. Expand one into its member games — IGDB is "
                                    + "checked when you click.")
                 }
+                // "DLC & Expansions" — games that are IGDB DLC / expansions / packs / seasons /
+                // updates / mods, not games in their own right (PLAN §5.1). Shown ONLY when > 0.
+                if (vm.counts.count(for: .dlcAndExpansions) ?? 0) > 0 {
+                    taggedRow(.dlcAndExpansions) {
+                        Label(Self.title(for: .dlcAndExpansions), systemImage: Self.icon(for: .dlcAndExpansions))
+                            .badge(badge(for: .dlcAndExpansions))
+                    }
+                    .appKitTooltip("Add-on content matched to IGDB as DLC, an expansion, a pack, a "
+                                   + "season, an update or a mod — not a game in its own right.")
+                }
+                // "Same Game, Two Entries" — an IGDB port whose parent game is also in the library
+                // (PLAN §5.1). Shown ONLY when > 0; merge one into its original from here.
+                if (vm.counts.count(for: .sameGameTwoEntries) ?? 0) > 0 {
+                    taggedRow(.sameGameTwoEntries) {
+                        Label(Self.title(for: .sameGameTwoEntries), systemImage: Self.icon(for: .sameGameTwoEntries))
+                            .badge(badge(for: .sameGameTwoEntries))
+                    }
+                    .appKitTooltip("A port catalogued separately from the original you also own — "
+                                   + "merge it into the original to keep one entry.")
+                }
             }
 
             Section("Rankings") {
@@ -213,6 +233,8 @@ struct SidebarView: View {
         case .playNext: return "Play Next"
         case .unlinked: return "Unlinked"
         case .bundlesToExpand: return "Bundles to Expand"
+        case .dlcAndExpansions: return "DLC & Expansions"
+        case .sameGameTwoEntries: return "Same Game, Two Entries"
         case .tierBoard: return "Tier Board"
         case .theTop: return "The Top"
         case .duel: return "Duel"
@@ -233,6 +255,8 @@ struct SidebarView: View {
         case .playNext: return "sparkles"
         case .unlinked: return "link.badge.plus"
         case .bundlesToExpand: return "square.stack.3d.up.fill"
+        case .dlcAndExpansions: return "puzzlepiece.extension"
+        case .sameGameTwoEntries: return "arrow.triangle.merge"
         case .tierBoard: return "square.stack.3d.up"
         case .theTop: return "trophy"
         case .duel: return "flag.2.crossed"

@@ -31,6 +31,18 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     /// this scopes the grid to those game ids so the owner can expand them into their members.
     case bundlesToExpand
 
+    /// Library games that are IGDB **DLC / expansions / packs / seasons / updates / mods** rather
+    /// than games in their own right (PLAN §5.1 "What counts as a game"). Driven purely by the
+    /// game's own cached IGDB `game_type` (no request). A LIBRARY row under Bundles to Expand,
+    /// shown **only when its count > 0**.
+    case dlcAndExpansions
+
+    /// Library games that are an IGDB **port** (game_type 11) whose parent game is **also** in the
+    /// library — the "same game, two entries" pairs the owner may want to merge (PLAN §5.1). A
+    /// LIBRARY row under Bundles to Expand, shown **only when its count > 0**; the header/context
+    /// action runs the existing reconcile merge with the parent as target.
+    case sameGameTwoEntries
+
     // Ranking views (PLAN §7)
     case tierBoard
     case theTop
@@ -62,6 +74,8 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
         case .playNext: return "playNext"
         case .unlinked: return "unlinked"
         case .bundlesToExpand: return "bundlesToExpand"
+        case .dlcAndExpansions: return "dlcAndExpansions"
+        case .sameGameTwoEntries: return "sameGameTwoEntries"
         case .tierBoard: return "tierBoard"
         case .theTop: return "theTop"
         case .duel: return "duel"

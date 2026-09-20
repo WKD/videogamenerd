@@ -25,6 +25,9 @@ enum TestDB {
         .init(id: "pc", name: "PC (Windows)", short: "PC",
               manufacturer: "Microsoft", group: "Computer", kind: "computer",
               generation: nil, igdbIDs: [6], libretroRepo: nil, sort: 10),
+        .init(id: "mac", name: "Mac", short: "Mac",
+              manufacturer: "Apple", group: "Computer", kind: "computer",
+              generation: nil, igdbIDs: [14], libretroRepo: nil, sort: 20),
     ]
 
     /// A migrated, in-memory database with the test platforms seeded.

@@ -87,6 +87,9 @@ extension LibraryStore {
                 for gameID in memberIDs {
                     try Self.ensureGamePlatform(gameID: gameID, platformID: platformID, played: false, db: db)
                 }
+                // No pruning: the OLD platform simply stops showing because the read rule
+                // (PLAN §4) sources an owned game's platforms from its copies (∪ played-on rows),
+                // and the copy has moved. The stale `game_platforms` row stays, untouched.
             }
             if let format {
                 try db.execute(sql: "UPDATE products SET format = ?, updated_at = ? WHERE id = ?",

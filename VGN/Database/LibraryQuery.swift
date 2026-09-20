@@ -7,6 +7,29 @@ import GRDB
 ///
 /// Search is a basic FTS5 prefix match for now (next wave deepens it).
 enum LibraryQuery {
+    /// **The one effective-platform rule (PLAN §4).** The platforms a game SHOWS and is
+    /// counted/filtered under, as `(game_id, platform_id)` rows — the single source every
+    /// reader shares so pills, filters, counts, the inspector, stats and exports never drift:
+    ///  - a game with ≥ 1 copy: the platforms of its copies (any product — single, compilation
+    ///    membership, PS Plus claim) **∪** its `game_platforms` rows marked `played = 1` (a
+    ///    platform the owner said they played on always shows);
+    ///  - a game with **no** copy (played-not-owned): all its `game_platforms` rows.
+    ///
+    /// A non-played `game_platforms` row of an *owned* game is ignored on read — it is the
+    /// echo of a copy, or a leftover of a deleted / re-platformed one. The row stays in the
+    /// table untouched (nothing is ever pruned; owner decision 2026-09-20). Because a game
+    /// always has either a copy or a `game_platforms` row, this never yields zero platforms
+    /// for a game that has any.
+    static let effectivePlatformsSQL = """
+        SELECT pg.game_id AS game_id, p.platform_id AS platform_id
+        FROM products p JOIN product_games pg ON pg.product_id = p.id
+        UNION
+        SELECT gp.game_id AS game_id, gp.platform_id AS platform_id
+        FROM game_platforms gp
+        WHERE gp.played = 1
+           OR NOT EXISTS (SELECT 1 FROM product_games pg2 WHERE pg2.game_id = gp.game_id)
+        """
+
     /// The grid's SELECT with its per-game facts (owned / compilation / ROM /
     /// platform ids) resolved through two **pre-aggregated CTEs** joined once,
     /// rather than four correlated subqueries evaluated per row (PLAN §9). At
@@ -44,12 +67,8 @@ enum LibraryQuery {
             GROUP BY pg.game_id
         ),
         plat AS (
-            SELECT game_id, group_concat(pid) AS ids FROM (
-                SELECT game_id, platform_id AS pid FROM game_platforms
-                UNION
-                SELECT pg.game_id, p.platform_id FROM products p
-                JOIN product_games pg ON pg.product_id = p.id
-            ) GROUP BY game_id
+            SELECT game_id, group_concat(platform_id) AS ids
+            FROM (\(effectivePlatformsSQL)) GROUP BY game_id
         )
         SELECT
             g.id                                             AS id,
@@ -152,6 +171,11 @@ enum LibraryQuery {
             // `restrictToIDs` (see ``LibraryStore/fetchGames(_:_:)``). Reached with no restrict
             // set only in the preview/in-memory path, where the evaluator scopes it.
             break
+        case .dlcAndExpansions:
+            // Pure cached-type predicate (no request), like the bundle cached-type check (PLAN §5.1).
+            wheres.append(dlcAndExpansionsPredicate())
+        case .sameGameTwoEntries:
+            wheres.append(sameGameTwoEntriesPredicate())
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
@@ -187,11 +211,9 @@ enum LibraryQuery {
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         wheres.append("""
-            (EXISTS(SELECT 1 FROM game_platforms gp WHERE gp.game_id = g.id AND gp.platform_id = ?)
-             OR EXISTS(SELECT 1 FROM products p3 JOIN product_games pg3 ON pg3.product_id = p3.id
-                       WHERE pg3.game_id = g.id AND p3.platform_id = ?))
+            EXISTS(SELECT 1 FROM (\(effectivePlatformsSQL)) ep
+                   WHERE ep.game_id = g.id AND ep.platform_id = ?)
             """)
-        args.append(slug)
         args.append(slug)
     }
 
@@ -209,11 +231,9 @@ enum LibraryQuery {
             let slugs = filter.platforms.sorted()
             let placeholders = self.placeholders(slugs.count)
             wheres.append("""
-                (EXISTS(SELECT 1 FROM game_platforms gp WHERE gp.game_id = g.id AND gp.platform_id IN (\(placeholders)))
-                 OR EXISTS(SELECT 1 FROM products p4 JOIN product_games pg4 ON pg4.product_id = p4.id
-                           WHERE pg4.game_id = g.id AND p4.platform_id IN (\(placeholders))))
+                EXISTS(SELECT 1 FROM (\(effectivePlatformsSQL)) ep
+                       WHERE ep.game_id = g.id AND ep.platform_id IN (\(placeholders)))
                 """)
-            args.append(contentsOf: slugs.map { $0 as DatabaseValueConvertible })
             args.append(contentsOf: slugs.map { $0 as DatabaseValueConvertible })
         }
         // Tier facet (OR within kind): selected tiers OR "Unrated" (played, no tier —
@@ -264,6 +284,17 @@ enum LibraryQuery {
         // ANDed across kinds; owner request 2026-09-19).
         if filter.multipleCopies {
             wheres.append("(SELECT COUNT(*) FROM product_games pg5 WHERE pg5.game_id = g.id) >= 2")
+        }
+        // "Duplicate Copies" — ≥ 2 really-owned copies (subscription IS NULL) sharing the SAME
+        // platform AND format, e.g. two physical PS3 discs (owner request 2026-09-20). Each
+        // product counts once; a compilation copy counts as a copy of each member (its
+        // product_games row). Narrower than Multiple Copies; ANDs across kinds.
+        if filter.duplicateCopies {
+            wheres.append("""
+                EXISTS(SELECT 1 FROM product_games pg8 JOIN products p8 ON p8.id = pg8.product_id
+                       WHERE pg8.game_id = g.id AND p8.subscription IS NULL
+                       GROUP BY p8.platform_id, p8.format HAVING COUNT(*) >= 2)
+                """)
         }
         // Format ▸ "PS Plus" — games whose **only** owned copies are subscription copies
         // (PLAN §13.3). Its own facet, ANDed across kinds (like Multiple Copies): the game
@@ -436,6 +467,48 @@ enum LibraryQuery {
     /// the scalar/per-platform/length counts, never as a second observation.
     static func fetchUnlinkedCount(_ db: Database) throws -> Int {
         try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games WHERE igdb_id IS NULL") ?? 0
+    }
+
+    // MARK: - "What counts as a game" review lists (PLAN §5.1)
+
+    /// The cached IGDB `game_type` for `g` (else the legacy `category`), read from the game's
+    /// own `catalog_cache` blob — the same zero-request join the bundle candidate rule uses.
+    private static func cachedTypeExpr() -> String {
+        "COALESCE(json_extract(cc.json, '$.game_type'), json_extract(cc.json, '$.category'))"
+    }
+
+    /// PLAN §5.1 "DLC & Expansions": a game whose own cached IGDB type is dlc_addon (1),
+    /// expansion (2), mod (5), season (7), pack (13) or update (14) — NOT standalone_expansion (4)
+    /// or episode (6), which are games in their own right.
+    static func dlcAndExpansionsPredicate() -> String {
+        """
+        EXISTS(SELECT 1 FROM catalog_cache cc WHERE cc.igdb_id = g.igdb_id
+               AND \(cachedTypeExpr()) IN (1, 2, 5, 7, 13, 14))
+        """
+    }
+
+    /// PLAN §5.1 "Same Game, Two Entries": a game that is an IGDB **port** (game_type 11) whose
+    /// `parent_game` or `version_parent` IGDB id is **also** a library game — the pairs the owner
+    /// may want to merge (e.g. a 2020 port next to the 2007 original).
+    static func sameGameTwoEntriesPredicate() -> String {
+        """
+        EXISTS(SELECT 1 FROM catalog_cache cc WHERE cc.igdb_id = g.igdb_id
+               AND \(cachedTypeExpr()) = 11
+               AND (json_extract(cc.json, '$.parent_game')
+                        IN (SELECT igdb_id FROM games WHERE igdb_id IS NOT NULL AND igdb_id <> g.igdb_id)
+                    OR json_extract(cc.json, '$.version_parent')
+                        IN (SELECT igdb_id FROM games WHERE igdb_id IS NOT NULL AND igdb_id <> g.igdb_id)))
+        """
+    }
+
+    /// Sidebar count for the "DLC & Expansions" row (composed into the single counts observation).
+    static func fetchDLCAndExpansionsCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(dlcAndExpansionsPredicate())") ?? 0
+    }
+
+    /// Sidebar count for the "Same Game, Two Entries" row.
+    static func fetchSameGameTwoEntriesCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(sameGameTwoEntriesPredicate())") ?? 0
     }
 
     /// Locale-independent decimal literal for a `Double` app constant (Swift's own

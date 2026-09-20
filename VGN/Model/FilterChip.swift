@@ -14,7 +14,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         case search, genre, decade
         case tier, unrated
         case status, notPlayed, noStatus
-        case format, notOwned, multipleCopies, subscriptionOnly
+        case format, notOwned, multipleCopies, duplicateCopies, subscriptionOnly
         case playtime, noEstimate, suspiciousEstimate, platform
 
         var label: String {
@@ -30,6 +30,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .format: return "Format"
             case .notOwned: return "Not Owned"
             case .multipleCopies: return "Multiple Copies"
+            case .duplicateCopies: return "Duplicate Copies"
             case .subscriptionOnly: return "PS Plus"
             case .playtime: return "Playtime"
             case .noEstimate: return "No Estimate"
@@ -42,7 +43,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         /// "Kind: value" split.
         var isStandalone: Bool {
             switch self {
-            case .unrated, .notPlayed, .noStatus, .notOwned, .multipleCopies, .subscriptionOnly, .noEstimate, .suspiciousEstimate: return true
+            case .unrated, .notPlayed, .noStatus, .notOwned, .multipleCopies, .duplicateCopies, .subscriptionOnly, .noEstimate, .suspiciousEstimate: return true
             default: return false
             }
         }
@@ -116,6 +117,7 @@ enum LibraryFilterChips {
         add(.format, formatPairs)
         if filter.includeNotOwned { add(.notOwned, [("true", "Not Owned")]) }
         if filter.multipleCopies { add(.multipleCopies, [("true", "Multiple Copies")]) }
+        if filter.duplicateCopies { add(.duplicateCopies, [("true", "Duplicate Copies")]) }
         if filter.includeSubscriptionOnly { add(.subscriptionOnly, [("true", "PS Plus")]) }
 
         let playtimePairs = PlaytimeBucket.allCases
@@ -146,6 +148,7 @@ enum LibraryFilterChips {
         case .format: if let fmt = ProductFormat(rawValue: chip.value) { f.formats.remove(fmt) }
         case .notOwned: f.includeNotOwned = false
         case .multipleCopies: f.multipleCopies = false
+        case .duplicateCopies: f.duplicateCopies = false
         case .subscriptionOnly: f.includeSubscriptionOnly = false
         case .playtime: if let b = PlaytimeBucket(rawValue: chip.value) { f.playtimes.remove(b) }
         case .noEstimate: f.includeNoTimeEstimate = false
