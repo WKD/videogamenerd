@@ -77,4 +77,12 @@ final class PlayPaceModel {
     var headerLabelWithStyle: String {
         hasChosen ? "\(headerLabel) · \(style.name.lowercased())" : headerLabel
     }
+
+    /// The play style, moved out of the (too-long) section title into the header tooltip
+    /// (owner request, wave 17): "8 h / week · playing lots of side quests — click to change".
+    var styleTooltip: String {
+        hasChosen
+            ? "\(headerLabel) · playing \(style.name.lowercased()) — click to change your pace and play style"
+            : "Set how much you can play in a week and how you play — sets the ranges below"
+    }
 }
