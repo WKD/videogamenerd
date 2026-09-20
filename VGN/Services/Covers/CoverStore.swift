@@ -30,7 +30,7 @@ actor CoverStore {
     /// In-memory previews of "Choose Cover…" candidates. These are never filed to
     /// disk — an unchosen candidate must not pollute `covers/`/`thumbs/` (PLAN §5.2
     /// step 4). Its own small cache so browsing candidates can't evict grid thumbs.
-    private let candidatePreviewCache = NSCache<NSString, CGImageBox>()
+    private let candidatePreviewCache: PreviewImageCache
     private var inflightFetch: [Int64: Task<StoredCover?, Error>] = [:]
     private var inflightThumb: [String: Task<CGImageBox?, Never>] = [:]
     private var inflightPreview: [String: Task<CGImageBox?, Never>] = [:]
@@ -48,7 +48,11 @@ actor CoverStore {
         sentinelClock: @escaping @Sendable () -> TimeInterval = { Date().timeIntervalSince1970 },
         maxConcurrentDownloads: Int = 6,
         negativeTTL: TimeInterval = 7 * 24 * 60 * 60,
-        memoryCostLimit: Int = 96 * 1024 * 1024
+        memoryCostLimit: Int = 96 * 1024 * 1024,
+        // Production `NSCache` may evict a preview under memory pressure (fine — cheap
+        // to refetch). Tests inject a non-evicting store to assert "second call hits
+        // the cache" deterministically (wave 20).
+        previewCache: PreviewImageCache = NSCachePreviewStore()
     ) {
         self.chain = chain
         self.transport = transport
@@ -58,6 +62,7 @@ actor CoverStore {
         self.sentinelClock = sentinelClock
         self.downloadLimiter = AsyncSemaphore(permits: maxConcurrentDownloads)
         self.negativeTTL = negativeTTL
+        self.candidatePreviewCache = previewCache
         self.memoryCache.totalCostLimit = memoryCostLimit
         try? FileManager.default.createDirectory(at: coversDirectory, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: thumbsDirectory, withIntermediateDirectories: true)
@@ -183,17 +188,19 @@ actor CoverStore {
     /// (the tile shows a placeholder).
     func candidatePreview(from url: URL, maxPixel: Int) async -> sending CGImage? {
         let bucket = Self.bucket(for: CGSize(width: maxPixel, height: maxPixel))
-        let key = "\(url.absoluteString)@\(bucket)" as NSString
+        let key = "\(url.absoluteString)@\(bucket)"
         if let cached = candidatePreviewCache.object(forKey: key) { return cached.image }
-        if let inflight = inflightPreview[key as String] { return await inflight.value?.image }
+        // Coalesce concurrent identical previews (tile reuse on scroll can request the
+        // same URL many times) onto ONE download; the twin joins the in-flight task.
+        if let inflight = inflightPreview[key] { return await inflight.value?.image }
 
         let task = Task<CGImageBox?, Never> { [self] in
             guard let data = try? await download(url) else { return nil }
             return ImageDownsampler.thumbnail(fromData: data, maxPixelSize: bucket)
         }
-        inflightPreview[key as String] = task
+        inflightPreview[key] = task
         let box = await task.value
-        inflightPreview[key as String] = nil
+        inflightPreview[key] = nil          // failures leave nothing cached → a retry re-downloads
         if let box { candidatePreviewCache.setObject(box, forKey: key, cost: box.cost) }
         return box?.image
     }
