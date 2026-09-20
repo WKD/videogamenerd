@@ -236,6 +236,36 @@ Each app-side fix is a separate commit `Fix: … (found by UI test …)`.
   segmented `Picker`, so there are no per-bracket elements. The flow switches
   brackets with the `1`–`4` keys instead.
 
+### Run status — 2026-09-20 (wave 18, `--per-class` attempt) — BLOCKED at init
+
+`--per-class` was attempted (owner away, authorised window). It **could not be
+evaluated** — the runner never reached any flow. `build-for-testing VGN-UITests`
+succeeded (the target compiles after the wave 14–18 merge), but every
+`test-without-building` invocation **failed to initialize for UI testing**, twice in a
+row on the first class:
+
+```
+Failed to initialize for UI testing: Error Domain=com.apple.LocalAuthentication Code=-4
+"System authentication is running." … Authentication cancelled. BiometryType=1
+… The test runner failed to initialize for UI testing.
+```
+
+This is an **environment/authorisation state on the login session**, not a test or app
+bug: a system authentication dialog (`BiometryType=1` = Touch ID) is active and cancels
+the UI-testing harness before it starts. The likely trigger is a **Keychain / Touch ID
+prompt left on screen by the ad-hoc-signed app rebuilds** (the signing note in
+`docs/LIMITATIONS.md` §1 warns macOS may re-ask for Keychain access after rebuilds), or a
+missing/again-required Accessibility/Automation grant. It can only be cleared by the owner
+at the machine (dismiss the auth dialog / re-grant the runner in **System Settings ▸
+Privacy & Security ▸ Accessibility** and **▸ Automation**), then re-run
+`scripts/uitests.sh --per-class`. The run was **stopped after two identical init failures**
+rather than hammering all 12 classes to the same wall; no flow executed, **no keyboard/mouse
+was hijacked** (it failed before that), and **no `VGN` process was left running**. So this
+run neither confirms nor refutes whether `--per-class` dodges the frontmost-window blocker
+below — that remains untested. **Not run: all 12 classes** (Duel, FilterChips, GridKey,
+InspectorEdit, LaunchSmoke, PlayNext, QuickAddFlow, RankingViews, ScanSheet, SearchFlow,
+Settings, TriageFlow).
+
 ### Run status — 2026-09-19 (full run ≈ 5m 20s, 23 tests)
 
 The suite builds, signs, loads and **executes** against the real app (Accessibility/
