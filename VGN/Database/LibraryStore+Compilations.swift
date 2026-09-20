@@ -87,11 +87,9 @@ extension LibraryStore {
                 for gameID in memberIDs {
                     try Self.ensureGamePlatform(gameID: gameID, platformID: platformID, played: false, db: db)
                 }
-                // A platform *correction* re-points the product: drop the OLD platform row each
-                // member no longer has a copy on (bug 2026-09-20 — the correction added the new
-                // platform row but never pruned the old, leaving a stale pill). Same rule/keeps
-                // as a copy removal: a played-on row and a game's last platform stay.
-                try Self.pruneCopyOnlyPlatforms(gameIDs: memberIDs, db: db)
+                // No pruning: the OLD platform simply stops showing because the read rule
+                // (PLAN §4) sources an owned game's platforms from its copies (∪ played-on rows),
+                // and the copy has moved. The stale `game_platforms` row stays, untouched.
             }
             if let format {
                 try db.execute(sql: "UPDATE products SET format = ?, updated_at = ? WHERE id = ?",

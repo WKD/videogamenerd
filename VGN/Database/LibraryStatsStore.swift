@@ -119,12 +119,7 @@ struct LibraryStatsStore: Sendable {
                    COALESCE(SUM(EXISTS(SELECT 1 FROM product_games pg WHERE pg.game_id = m.gid)), 0) AS owned,
                    COALESCE(SUM(g.played = 1), 0) AS played,
                    COALESCE(SUM(\(effective)), 0) AS secs
-            FROM (
-                SELECT platform_id AS pid, game_id AS gid FROM game_platforms
-                UNION
-                SELECT p.platform_id, pg.game_id FROM products p
-                JOIN product_games pg ON pg.product_id = p.id
-            ) m
+            FROM (SELECT game_id AS gid, platform_id AS pid FROM (\(LibraryQuery.effectivePlatformsSQL))) m
             JOIN games g ON g.id = m.gid
             WHERE \(s)
             GROUP BY m.pid
@@ -280,12 +275,8 @@ struct LibraryStatsStore: Sendable {
         _ db: Database, scope: StatsScope, scores: [GameID: DerivedScoreValue]
     ) throws -> ([LibraryStatsReport.PlatformScore], [LibraryStatsReport.PlatformBestGame]) {
         let rows = try Row.fetchAll(db, sql: """
-            SELECT m.pid AS pid, m.gid AS gid, g.title AS title FROM (
-                SELECT platform_id AS pid, game_id AS gid FROM game_platforms
-                UNION
-                SELECT p.platform_id, pg.game_id FROM products p
-                JOIN product_games pg ON pg.product_id = p.id
-            ) m
+            SELECT m.pid AS pid, m.gid AS gid, g.title AS title
+            FROM (SELECT game_id AS gid, platform_id AS pid FROM (\(LibraryQuery.effectivePlatformsSQL))) m
             JOIN games g ON g.id = m.gid
             WHERE g.played = 1 AND g.tier_id IS NOT NULL AND \(scopeClause(scope))
             """)

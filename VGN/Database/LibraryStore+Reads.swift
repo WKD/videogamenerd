@@ -38,13 +38,10 @@ extension LibraryStore {
             )
             """)!
         var perPlatform: [String: Int] = [:]
+        // Per-platform counts use the ONE effective-platform rule (PLAN §4), same as the pills.
         let rows = try Row.fetchAll(db, sql: """
-            SELECT platform_id AS pid, COUNT(DISTINCT game_id) AS n FROM (
-                SELECT platform_id, game_id FROM game_platforms
-                UNION
-                SELECT p.platform_id, pg.game_id FROM products p
-                JOIN product_games pg ON pg.product_id = p.id
-            ) GROUP BY platform_id
+            SELECT platform_id AS pid, COUNT(DISTINCT game_id) AS n
+            FROM (\(LibraryQuery.effectivePlatformsSQL)) GROUP BY platform_id
             """)
         for r in rows { perPlatform[r["pid"]] = r["n"] }
         return SidebarCounts(
@@ -105,13 +102,10 @@ extension LibraryStore {
             WHERE gg.game_id = ? ORDER BY ge.name
             """, arguments: [id])
 
+        // The inspector's platform list uses the ONE effective-platform rule (PLAN §4).
         let platformIDs = try String.fetchAll(db, sql: """
-            SELECT pid FROM (
-                SELECT platform_id AS pid FROM game_platforms WHERE game_id = ?1
-                UNION
-                SELECT p.platform_id FROM products p JOIN product_games pg ON pg.product_id = p.id
-                WHERE pg.game_id = ?1
-            ) ORDER BY pid
+            SELECT platform_id FROM (\(LibraryQuery.effectivePlatformsSQL))
+            WHERE game_id = ?1 ORDER BY platform_id
             """, arguments: [id])
 
         let copyRows = try Row.fetchAll(db, sql: """
@@ -214,11 +208,11 @@ extension LibraryStore {
     }
 
     static func fetchPlatformsInUse(_ db: Database) throws -> [PlatformInfo] {
+        // A platform appears in the sidebar iff a game is *effectively* on it (PLAN §4),
+        // so a stale copy-only row never leaves an empty platform in the list.
         try PlatformRecord.fetchAll(db, sql: """
             SELECT * FROM platforms WHERE id IN (
-                SELECT platform_id FROM game_platforms
-                UNION
-                SELECT platform_id FROM products
+                SELECT DISTINCT platform_id FROM (\(LibraryQuery.effectivePlatformsSQL))
             ) ORDER BY group_name, sort
             """).map(\.info)
     }

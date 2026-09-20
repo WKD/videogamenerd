@@ -27,12 +27,9 @@ extension LibraryStore {
             """)!
 
         let platformRows = try Row.fetchAll(db, sql: """
-            SELECT platform_id AS pid, COUNT(DISTINCT game_id) AS n FROM (
-                SELECT platform_id, game_id FROM game_platforms
-                UNION
-                SELECT p.platform_id, pg.game_id FROM products p
-                JOIN product_games pg ON pg.product_id = p.id
-            ) GROUP BY platform_id ORDER BY n DESC, pid LIMIT 5
+            SELECT platform_id AS pid, COUNT(DISTINCT game_id) AS n
+            FROM (\(LibraryQuery.effectivePlatformsSQL))
+            GROUP BY platform_id ORDER BY n DESC, pid LIMIT 5
             """)
         let byPlatform = platformRows.map {
             LibraryStats.PlatformCount(platformID: $0["pid"], count: $0["n"])

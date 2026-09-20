@@ -39,6 +39,10 @@ struct GRDBLibraryDataSource: LibraryDataSource {
                 // candidate rule, so a dismissal (app_state) or an expansion (games/products)
                 // re-runs this stream and the badge follows. No timer, no second observation.
                 counts.bundlesToExpand = try LibraryStore.fetchBundleExpansionCandidates(db).count
+                // "DLC & Expansions" / "Same Game, Two Entries" — pure cached-type reads (PLAN §5.1),
+                // same single observation so a link/merge/dismissal re-runs them with everything else.
+                counts.dlcAndExpansions = try LibraryQuery.fetchDLCAndExpansionsCount(db)
+                counts.sameGameTwoEntries = try LibraryQuery.fetchSameGameTwoEntriesCount(db)
                 return counts
             }
             .values(in: store.dbReader)

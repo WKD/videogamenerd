@@ -7,6 +7,29 @@ import GRDB
 ///
 /// Search is a basic FTS5 prefix match for now (next wave deepens it).
 enum LibraryQuery {
+    /// **The one effective-platform rule (PLAN §4).** The platforms a game SHOWS and is
+    /// counted/filtered under, as `(game_id, platform_id)` rows — the single source every
+    /// reader shares so pills, filters, counts, the inspector, stats and exports never drift:
+    ///  - a game with ≥ 1 copy: the platforms of its copies (any product — single, compilation
+    ///    membership, PS Plus claim) **∪** its `game_platforms` rows marked `played = 1` (a
+    ///    platform the owner said they played on always shows);
+    ///  - a game with **no** copy (played-not-owned): all its `game_platforms` rows.
+    ///
+    /// A non-played `game_platforms` row of an *owned* game is ignored on read — it is the
+    /// echo of a copy, or a leftover of a deleted / re-platformed one. The row stays in the
+    /// table untouched (nothing is ever pruned; owner decision 2026-09-20). Because a game
+    /// always has either a copy or a `game_platforms` row, this never yields zero platforms
+    /// for a game that has any.
+    static let effectivePlatformsSQL = """
+        SELECT pg.game_id AS game_id, p.platform_id AS platform_id
+        FROM products p JOIN product_games pg ON pg.product_id = p.id
+        UNION
+        SELECT gp.game_id AS game_id, gp.platform_id AS platform_id
+        FROM game_platforms gp
+        WHERE gp.played = 1
+           OR NOT EXISTS (SELECT 1 FROM product_games pg2 WHERE pg2.game_id = gp.game_id)
+        """
+
     /// The grid's SELECT with its per-game facts (owned / compilation / ROM /
     /// platform ids) resolved through two **pre-aggregated CTEs** joined once,
     /// rather than four correlated subqueries evaluated per row (PLAN §9). At
@@ -44,12 +67,8 @@ enum LibraryQuery {
             GROUP BY pg.game_id
         ),
         plat AS (
-            SELECT game_id, group_concat(pid) AS ids FROM (
-                SELECT game_id, platform_id AS pid FROM game_platforms
-                UNION
-                SELECT pg.game_id, p.platform_id FROM products p
-                JOIN product_games pg ON pg.product_id = p.id
-            ) GROUP BY game_id
+            SELECT game_id, group_concat(platform_id) AS ids
+            FROM (\(effectivePlatformsSQL)) GROUP BY game_id
         )
         SELECT
             g.id                                             AS id,
@@ -192,11 +211,9 @@ enum LibraryQuery {
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         wheres.append("""
-            (EXISTS(SELECT 1 FROM game_platforms gp WHERE gp.game_id = g.id AND gp.platform_id = ?)
-             OR EXISTS(SELECT 1 FROM products p3 JOIN product_games pg3 ON pg3.product_id = p3.id
-                       WHERE pg3.game_id = g.id AND p3.platform_id = ?))
+            EXISTS(SELECT 1 FROM (\(effectivePlatformsSQL)) ep
+                   WHERE ep.game_id = g.id AND ep.platform_id = ?)
             """)
-        args.append(slug)
         args.append(slug)
     }
 
@@ -214,11 +231,9 @@ enum LibraryQuery {
             let slugs = filter.platforms.sorted()
             let placeholders = self.placeholders(slugs.count)
             wheres.append("""
-                (EXISTS(SELECT 1 FROM game_platforms gp WHERE gp.game_id = g.id AND gp.platform_id IN (\(placeholders)))
-                 OR EXISTS(SELECT 1 FROM products p4 JOIN product_games pg4 ON pg4.product_id = p4.id
-                           WHERE pg4.game_id = g.id AND p4.platform_id IN (\(placeholders))))
+                EXISTS(SELECT 1 FROM (\(effectivePlatformsSQL)) ep
+                       WHERE ep.game_id = g.id AND ep.platform_id IN (\(placeholders)))
                 """)
-            args.append(contentsOf: slugs.map { $0 as DatabaseValueConvertible })
             args.append(contentsOf: slugs.map { $0 as DatabaseValueConvertible })
         }
         // Tier facet (OR within kind): selected tiers OR "Unrated" (played, no tier —

@@ -107,6 +107,11 @@ enum LibraryFilterEvaluator {
             // "no constraint" (like .unlinked). The live path scopes it via the id set, and in
             // sample mode the count stays 0 so the row is hidden — documented, not a bug.
             break
+        case .dlcAndExpansions, .sameGameTwoEntries:
+            // Cached IGDB-type review lists (PLAN §5.1): a GameSummary carries no game_type or
+            // parent link, so the preview/in-memory evaluator can't reproduce them — "no
+            // constraint" (like .unlinked). The live SQL scopes them; sample counts stay 0.
+            break
         case .length, .unmeasured:
             // GameSummary carries no time-to-beat estimate, so the preview/in-memory
             // evaluator cannot band by length — treat these scopes as "no constraint"
