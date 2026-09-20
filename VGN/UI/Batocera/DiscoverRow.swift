@@ -17,7 +17,8 @@ struct DiscoverRowView: View {
         }
         .task {
             guard model == nil, let env else { return }
-            let m = DiscoverModel(backend: env.discover, thumbnails: env.thumbnails)
+            let m = DiscoverModel(backend: env.discover, thumbnails: env.thumbnails,
+                                  openURL: env.openURL)
             model = m
             m.load()
         }
@@ -46,7 +47,9 @@ struct DiscoverRowView: View {
                             item: item, loader: model.thumbnails,
                             onAdd: { env?.addToLibrary?([item.entry.id]) },
                             onNotInterested: { model.notInterested(item.entry) },
-                            onShowInCatalogue: { env?.showCatalogue?() })
+                            onShowInCatalogue: { env?.showCatalogue?() },
+                            onOpenIGDB: item.entry.igdbID != nil
+                                ? { model.openIGDB(item.entry) } : nil)
                     }
                 }
                 .padding(.vertical, 2)
@@ -64,6 +67,8 @@ struct DiscoverCardView: View {
     let onAdd: () -> Void
     let onNotInterested: () -> Void
     let onShowInCatalogue: () -> Void
+    /// Opens the entry's IGDB page (D7); nil when the entry has no `igdb_id` (no button then).
+    var onOpenIGDB: (() -> Void)? = nil
 
     private var entry: RomCatalogEntry { item.entry }
 
@@ -103,6 +108,17 @@ struct DiscoverCardView: View {
                 Button("Add…") { onAdd() }
                     .controlSize(.small).buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("discover.add")
+                // A quiet "Open on IGDB" button, only for matched entries (D7). Never steals the
+                // card's primary click; never shown (nor disabled) without an id.
+                if let onOpenIGDB {
+                    Button { onOpenIGDB() } label: {
+                        Image(systemName: "arrow.up.right.square")
+                    }
+                    .controlSize(.small).buttonStyle(.borderless)
+                    .help("Open on IGDB")
+                    .accessibilityLabel("Open \(entry.name) on IGDB")
+                    .accessibilityIdentifier("discover.openIGDB")
+                }
                 Menu {
                     Button("Not Interested") { onNotInterested() }
                     Button("Show in the Vault") { onShowInCatalogue() }

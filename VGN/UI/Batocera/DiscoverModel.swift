@@ -27,6 +27,9 @@ final class DiscoverModel {
     let poolLimit: Int
     /// Injectable clock for the ISO-week rotation seed (deterministic in tests).
     var now: () -> Date = { Date() }
+    /// Opens a URL (the "Open on IGDB" card button, D7). Injected so tests capture it and NOTHING
+    /// is opened during a test run; the app passes ``BatoceraEnvironment/openURL``.
+    @ObservationIgnored var openURL: (URL) -> Void
 
     /// The owner's play style / weekly pace, for the PS Plus deadline finishability (PLAN §16).
     private let playStyle: PlayStyle
@@ -52,7 +55,8 @@ final class DiscoverModel {
          playStyle: PlayStyle = UserDefaultsPlayPacePreferences().playStyle(),
          pace: PlayPace = UserDefaultsPlayPacePreferences().playPace(),
          prioritisePSPlus: Bool = DiscoverModel.prioritisePSPlusDefault(),
-         deadlineMonthsLeft: @escaping @MainActor () -> Double? = { PSPlusDeadlinePreferences().monthsLeft() }) {
+         deadlineMonthsLeft: @escaping @MainActor () -> Double? = { PSPlusDeadlinePreferences().monthsLeft() },
+         openURL: @escaping (URL) -> Void = { _ in }) {
         self.backend = backend
         self.thumbnails = thumbnails
         self.cardCount = cardCount
@@ -61,6 +65,27 @@ final class DiscoverModel {
         self.pace = pace
         self.prioritisePSPlus = prioritisePSPlus
         self.deadlineMonthsLeft = deadlineMonthsLeft
+        self.openURL = openURL
+    }
+
+    // MARK: - Open on IGDB (D7)
+
+    /// The IGDB web URL for an entry that carries an `igdb_id`, or nil (no button then).
+    // TODO(merge): replace with the shared `IGDBWebLink` helper (wave-17-B) once it lands — that
+    // one builds a canonical `/games/<id>` URL from the id; this reuses the reconcile sheet's
+    // search-by-name scheme, which is what this lane's base has.
+    nonisolated static func igdbURL(for entry: RomCatalogEntry) -> URL? {
+        guard entry.igdbID != nil else { return nil }
+        var comps = URLComponents(string: "https://www.igdb.com/search")
+        comps?.queryItems = [URLQueryItem(name: "type", value: "1"),
+                             URLQueryItem(name: "q", value: entry.name)]
+        return comps?.url
+    }
+
+    /// Open a vault card's IGDB page through the injected opener (D7). No-op when unmatched.
+    func openIGDB(_ entry: RomCatalogEntry) {
+        guard let url = Self.igdbURL(for: entry) else { return }
+        openURL(url)
     }
 
     deinit {

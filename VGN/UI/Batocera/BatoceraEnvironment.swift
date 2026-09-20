@@ -29,6 +29,9 @@ final class BatoceraEnvironment {
     let romsRoot: URL?
     /// The manual "Find match…" seam for PS Plus entries (PLAN §16). nil unless IGDB is configured.
     let findMatch: VaultFindMatchSeam?
+    /// Opens a URL — the vault card "Open on IGDB" button (D7). Defaults to the system browser;
+    /// injected in tests so nothing is opened.
+    let openURL: @MainActor (URL) -> Void
 
     init(catalog: RomCatalogStore,
          thumbnails: BatoceraThumbnailLoader,
@@ -39,7 +42,8 @@ final class BatoceraEnvironment {
          addToLibrary: (@MainActor ([Int64]) -> Void)? = nil,
          inspectGame: (@MainActor (Int64) -> Void)? = nil,
          showCatalogue: (@MainActor () -> Void)? = nil,
-         findMatch: VaultFindMatchSeam? = nil) {
+         findMatch: VaultFindMatchSeam? = nil,
+         openURL: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         self.catalog = catalog
         self.thumbnails = thumbnails
         self.vaultCovers = vaultCovers
@@ -50,6 +54,7 @@ final class BatoceraEnvironment {
         self.inspectGame = inspectGame
         self.showCatalogue = showCatalogue
         self.findMatch = findMatch
+        self.openURL = openURL
     }
 
     /// Reveal a catalogue entry's ROM file (or its folder) in Finder, when the share is
