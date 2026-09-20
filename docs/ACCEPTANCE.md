@@ -126,6 +126,14 @@ The request shape was **verified live 2026-09-19** (wave 10, lane B) and the fix
 - [ ] In `-VGNSampleData` mode the button + sheet still work but make **no network calls** (every game resolves "not found") — the inert search.
 - [ ] Inspector footer shows **"Added <date> · via <origin>"**; the CSV/JSON export carries `origin` (and each copy's `source` / `external_id`).
 
+## Suspicious estimates (wave 18, lane B — PLAN §5.3) — filter offline, refresh is live-only
+The rule, filter, dismissals and personal-length fallback are exercised offline by the unit suite; the **refresh** touches the real site, so run it in live mode.
+- [ ] Toolbar **Playtime ▾ ▸ Suspicious Estimate** (below the divider, next to *No Estimate*) shows the reviewable list — on the owner's real library expect roughly **30–40 games**, including **LittleBigPlanet** (54 h main → 1 000 h completionist) and **Resident Evil 6**. It composes with every other facet (e.g. + a platform), shows a removable chip, fills the menu icon and clears with the menu's Clear / "Clear all".
+- [ ] Inspector on a flagged game shows a small **⚠︎ "Suspicious estimate"** next to the estimates table; hovering it shows the reason ("Completionist (1 000 h) is more than 4× the main story (54 h)"). The raw stored times are still shown.
+- [ ] Filter to Suspicious Estimate, select a handful (or select-all), then **Game ▸ / right-click ▸ Refresh Time Estimates from HowLongToBeat…**: a confirmation states the count and that values will be **replaced**; running it overwrites the three times where HLTB has the game, the game leaves the filter, and **⌘Z** undoes the whole batch in one step. A game HLTB doesn't know **stays flagged**.
+- [ ] On a game whose estimate is actually fine, the inspector's **Estimate Looks Right** dismisses it (⚠︎ gone, leaves the filter); the same place then offers **Flag again**, which restores it. The dismissal sticks across relaunches.
+- [ ] A flagged completionist no longer inflates planning: a BY LENGTH shelf / Play Next pick for such a game reads a shorter "≈ … for you" (main × 1.5) until it is refreshed or dismissed; dismissing restores the raw completionist length.
+
 ## PSN import (§13) — S0 built offline; live steps S1–S8 are gated (owner + orchestrator)
 S0 (scaffolding) is done and unit-tested on synthetic fixtures — **no PSN request has been
 made**. The runbook, the exact tiny probe per step, and the stop-and-ask rules are in

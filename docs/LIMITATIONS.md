@@ -234,6 +234,39 @@ end to end (see `docs/hltb.md` for the request log and the real mechanics).
   surfaced only in the inspector footer + export; it is set once at creation and never changed by a
   later copy.
 
+### Suspicious estimates (wave 18, lane B — PLAN §5.3)
+Flags a game whose stored times look wrong (out of order, completionist ≥ 4× main, rushed < 0.25×
+main, or a lone completionist) so the owner can refresh them from HowLongToBeat. Pure rule
+`EstimateSanity` (Model) with the SQL mirror in `LibraryQuery`; a parity test proves they agree.
+- **The dismissals live in `app_state`** (`estimate.looksRight`, a JSON id array — same mechanism as
+  `reconcile.notBundle`), **no schema change**. `LibraryQuery`'s length expression and the filter
+  read that key directly via `json_each`, so the grid / BY LENGTH shelves / Stats re-run live when a
+  game is dismissed or flagged again. (Requires the SQLite JSON1 extension, which the system SQLite
+  GRDB links has.)
+- **The dismissal set the inspector's ⚠︎ reads is cached on the HLTB presenter** (loaded once,
+  updated optimistically on toggle), not carried on `GameDetail`. Across two open windows a dismissal
+  made in one flips the other's grid/shelves immediately (SQL reads `app_state`) but the *inspector*
+  ⚠︎ in the other window refreshes only when its presenter next reloads — acceptable for a
+  single-owner app; a full cross-window observation was not built.
+- **Personal-length fallback is completionist-only.** A flagged **completionist ≥ 4× main** is
+  ignored for planning and falls back to `main × PlayStyle.sidesRatio` (1.5) — the BY LENGTH shelves,
+  the Length sort, Stats "Backlog to beat", Play Next's time input and the Vault scorer all use the
+  shared expression, so they agree. The **main**-implausible cases (`rushed > main`, `main >
+  completionist`) keep the stored pair and rely on the existing `completely < normally` clamp
+  (which collapses a dirty completionist to the main story) — a deliberate "use the ordered pair
+  conservatively" choice. A **lone flagged completionist** (no main) keeps its stored
+  completionist-only estimate rather than becoming Unmeasured, because there is no main to fall back
+  to (it is still surfaced in the filter so the owner can refresh it). The inspector always shows the
+  raw stored values (plus the ⚠︎); a dismissed game uses its raw values again.
+- **Refresh (replace) semantics.** "Refresh Time Estimates from HowLongToBeat…" **overwrites** all
+  three `ttb_*` columns with HLTB's values and stamps `ttb_source = 'hltb'` (so the game leaves the
+  filter); it never touches the owner's own **playtime** (`my_playtime_s` / `psn_playtime_s`). If
+  HLTB has the game but lacks one of the three times, that column is set to NULL (HLTB is the new
+  reference) — usually HLTB has all three. A game HLTB does not know is left untouched and stays
+  flagged. One Undo step restores the whole batch's previous times + source.
+- **Not retuned.** The recommendation weights and the taste backtest were not re-tuned for the
+  fallback length (per brief).
+
 ## 5. Out of scope for now [later]
 Filed ideas (PLAN §7b "Ideas filed for later", owner 2026-09-19): a **personal pace factor** that inflates advertised completion times from my own finished games (median of mine ÷ advertised), applied to Play Next, the BY LENGTH shelves and the backlog-hours stat; and **"finish what you started"** pools in Play Next (*almost there* — most of the estimate already played; *worth another try* — abandoned early but a strong taste match). Both wait for per-game playtime, i.e. the PSN import. Also filed (PLAN §15): a **Batocera / ROM collection** importer — played or favourite ROMs become library games, the thousands of others stay in a separate catalogue that feeds a Play Next "Discover" row instead of flooding the grid. Also filed: **"Play it again"** replay suggestions for finished games — needs an inferred replay-value score (no online source has one) and a machine-known last-played date (PSN provides it); to be built only if enough finished games get that date from imports, never if it would rely on hand-entered dates.
 
