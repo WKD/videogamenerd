@@ -7,6 +7,9 @@ struct LibraryGridView: View {
     @Bindable var vm: LibraryViewModel
     @State private var containerWidth: CGFloat = 0
     @FocusState private var gridFocused: Bool
+    // Read for wiring the empty states to existing commands (no new navigation plumbing).
+    @Environment(\.rankingActions) private var rankingActions
+    @Environment(\.hltbFetchPresenter) private var hltbPresenter
 
     private let spacing: CGFloat = 14
     private let outerPadding: CGFloat = 16
@@ -219,38 +222,125 @@ struct LibraryGridView: View {
     // MARK: Empty states
 
     private var emptyLibraryState: some View {
-        ContentUnavailableView {
-            Label("No games yet", systemImage: "gamecontroller")
-        } description: {
-            Text("Press ⌘N to add your first game.")
+        EmptyStateView(
+            systemImage: "gamecontroller",
+            title: "No games yet",
+            message: "Add the games you own or have played, then rank the ones worth ranking.",
+            actions: [
+                EmptyStateAction(title: "Quick Add", systemImage: "plus", isProminent: true,
+                                 accessibilityID: "grid.empty.quickAdd") { vm.requestQuickAdd() },
+            ],
+            accessibilityID: "grid.empty.library")
+    }
+
+    @ViewBuilder
+    private var emptyResultState: some View {
+        let query = vm.filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if vm.filter.hasActiveFacets || !query.isEmpty {
+            EmptyStateView(
+                systemImage: "magnifyingglass",
+                title: "No matches",
+                message: query.isEmpty
+                    ? "No games match the current filters."
+                    : "No games match “\(query)”.",
+                actions: noMatchActions(query: query),
+                accessibilityID: "grid.empty.noMatches")
+        } else {
+            let e = Self.smartListEmpty(for: vm.selection)
+            EmptyStateView(systemImage: e.symbol, title: e.title, message: e.message,
+                           actions: smartListActions(e.action),
+                           accessibilityID: "grid.empty.list")
         }
     }
 
-    private var emptyResultState: some View {
-        let query = vm.filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ContentUnavailableView {
-            Label("No matches", systemImage: "magnifyingglass")
-        } description: {
-            Text(vm.filter.hasActiveFacets
-                 ? "No games match the current search and filters."
-                 : "Nothing in this list yet.")
-        } actions: {
-            VStack(spacing: 8) {
-                if !query.isEmpty {
-                    Button {
-                        vm.requestQuickAdd(prefill: query)
-                    } label: {
-                        Label("Add “\(query)” with Quick Add (⌘N)", systemImage: "plus")
-                    }
-                }
-                // One-click escape from a scoped search to the whole library.
-                if vm.selection != .all, !query.isEmpty {
-                    Button("Search all games") { vm.searchAllScope() }
-                }
-                if vm.filter.hasActiveFacets {
-                    Button("Clear filters") { vm.clearAllFilters() }
-                }
-            }
+    /// Up to two escapes from a fruitless search/filter, wired to the existing clears.
+    private func noMatchActions(query: String) -> [EmptyStateAction] {
+        var actions: [EmptyStateAction] = []
+        let scoped = vm.selection != .all && !query.isEmpty
+        if scoped {
+            actions.append(EmptyStateAction(title: "Search all games", isProminent: true) {
+                vm.searchAllScope()
+            })
+        }
+        if vm.filter.hasActiveFacets {
+            actions.append(EmptyStateAction(title: "Clear filters", isProminent: !scoped,
+                                            accessibilityID: "grid.empty.clearFilters") {
+                vm.clearAllFilters()
+            })
+        } else if !query.isEmpty {
+            actions.append(EmptyStateAction(title: "Clear search", isProminent: !scoped,
+                                            accessibilityID: "grid.empty.clearFilters") {
+                _ = vm.clearSearch()
+            })
+        }
+        if actions.count < 2, !query.isEmpty {
+            actions.append(EmptyStateAction(title: "Add “\(query)”", systemImage: "plus") {
+                vm.requestQuickAdd(prefill: query)
+            })
+        }
+        return actions
+    }
+
+    /// Which empty-state action a smart list wants (resolved to a real callback here, where the
+    /// environment presenters are in scope). Internal so the pure mapping is unit-tested.
+    enum SmartListAction { case quickAdd, startRanking, fetchTimes, none }
+
+    private func smartListActions(_ kind: SmartListAction) -> [EmptyStateAction] {
+        switch kind {
+        case .quickAdd:
+            return [EmptyStateAction(title: "Quick Add", systemImage: "plus", isProminent: true,
+                                     accessibilityID: "grid.empty.quickAdd") { vm.requestQuickAdd() }]
+        case .startRanking:
+            guard let goToDuel = rankingActions.goToDuel else { return [] }
+            return [EmptyStateAction(title: "Start ranking", systemImage: "square.stack.3d.up.fill",
+                                     isProminent: true) { goToDuel() }]
+        case .fetchTimes:
+            guard let hltb = hltbPresenter, hltb.canRunBulk else { return [] }
+            return [EmptyStateAction(title: "Fetch Missing Time Estimates…",
+                                     systemImage: "clock.arrow.circlepath") { hltb.presentBulk() }]
+        case .none:
+            return []
+        }
+    }
+
+    /// Per-selection copy for an empty smart list (no active search/filter). Second person,
+    /// concrete, no exclamation marks.
+    static func smartListEmpty(for selection: SidebarSelection)
+        -> (symbol: String, title: String, message: String, action: SmartListAction) {
+        switch selection {
+        case .backlog:
+            return ("tray", "Your backlog is empty",
+                    "Games you own but haven't played show up here. Mark a game as owned to build a backlog.",
+                    .quickAdd)
+        case .unranked:
+            return ("questionmark.square.dashed", "Nothing left to rank",
+                    "Every played game sits in a tier. Mark more games as played, or start ranking to place them.",
+                    .startRanking)
+        case .unlinked:
+            return ("link", "Everything is linked",
+                    "Every game is matched to IGDB, so metadata, covers and time estimates can be fetched.",
+                    .none)
+        case .owned:
+            return ("shippingbox", "Nothing owned yet",
+                    "Add the games you own — physical, digital or ROM — and they'll appear here.",
+                    .quickAdd)
+        case .played:
+            return ("gamecontroller", "Nothing played yet",
+                    "Mark the games you've played and they'll gather here, ready to rank.",
+                    .quickAdd)
+        case .unmeasured:
+            return ("clock.badge.questionmark", "No unmeasured games",
+                    "Every game has a completion-time estimate. Fetch missing estimates when new games arrive.",
+                    .fetchTimes)
+        case .length:
+            return ("clock", "Nothing on this shelf",
+                    "No games fall in this length range yet. Fetch missing time estimates to sort more games onto the length shelves.",
+                    .fetchTimes)
+        case .platform(let slug):
+            return ("square.grid.2x2", "No \(PlatformLabels.short(slug)) games",
+                    "Add a game on this platform and it'll appear here.", .quickAdd)
+        default:
+            return ("tray", "Nothing here yet", "This list has no games yet.", .quickAdd)
         }
     }
 }

@@ -149,19 +149,68 @@ struct RomCatalogueContent: View {
 
     // MARK: List
 
+    @ViewBuilder
     private var list: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(model.entries) { entry in
-                    row(for: entry)
-                    Divider()
-                    .onAppear { if entry.id == model.entries.last?.id { model.loadMore() } }
-                }
-                if model.isLoading {
-                    ProgressView().controlSize(.small).padding(8)
+        if model.entries.isEmpty, !model.isLoading {
+            vaultEmptyState
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(model.entries) { entry in
+                        row(for: entry)
+                        Divider()
+                        .onAppear { if entry.id == model.entries.last?.id { model.loadMore() } }
+                    }
+                    if model.isLoading {
+                        ProgressView().controlSize(.small).padding(8)
+                    }
                 }
             }
         }
+    }
+
+    /// The Vault list empty states (PLAN §16): nothing in this shelf at all (source not set up),
+    /// or everything filtered out. No Settings button — there is no programmatic open for a
+    /// specific Settings tab today, so the sentence points there (noted in the hand-off).
+    @ViewBuilder
+    private var vaultEmptyState: some View {
+        if model.totalAll == 0 {
+            switch model.source {
+            case .psn:
+                EmptyStateView(
+                    systemImage: "sparkles",
+                    title: "No PS Plus games yet",
+                    message: "Sync your PlayStation library in Settings ▸ PlayStation. PS Plus catalogue games you've only sampled land here, kept out of your library.",
+                    accessibilityID: "vault.empty.unconfigured")
+            default:
+                EmptyStateView(
+                    systemImage: "archivebox",
+                    title: "No ROM catalogue yet",
+                    message: "Point VGN at your Batocera share in Settings ▸ Batocera, then sync to browse the ROMs you can add.",
+                    accessibilityID: "vault.empty.unconfigured")
+            }
+        } else {
+            EmptyStateView(
+                systemImage: "line.3.horizontal.decrease.circle",
+                title: "Nothing matches",
+                message: "No games in the Vault match the current system, search or filter.",
+                actions: isVaultFiltered
+                    ? [EmptyStateAction(title: "Clear filters", isProminent: true,
+                                        accessibilityID: "vault.empty.clearFilters") { clearVaultFilters() }]
+                    : [],
+                accessibilityID: "vault.empty.filtered")
+        }
+    }
+
+    private var isVaultFiltered: Bool {
+        !model.searchText.isEmpty || model.selectedSystem != nil
+            || model.filter != RomCatalogStore.BrowseFilter.allCases.first
+    }
+
+    private func clearVaultFilters() {
+        model.searchText = ""
+        model.selectedSystem = nil
+        if let first = RomCatalogStore.BrowseFilter.allCases.first { model.filter = first }
     }
 
     @ViewBuilder

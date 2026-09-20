@@ -44,11 +44,15 @@ struct StatsDashboardView: View {
         if model.isLoading && model.report.isEmpty {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.report.isEmpty {
-            ContentUnavailableView {
-                Label(emptyTitle, systemImage: "gamecontroller")
-            } description: {
-                Text(emptyMessage)
-            }
+            EmptyStateView(
+                systemImage: "chart.bar.xaxis",
+                title: emptyTitle,
+                message: emptyMessage,
+                actions: model.scope == .all ? [] : [
+                    EmptyStateAction(title: "Show all games", isProminent: true) {
+                        model.scopeBinding.wrappedValue = .all
+                    },
+                ])
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
