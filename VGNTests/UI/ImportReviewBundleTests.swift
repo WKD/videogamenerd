@@ -156,10 +156,11 @@ struct ImportReviewBundleTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func psnNeverExpandsBundles() async throws {
+    func psnBundlesExpandToo() async throws {
+        // PSN bundles expand too now (PLAN §13.3, W18-A — replaces the earlier "PSN never
+        // commits a compilation"): the same shape with source PSN becomes a compilation row.
         let db = try await ImportTestDB.makeSeeded()
         let staging = ImportStagingStore(db)
-        // Same shape, but the source is PSN → bundle expansions are ignored (PLAN §13.3).
         let result = ImportSyncResult(
             summary: ImportSyncSummary(source: ImportSourceID.psn, stagedTotal: 1, newCount: 1),
             matches: [ImportMatchResult(externalID: "b1", name: "Some Collection",
@@ -168,13 +169,19 @@ struct ImportReviewBundleTests {
                                     name: "Some Collection", platform: "ps3", signals: [.owned])],
             bundleExpansions: ["b1": ImportBundleExpansion(
                 bundleIGDBID: 500, title: "Some Collection",
-                members: [member(1, "A", position: 0)])])
+                members: [member(1, "A", position: 0), member(2, "B", position: 1)])])
         try await staging.upsert(result.rows)
         let m = ImportReviewModel(source: ImportSourceID.psn, sourceLabel: "PlayStation",
                                   staging: staging, result: result, productFormat: .digital,
                                   platformChoices: ["pc"])
         await m.load()
         let row = try #require(m.rows.first { $0.externalID == "b1" })
-        #expect(!row.isBundleExpansion)
+        #expect(row.isBundleExpansion)
+        #expect(row.bundleMembers.count == 2)
+        let item = try #require(m.commitItems().first { $0.externalID == "b1" })
+        if case .compilation(let title, let members) = item.target {
+            #expect(title == "Some Collection")
+            #expect(members.count == 2)
+        } else { Issue.record("expected a compilation target for a PSN bundle") }
     }
 }

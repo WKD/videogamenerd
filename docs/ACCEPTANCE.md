@@ -323,6 +323,33 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 - [ ] **PSN review — Launched rows go to the Vault.** The *Launched* group (trophies 0 % **or** play time ≤ 10 min — e.g. *Prey*, 8 min) is unticked by default with "Unticked rows go to the Vault" + a switch. Committing shows "N imported · M sent to the Vault"; ticking a Launched row imports it normally; turning the switch off vaults nothing; **Undo Vault Sends** (committed footer) reverses the vault part (the import itself is final).
 - [ ] **Sidebar scrolls at any height (bug fix).** With a tall sidebar (many platforms, Unlinked, Bundles to Expand, The Vault) in a short window, selecting **Bundles to Expand** no longer pushes rows under the title bar or blocks scrolling up — the sidebar scrolls normally, top rows reachable, same as any other selection.
 
+## PSN bundles expand too (wave 18, §13.3) [owner]
+- [ ] **A fresh PSN sync expands bundles.** In the `psn-test` profile, run a PSN sync that contains a
+  collection (e.g. *Castlevania Advance Collection*, *BioShock: The Collection*, *Uncharted: The
+  Nathan Drake Collection*). The review row reads **"Bundle · N games — imports as a compilation"**;
+  committing creates **one** compilation Product (digital for a purchase, the PS Plus copy for a
+  claim, physical/digital per *own-as* for a played-no-purchase disc), with the member games listed
+  individually and existing library games linked, not duplicated. A second sync adds nothing.
+- [ ] **"Which did you play?" once, in the row.** For a collection PSN reports as played, the row
+  shows a per-member played tick with **All / None** (default none). Tick exactly one member → its
+  play time / last-played / 100 % status land on that member only; tick several → all are played but
+  none gets the collection's play time; tick none → all owned backlog, play time stays on the record.
+  A collection PSN never played asks nothing.
+- [ ] **Played, not owned.** A played-no-purchase collection left with *own-as* neutral reads
+  "not owned: only the games you tick are added" and creates only the ticked members (as played, not
+  owned) — no compilation Product, and the un-ticked members are not created.
+- [ ] **Title tails.** A cross-gen twin like *The Dark Pictures Anthology: Man of Medan PS4 & PS5*
+  matches the same IGDB game as its sibling (the platform tail is dropped for matching; the shown
+  title still reads "… PS4 & PS5").
+- [ ] **Empty review.** A sync with nothing to review shows "Everything is already in your library."
+  rather than an empty list.
+- [ ] **Not yet built (deferred — see `docs/LIMITATIONS.md`):** *Bundles to Expand ▸ **Expand All
+  Unplayed (N)…*** for PSN bundles **already imported as singles** (e.g. *Castlevania Advance
+  Collection* 75 h, *BioShock: The Collection* 52 h), the per-game expand sheet with played ticks,
+  IGDB-type candidate detection, the remembered single-played member on re-sync, review twin folding,
+  and the compilation view's "N h on the whole collection (PSN)" line. Use the existing per-game
+  *Expand Bundle into Games…* repair path meanwhile.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

@@ -494,6 +494,25 @@ Matching to the library reuses the photo-scan ladder (platform-constrained IGDB 
 - **Already imported as singles** (the `psn-test` profile; nothing in the real library yet): they show up under **Bundles to Expand**. Placeholders with no play data expand in one step — **Expand All Unplayed (N)…** in that list's header, one confirmation listing them, one undo; played ones go through the expand sheet one at a time (the same played ticks as the review row, plus the tier/rank target when the placeholder was ranked).
 - Title cleaning for matching also drops platform tails Sony appends ("… PS4 & PS5", "… PS4™ & PS5™"), which today leave a twin unmatched beside the matched game (*The Dark Pictures Anthology: Man of Medan PS4 & PS5*).
 
+**Built — W18-A (2026-09-20).** ✅ **PSN review expands bundles.** The PSN backend now passes an
+`IGDBImportBundleExpander` (when IGDB is configured) and the review model no longer zeroes PSN bundle
+expansions: a bundle match reads "Bundle · N games — imports as a compilation" and commits as ONE
+`compilation` Product keyed by the PSN external id — digital for a purchase, the PS Plus subscription
+copy for a claim, physical/digital per the *own-as* control for a played-no-purchase disc, or **no
+product** for played-not-owned (then only the members ticked as played are created, as
+played-not-owned games; the rest are not created at all). Members are ordered by release date and
+deduped against the library (an existing game is linked, its play/tier/rank untouched). ✅ **"Which
+did you play?" once, in the row** — a per-member played tick with All / None (default none), shown
+only when PSN reports the collection played; the collection's play time / dates / 100 % status land
+on a member **only when exactly one is ticked** (otherwise they stay on the import record). ✅ **Title
+tails** — `PSNMapping.cleanMatchTitle` also drops "… PS4 & PS5", "… (PS4)", "… PS5", "for PS4" and
+the like (match-title only; the shown name is unchanged). ✅ **Re-sync** is idempotent on
+`(source, external_id)` — a committed compilation never re-lists as New nor duplicates its product.
+**Still to build (see `docs/LIMITATIONS.md`):** the **Expand All Unplayed** header action + per-game
+expand sheet for singles already in the library (D4); IGDB-type candidate detection; the remembered
+single-played member on re-sync; the review's cross-gen twin folding; the compilation view's
+"N h on the whole collection (PSN)" line.
+
 ### 13.4 Architecture
 `VGN/Services/Importers/` — `LibraryImporter` protocol (authenticate → fetch → emit staging rows → shared review sheet; GOG will be the second implementation), `PSN/PSNAuth` (WebView bridge, token actor with single-flight refresh, Keychain), `PSN/PSNClient` (actor: allow-list, serial queue, delay, budget, validation, cache-first reads through `PSNResponseCache`), `PSN/PSNMapping` (pure: DTO → staging rows, noise rules), `PSNSyncCoordinator` (orchestrates a sync, progress + summary). UI: Settings ▸ Accounts ▸ PlayStation (sign in, status, token expiry, last sync, cache age per data set, Force refresh, Sign out & wipe), the import review sheet (shared component with photo scan where it fits). Everything behind protocols with fakes; **unit tests never touch the network** — they run on recorded, scrubbed fixtures and an injected clock (TTL, delay, budget, reject paths, resume after a partial paged fetch).
 

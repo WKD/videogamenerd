@@ -418,6 +418,17 @@ struct ImportStagingStore: Sendable {
                                       result: inout ImportCommitResult) throws {
         guard let psn = item.psn else { return }
 
+        // PSN bundles expand too (PLAN §13.3): a bundle match commits as ONE compilation Product
+        // keyed by the PSN external id, with ownership per the kind (digital purchase / PS Plus
+        // subscription copy / physical-or-digital for a played-no-purchase disc), or NO product
+        // for played-not-owned (then only the members ticked as played are created, as
+        // played-not-owned games; the rest are not created at all).
+        if case .compilation(let title, let members) = item.target {
+            try commitPSNCompilation(item, psn: psn, title: title, members: members,
+                                     db: db, result: &result)
+            return
+        }
+
         // Resolve the game id.
         let gameID: Int64
         switch item.target {
@@ -435,7 +446,7 @@ struct ImportStagingStore: Sendable {
             gameID = outcome.gameID
             if case .created = outcome { result.gamesCreated += 1 }
         case .compilation:
-            return   // PSN never commits a compilation.
+            return   // handled above.
         }
 
         // Owned digital copy (a purchase) — idempotent; carries the PS Plus flag.
@@ -468,6 +479,84 @@ struct ImportStagingStore: Sendable {
 
         result.affectedGameIDs.append(gameID)
         try markMatched(source: item.source, externalID: item.externalID, gameID: gameID, db: db)
+    }
+
+    /// Commit one PSN **bundle** row as a compilation (PLAN §13.3 "PSN bundles expand too").
+    ///
+    /// Ownership comes from `psn.createProduct`:
+    ///  - true → ONE `compilation` Product keyed `(source, external_id)`, `format` (digital for a
+    ///    purchase, physical/digital for a played-no-purchase disc), with any PS Plus `subscription`
+    ///    flag; every member is upserted/deduped and owned through it;
+    ///  - false → played-not-owned: **no** Product; only the members ticked as played are created
+    ///    (as played-not-owned games), the rest are not created at all.
+    ///
+    /// A member ticked as played (`member.played`) is marked played. The collection's play time,
+    /// dates and 100 % status go to a member **only when exactly one** is ticked (PLAN §13.3);
+    /// with several ticked or none they stay on the import record (`import_titles`). Idempotent on
+    /// `(source, external_id)`: a re-synced compilation reuses its Product and never duplicates it.
+    private static func commitPSNCompilation(_ item: ImportCommitItem, psn: PSNCommit,
+                                             title: String?, members: [CompilationMemberDraft],
+                                             db: Database, result: inout ImportCommitResult) throws {
+        let ordered = LibraryStore.orderedByReleaseDate(members)
+        let source = ProductSource(rawValue: item.source) ?? .psn
+        let playedCount = ordered.filter(\.played).count
+        var memberIDs: [(draft: CompilationMemberDraft, gameID: Int64)] = []
+        var firstMemberGameID: Int64?
+
+        if psn.createProduct {
+            // ONE compilation Product; reuse it on re-sync (idempotent).
+            let productID: Int64
+            if let existing = try LibraryStore.existingImportProductID(
+                sourceRaw: item.source, externalID: item.externalID, db: db) {
+                productID = existing
+            } else {
+                productID = try LibraryStore.insertImportProductRow(
+                    platformID: item.platformID, format: item.format,
+                    sourceRaw: item.source, externalID: item.externalID,
+                    kindRaw: "compilation", title: title,
+                    subscription: psn.subscription, db: db)
+                result.productsAdded += 1
+            }
+            for member in ordered {
+                let outcome = try LibraryStore.upsertCompilationMember(
+                    member, productID: productID, platformID: item.platformID, source: source, db: db)
+                if case .created = outcome { result.gamesCreated += 1 }
+                memberIDs.append((member, outcome.gameID))
+                result.affectedGameIDs.append(outcome.gameID)
+                if firstMemberGameID == nil { firstMemberGameID = outcome.gameID }
+            }
+        } else {
+            // Played, not owned: create ONLY the ticked members, as played-not-owned games.
+            for member in ordered where member.played {
+                let draft = GameDraft(
+                    title: member.title, igdbID: member.igdbID, year: member.year,
+                    altTitles: member.altTitles, platformIDs: [item.platformID],
+                    owned: false, played: true, source: source)
+                let outcome = try LibraryStore.insert(draft, db)
+                if case .created = outcome { result.gamesCreated += 1 }
+                try LibraryStore.markPlayedWithoutCopy(
+                    gameID: outcome.gameID, platformID: item.platformID, db: db)
+                memberIDs.append((member, outcome.gameID))
+                result.affectedGameIDs.append(outcome.gameID)
+                if firstMemberGameID == nil { firstMemberGameID = outcome.gameID }
+            }
+        }
+
+        // The collection's play time / dates / status land on the single played member only.
+        if playedCount == 1, let target = memberIDs.first(where: { $0.draft.played })?.gameID {
+            try LibraryStore.setPSNPlaytime(gameID: target, seconds: psn.playDurationS, db: db)
+            try LibraryStore.setPSNPlayedDates(
+                gameID: target, first: psn.firstPlayedAt, last: psn.lastPlayedAt, db: db)
+            if let status = psn.statusPrefill {
+                try LibraryStore.prefillStatusIfNone(gameID: target, status: status, db: db)
+            }
+        }
+
+        // Mark the staging row matched so it never re-lists as *New* (records the first member;
+        // the `(source, external_id)` Product keeps re-import idempotent regardless).
+        if let gameID = firstMemberGameID {
+            try markMatched(source: item.source, externalID: item.externalID, gameID: gameID, db: db)
+        }
     }
 
     /// Every committed subscription (PS Plus) copy whose claim is **absent** from the

@@ -69,9 +69,15 @@ enum PSNImportBuilder {
                     platformIGDBIDs: { slug in platformCatalog.entry(forSlug: slug)?.igdbIDs ?? [] }))
                 : NoMatchImportMatcher()
 
+            // PSN bundles expand too (PLAN §13.3): an IGDB bundle match fetches its members
+            // during matching, on the shared IGDB client / rate limiter — nil when IGDB is not
+            // configured, so a bundle simply commits as a single.
+            let bundleExpander: (any ImportBundleExpanding)? = configured
+                ? IGDBImportBundleExpander(client: graph.igdbClient) : nil
+
             backend = LivePSNImportBackend(
                 auth: auth, importer: importer, coordinator: coordinator,
-                matcher: matcher, cache: cache, staging: staging)
+                matcher: matcher, cache: cache, staging: staging, bundleExpander: bundleExpander)
 
             // The Vault IGDB trait-matching pass (PLAN §16) exists only when IGDB can match —
             // it fills PS Plus entries with traits / rating / time-to-beat so they can be
