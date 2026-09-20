@@ -32,6 +32,15 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     /// "Own the ticked rows as ▸ Physical / Digital" group action (PLAN §13.3). nil ⇒ keep
     /// it played-only. Forces a copy at commit.
     var ownAsFormat: ProductFormat? = nil
+    /// **(Bundles, PLAN §5.1)** The bundle's title when the IGDB match is a bundle/pack —
+    /// shown on the row and used as the compilation Product's title at commit.
+    var bundleTitle: String? = nil
+    /// **(Bundles, PLAN §5.1)** The bundle's member games as compilation drafts. Non-empty
+    /// ⇒ this row commits as a compilation Product; empty ⇒ a plain single (also the
+    /// fallback when IGDB returned no member list).
+    var bundleMembers: [CompilationMemberDraft] = []
+    /// A new row whose match is a bundle we could expand into a compilation.
+    var isBundleExpansion: Bool { !bundleMembers.isEmpty }
 
     var id: String { externalID }
 
@@ -174,6 +183,8 @@ final class ImportReviewModel {
 
     @ObservationIgnored private let transientByID: [String: ImportStagingRow]
     @ObservationIgnored private let matchByID: [String: ScanMatchOutcome]
+    /// **(Bundles, PLAN §5.1)** external id → the bundle expansion resolved during matching.
+    @ObservationIgnored private let bundleExpansions: [String: ImportBundleExpansion]
     /// "igdbID|platform" → existing game id for an owned copy of `productFormat` (shelf
     /// duplicate); a different format on the same platform lands in `otherFormatKeys`.
     @ObservationIgnored private var sameFormatKeys: [String: Int64] = [:]
@@ -219,6 +230,8 @@ final class ImportReviewModel {
         self.transientByID = Dictionary(result.rows.map { ($0.externalID, $0) }, uniquingKeysWith: { a, _ in a })
         self.matchByID = Dictionary(
             result.matches.map { ($0.externalID, $0.outcome) }, uniquingKeysWith: { a, _ in a })
+        // PSN never commits a compilation (PLAN §13.3), so bundle expansions are ignored there.
+        self.bundleExpansions = source == ImportSourceID.psn ? [:] : result.bundleExpansions
     }
 
     /// Read the staged titles and build the review rows. Call once when the sheet opens.
@@ -272,6 +285,15 @@ final class ImportReviewModel {
             linuxOnly: transient?.linuxOnly ?? false)
         row.edition = transient?.edition
         row.acquiredAt = transient?.acquiredAt
+
+        // Bundle expansion (PLAN §5.1): a New row whose IGDB match is a bundle/pack with
+        // members commits as a compilation. A matched existing game, or an empty member
+        // list, keeps the single-game path (the fallback).
+        if bucket == .new, title.matchedGameID == nil,
+           let expansion = bundleExpansions[title.externalID], expansion.hasMembers {
+            row.bundleTitle = expansion.title
+            row.bundleMembers = expansion.members
+        }
 
         // Shelf-duplicate rule: a New row whose match already has an owned copy of this
         // format on this platform is dropped to Already matched, unticked (PLAN §5.5).
@@ -518,6 +540,11 @@ final class ImportReviewModel {
             let target: ImportCommitItem.Target
             if let gameID = row.matchedGameID {
                 target = .existingGame(gameID: gameID)
+            } else if row.isBundleExpansion {
+                // A bundle match with members → one compilation Product whose members are
+                // the individual games, each deduped against the library (PLAN §5.1).
+                target = .compilation(title: row.bundleTitle ?? row.sourceTitle,
+                                      members: row.bundleMembers)
             } else {
                 let title = row.proposedMatch?.name ?? row.sourceTitle
                 let alts = (row.proposedMatch != nil && row.showsSourceTitle) ? [row.sourceTitle] : []
@@ -981,6 +1008,12 @@ private struct ImportReviewRowView: View {
             }
             if let detail = model.rowDetailByID[row.externalID], !detail.isEmpty {
                 Text(detail).font(.caption2).foregroundStyle(.secondary)
+            }
+            if row.isBundleExpansion {
+                Label("Bundle · \(row.bundleMembers.count) games — imports as a compilation",
+                      systemImage: "square.stack.3d.up")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .help(row.bundleMembers.map(\.title).joined(separator: ", "))
             }
             unlinkedWarning
         }

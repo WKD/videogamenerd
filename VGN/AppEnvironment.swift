@@ -449,6 +449,7 @@ final class AppEnvironment {
                 }
             })
         vm.onLinkToIGDB = { [weak igdbLink] id in igdbLink?.present(for: id) }
+        vm.onExpandBundle = { [weak igdbLink] id in igdbLink?.presentBundleExpansion(for: id) }
 
         return Wiring(quickAdd: quickAdd, controller: controller, enrichment: enrichment,
                       igdbLink: igdbLink, catalogSearcher: searcher)

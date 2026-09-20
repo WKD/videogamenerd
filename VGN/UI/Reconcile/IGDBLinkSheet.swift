@@ -174,7 +174,8 @@ private struct IGDBLinkRowView: View {
                           systemImage: "checkmark.circle.fill")
                         .font(.caption2).foregroundStyle(.orange)
                 } else if row.isBundle {
-                    Text("Bundle — can’t stand in for a single game")
+                    Label("Bundle — links as a compilation (expands into its games)",
+                          systemImage: "square.stack.3d.up")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }

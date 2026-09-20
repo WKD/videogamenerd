@@ -14,10 +14,12 @@ struct IGDBLinkResult: Identifiable, Sendable, Equatable {
     var id: Int64 { result.id }
     /// Shown as "already in your library" (a *different* game holds this id → merge).
     var alreadyInLibrary: Bool { existingGameID != nil && !isCurrentGame }
-    /// A bundle/pack — disabled as a target (a single game can't stand in for a bundle).
+    /// A bundle/pack — choosing it **expands** the placeholder into a compilation of the
+    /// bundle's member games rather than standing in for a single game (PLAN §5.1).
     var isBundle: Bool { result.isBundle }
-    /// Selectable as a link target (bundles are not).
-    var isChoosable: Bool { !isBundle }
+    /// Selectable. Every result is now a valid choice — a bundle triggers the expand flow,
+    /// a game links/merges, and the current game's own link cancels the sheet.
+    var isChoosable: Bool { true }
 }
 
 /// What the owner chose in the link sheet, handed to the action layer to perform the

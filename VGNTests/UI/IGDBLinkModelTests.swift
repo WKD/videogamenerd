@@ -127,16 +127,20 @@ struct IGDBLinkModelTests {
         #expect(!chose)
     }
 
-    @Test func bundleIsNotChoosable() async {
+    @Test func bundleIsChoosableAndExpands() async {
+        // PLAN §5.1 (2026-09-20): a bundle is now a valid choice — it triggers the expand
+        // flow rather than being disabled ("how do I import Evolution Worlds then?").
         let searcher = RecordingSearcher(results: [result(10, "Collection", bundle: true)])
         let model = makeModel(searcher: searcher)
         model.start()
         await settle { model.phase == .results }
-        #expect(!model.results[0].isChoosable)
-        var chose = false
-        model.onChoose = { _ in chose = true }
+        #expect(model.results[0].isBundle)
+        #expect(model.results[0].isChoosable)
+        var choice: IGDBLinkChoice?
+        model.onChoose = { choice = $0 }
         model.choose(model.results[0])
-        #expect(!chose)
+        #expect(choice?.isBundle == true)
+        #expect(choice?.igdbID == 10)
     }
 
     @Test func notConfiguredState() async {

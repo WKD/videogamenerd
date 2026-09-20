@@ -151,6 +151,19 @@ private struct SingleGameInspector: View {
                         .buttonStyle(.borderless)
                         .help("Drop the hand-picked cover and fetch one from IGDB / libretro again.")
                     }
+
+                    // A linked game that sits on its own (not a compilation member) may be an
+                    // unexpanded bundle — offer to expand it (PLAN §5.1 repair). Verified
+                    // against IGDB on click; a no-op with a note when it is not a bundle.
+                    if detail.igdbID != nil, !detail.isCompilationMember {
+                        Button {
+                            vm.requestExpandBundle(gameID: detail.id)
+                        } label: {
+                            Label("Expand Bundle into Games…", systemImage: "square.stack.3d.up")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("If this is a bundle/collection on IGDB, expand it into its member games.")
+                    }
                 }
 
                 if !detail.genres.isEmpty {

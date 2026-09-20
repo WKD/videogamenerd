@@ -46,9 +46,13 @@ enum GOGImportBuilder {
                     platformIGDBIDs: { slug in platformCatalog.entry(forSlug: slug)?.igdbIDs ?? [] }))
                 : NoMatchImportMatcher()
 
+            // Bundle expansion reuses the shared IGDB client (PLAN §5.1); only when configured.
+            let bundleExpander: (any ImportBundleExpanding)? = configured
+                ? IGDBImportBundleExpander(client: graph.igdbClient) : nil
+
             backend = LiveGOGImportBackend(
                 auth: auth, importer: importer, coordinator: coordinator,
-                matcher: matcher, cache: cache, staging: staging)
+                matcher: matcher, cache: cache, staging: staging, bundleExpander: bundleExpander)
             login = GOGLoginConfig(
                 authorizationURL: auth.authorizationURL,
                 policy: GOGLoginNavigationPolicy(

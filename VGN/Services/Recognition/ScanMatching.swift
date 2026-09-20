@@ -9,6 +9,14 @@ struct ScanMatch: Sendable, Equatable {
     var platformSlugs: [String]
     var score: Double
     var matchedName: String
+    /// The IGDB `game_type` of the matched candidate, when known (PLAN §5.1). Carried so
+    /// the import review / reconcile can detect a bundle match and expand it into a
+    /// compilation. `nil` for matches built before the type was known (e.g. an explicit
+    /// inline "Find…" pick) — the caller then re-checks on demand.
+    var gameType: IGDBGameType? = nil
+
+    /// The matched candidate is a bundle/pack whose members VGN can expand (PLAN §5.1).
+    var isBundle: Bool { gameType?.isCompilation ?? false }
 }
 
 /// Confidence bucket for the review sheet (PLAN §6.2 step 5).
@@ -88,7 +96,8 @@ enum ScanMatching {
                 coverImageID: candidate.coverImageID,
                 platformSlugs: candidate.platformSlugs,
                 score: best,
-                matchedName: bestName
+                matchedName: bestName,
+                gameType: candidate.gameType
             ))
         }
 

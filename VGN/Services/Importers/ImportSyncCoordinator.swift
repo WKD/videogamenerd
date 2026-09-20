@@ -20,14 +20,21 @@ struct ImportSyncResult: Sendable, Equatable {
     var vaultEntries: [RomCatalogEntry]
     /// Every external id currently vaulted (for removing claims that vanished / crossed the gate).
     var vaultPresentIDs: Set<String>
+    /// **(Bundles, PLAN §5.1)** external id → the bundle expansion resolved during matching
+    /// (title + member drafts), for every *New* row whose best match is an IGDB bundle/pack.
+    /// The review sheet commits these as compilations. Empty when no expander ran (PSN, no
+    /// IGDB) or nothing matched a bundle.
+    var bundleExpansions: [String: ImportBundleExpansion]
 
     init(summary: ImportSyncSummary, matches: [ImportMatchResult], rows: [ImportStagingRow] = [],
-         vaultEntries: [RomCatalogEntry] = [], vaultPresentIDs: Set<String> = []) {
+         vaultEntries: [RomCatalogEntry] = [], vaultPresentIDs: Set<String> = [],
+         bundleExpansions: [String: ImportBundleExpansion] = [:]) {
         self.summary = summary
         self.matches = matches
         self.rows = rows
         self.vaultEntries = vaultEntries
         self.vaultPresentIDs = vaultPresentIDs
+        self.bundleExpansions = bundleExpansions
     }
 }
 
@@ -46,9 +53,14 @@ struct ImportSyncCoordinator: Sendable {
 
     init(staging: ImportStagingStore) { self.staging = staging }
 
-    /// Run a sync, reporting progress through `onProgress`.
+    /// Run a sync, reporting progress through `onProgress`. When a `bundleExpander` is
+    /// supplied, every *New* row whose best match is an IGDB bundle/pack has its member
+    /// games fetched here (still in the matching phase, on the shared IGDB pipeline —
+    /// never at commit time on the main actor) so the review sheet can commit it as a
+    /// compilation (PLAN §5.1). Nil ⇒ today's behaviour (a bundle commits as a single).
     func run(_ importer: any LibraryImporter,
              matcher: any ImportMatcher,
+             bundleExpander: (any ImportBundleExpanding)? = nil,
              onProgress: @Sendable @escaping (ImportProgress) -> Void = { _ in }) async throws -> ImportSyncResult {
         // 1. Fetch (cache-first, budgeted, validated). Throws on any reject.
         let fetched = try await importer.fetch(progress: onProgress)
@@ -78,6 +90,20 @@ struct ImportSyncCoordinator: Sendable {
             matches.append(ImportMatchResult(externalID: title.externalID, name: title.name, outcome: outcome))
         }
 
+        // 3b. Expand bundle matches (PLAN §5.1): a New row whose best match is an IGDB
+        // bundle/pack has its members fetched now, on the shared IGDB pipeline. On
+        // imperfect coverage (or an error) the row simply commits as a single.
+        var bundleExpansions: [String: ImportBundleExpansion] = [:]
+        if let bundleExpander {
+            for match in matches {
+                guard let best = match.outcome.best, best.isBundle else { continue }
+                let results = (try? await bundleExpander.members(ofBundleIGDBID: best.igdbID)) ?? []
+                bundleExpansions[match.externalID] = ImportBundleExpansion(
+                    bundleIGDBID: best.igdbID, title: best.name,
+                    members: ImportBundleMapping.members(from: results))
+            }
+        }
+
         // 4. Summary.
         let buckets = Dictionary(grouping: titles, by: \.bucket)
         let summary = ImportSyncSummary(
@@ -95,18 +121,20 @@ struct ImportSyncCoordinator: Sendable {
         onProgress(ImportProgress(phase: .finished))
         return ImportSyncResult(summary: summary, matches: matches, rows: fetched.rows,
                                 vaultEntries: fetched.vaultEntries,
-                                vaultPresentIDs: fetched.vaultPresentIDs)
+                                vaultPresentIDs: fetched.vaultPresentIDs,
+                                bundleExpansions: bundleExpansions)
     }
 
     /// The same sync as an `AsyncStream` of progress values; the final ``ImportSyncResult``
     /// (or the thrown error) is delivered through `completion`.
     func stream(for importer: any LibraryImporter,
                 matcher: any ImportMatcher,
+                bundleExpander: (any ImportBundleExpanding)? = nil,
                 completion: @Sendable @escaping (Result<ImportSyncResult, Error>) -> Void) -> AsyncStream<ImportProgress> {
         AsyncStream { continuation in
             let task = Task {
                 do {
-                    let result = try await run(importer, matcher: matcher) { progress in
+                    let result = try await run(importer, matcher: matcher, bundleExpander: bundleExpander) { progress in
                         continuation.yield(progress)
                     }
                     completion(.success(result))

@@ -12,6 +12,8 @@ final class IGDBLinkPresenter {
     var link: IGDBLinkModel?
     /// The active merge confirmation sheet, or nil.
     var merge: IGDBMergeModel?
+    /// The active bundle-expansion confirm sheet, or nil (PLAN §5.1).
+    var bundleExpansion: BundleExpansionModel?
 
     private let store: LibraryStore
     private weak var vm: LibraryViewModel?
@@ -66,14 +68,92 @@ final class IGDBLinkPresenter {
         link = model
     }
 
-    private func dismiss() { link = nil; merge = nil }
+    private func dismiss() { link = nil; merge = nil; bundleExpansion = nil }
 
     private func handleChoice(gameID: Int64, isLinked: Bool, choice: IGDBLinkChoice) {
-        if let existing = choice.existingGameID {
+        if choice.isBundle {
+            beginBundleExpansion(gameID: gameID, bundleIGDBID: choice.igdbID, bundleTitle: choice.title)
+        } else if let existing = choice.existingGameID {
             beginMerge(source: gameID, target: existing, targetTitle: choice.title)
         } else {
             Task { await performLinkOrRelink(gameID: gameID, isLinked: isLinked, choice: choice) }
         }
+    }
+
+    // MARK: - Bundle expansion (PLAN §5.1)
+
+    /// D3 repair entry point: expand a library game that is already linked to an IGDB
+    /// bundle. Resolves the game's IGDB id, verifies on demand (no-op with a clear message
+    /// when it is not a bundle / has no members), then opens the same confirm sheet.
+    func presentBundleExpansion(for gameID: Int64) {
+        Task {
+            guard let preview = try? await store.bundleExpansionPreview(gameID: gameID) else {
+                vm?.showBanner("Couldn't open the game.", kind: .error); return
+            }
+            guard let igdbID = preview.igdbID else {
+                vm?.showBanner("Link this game to IGDB first, then expand it.", kind: .info); return
+            }
+            await runBundleExpansion(gameID: gameID, bundleIGDBID: igdbID, bundleTitle: preview.title)
+        }
+    }
+
+    private func beginBundleExpansion(gameID: Int64, bundleIGDBID: Int64, bundleTitle: String) {
+        Task { await runBundleExpansion(gameID: gameID, bundleIGDBID: bundleIGDBID, bundleTitle: bundleTitle) }
+    }
+
+    private func runBundleExpansion(gameID: Int64, bundleIGDBID: Int64, bundleTitle: String) async {
+        let raw = (try? await searcher.bundleMembers(bundleIGDBID: bundleIGDBID)) ?? []
+        let members = ImportBundleMapping.members(from: raw)
+        guard !members.isEmpty else {
+            link = nil
+            vm?.showBanner("That’s not a bundle on IGDB — nothing to expand.", kind: .info)
+            return
+        }
+        let preview = try? await store.bundleExpansionPreview(gameID: gameID)
+        let model = BundleExpansionModel(
+            gameID: gameID, bundleTitle: bundleTitle, members: members,
+            carriesPlayData: preview?.carriesPlayData ?? false)
+        model.onCancel = { [weak self] in self?.dismiss() }
+        model.onConfirm = { [weak self] m in
+            self?.performExpansion(gameID: gameID, bundleTitle: bundleTitle,
+                                   members: m.members, targetIndex: m.effectiveTargetIndex)
+        }
+        link = nil
+        merge = nil
+        bundleExpansion = model
+    }
+
+    private func performExpansion(gameID: Int64, bundleTitle: String,
+                                  members: [CompilationMemberDraft], targetIndex: Int?) {
+        Task {
+            vm?.planReselectionAfterMutation([gameID])
+            do {
+                let result = try await store.expandBundle(
+                    gameID: gameID, bundleTitle: bundleTitle, members: members,
+                    playDataTargetIndex: targetIndex)
+                for memberID in result.memberGameIDs { onEnrich(memberID, false) }
+                vm?.showBanner("Expanded into \(result.memberGameIDs.count) games.", kind: .info)
+                registerBundleUndo(result.undo)
+            } catch {
+                vm?.showBanner("Couldn't expand the bundle.", kind: .error)
+            }
+            bundleExpansion = nil
+        }
+    }
+
+    private func registerBundleUndo(_ undo: BundleExpansionUndo) {
+        guard let um = vm?.undoManager else { return }
+        um.registerUndo(withTarget: self) { target in
+            Task { @MainActor in await target.undoBundleExpansion(undo) }
+        }
+        um.setActionName(undo.actionName)
+    }
+
+    /// Restore a bundle-expansion snapshot (undo). `internal` so a test drives it directly
+    /// (`UndoManager.undo()` hangs headless).
+    func undoBundleExpansion(_ undo: BundleExpansionUndo) async {
+        do { try await store.restoreBundleExpansion(undo) }
+        catch { vm?.showBanner("Couldn't undo.", kind: .error) }
     }
 
     // MARK: - Link / re-link
@@ -187,6 +267,9 @@ private struct IGDBLinkPresentationModifier: ViewModifier {
             }
             .sheet(item: $presenter.merge) { model in
                 IGDBMergeSheet(model: model)
+            }
+            .sheet(item: $presenter.bundleExpansion) { model in
+                BundleExpansionSheet(model: model)
             }
     }
 }
