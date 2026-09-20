@@ -131,20 +131,32 @@ final class HLTBFetchPresenter {
         guard !isFetchingOne, let library else { return }
         isFetchingOne = true
         let search = makeSearch()
+        let service = HLTBFillService(search: search)
         let store = self.store
+        // An explicit inspector Refresh honours the 24 h cache floor (D1); a gap-fill takes
+        // any fresh cache.
+        let policy: HLTBFreshnessPolicy = mode == .replace ? .refresh : .cacheFirst
         Task { [weak self] in
             defer { self?.isFetchingOne = false }
             guard let facts = (try? await store.timeToBeatFacts(gameIDs: [gameID]))?[gameID] else { return }
+            let slugs = facts.platformSlugSet
             do {
-                let candidates = try await search.search(title: facts.title)
-                switch HLTBMatcher.match(title: facts.title, year: facts.year, candidates: candidates) {
-                case .confident(let candidate):
-                    await self?.applyConfident(gameID: gameID, candidate: candidate, mode: mode)
-                case .ambiguous(let list):
-                    self?.picker = HLTBPickerRequest(
-                        gameID: gameID, title: facts.title, year: facts.year, candidates: list, mode: mode)
-                case .notFound:
-                    library.showBanner("No HowLongToBeat match for “\(facts.title)”.", kind: .info)
+                // D4: a linked game refreshes exactly by its stored id — never ambiguous.
+                if let hltbID = facts.hltbID {
+                    switch try await service.resolveLinked(
+                        title: facts.title, year: facts.year, hltbID: hltbID, librarySlugs: slugs, policy: policy) {
+                    case .exact(let candidate):
+                        await self?.applyConfident(gameID: gameID, candidate: candidate, mode: mode)
+                        await search.rememberChosen(candidate)
+                    case .lost(let outcome):
+                        await self?.handleSingle(outcome, gameID: gameID, facts: facts, mode: mode,
+                                                 search: search, lostLink: true)
+                    }
+                } else {
+                    let outcome = try await service.resolve(
+                        title: facts.title, year: facts.year, librarySlugs: slugs, policy: policy)
+                    await self?.handleSingle(outcome, gameID: gameID, facts: facts, mode: mode,
+                                             search: search, lostLink: false)
                 }
             } catch let error as ImportError {
                 library.showBanner(Self.stopMessage(error), kind: .error)
@@ -154,11 +166,39 @@ final class HLTBFetchPresenter {
         }
     }
 
-    /// The user picked one candidate from the single-game picker sheet.
+    /// Route a single-game match outcome (D2/D4): apply a confident match (and remember it),
+    /// raise the picker for an ambiguous one (with the game's platforms), or banner a miss.
+    private func handleSingle(_ outcome: HLTBMatchOutcome, gameID: Int64, facts: HLTBGameFacts,
+                              mode: HLTBWriteMode, search: any HLTBSearching, lostLink: Bool) async {
+        guard let library else { return }
+        switch outcome {
+        case .confident(let candidate):
+            await applyConfident(gameID: gameID, candidate: candidate, mode: mode)
+            await search.rememberChosen(candidate)
+        case .ambiguous(let list):
+            if lostLink {
+                library.showBanner("HowLongToBeat entry not found any more — pick again.", kind: .info)
+            }
+            picker = HLTBPickerRequest(gameID: gameID, title: facts.title, year: facts.year,
+                                       candidates: list, mode: mode, librarySlugs: facts.platformSlugs)
+        case .notFound:
+            let note = lostLink
+                ? "HowLongToBeat entry not found any more for “\(facts.title)”."
+                : "No HowLongToBeat match for “\(facts.title)”."
+            library.showBanner(note, kind: .info)
+        }
+    }
+
+    /// The user picked one candidate from the single-game picker sheet — also remembers it
+    /// under its id-key (D1) so the next refresh is exact.
     func pickForSingle(_ candidate: HLTBCandidate) {
         guard let request = picker else { return }
         picker = nil
-        Task { await applyConfident(gameID: request.gameID, candidate: candidate, mode: request.mode) }
+        let search = makeSearch()
+        Task {
+            await applyConfident(gameID: request.gameID, candidate: candidate, mode: request.mode)
+            await search.rememberChosen(candidate)
+        }
     }
 
     func dismissPicker() { picker = nil }
@@ -245,6 +285,7 @@ private struct HLTBFetchPresentation: ViewModifier {
                 )) { request in
                     HLTBPickerSheet(
                         title: request.title, year: request.year, candidates: request.candidates,
+                        librarySlugs: request.librarySlugs,
                         onPick: { presenter.pickForSingle($0) },
                         onCancel: { presenter.dismissPicker() })
                 }

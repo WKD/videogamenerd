@@ -114,22 +114,38 @@ extension LibraryStore {
         }
     }
 
-    /// Slim per-game facts the HLTB fill flow needs (title + year for matching, the
-    /// current times to decide whether a Fetch button should appear).
+    /// Slim per-game facts the HLTB fill flow needs (PLAN §5.3): title + year for matching,
+    /// the current times to decide whether a Fetch button should appear, the stored
+    /// `hltb_id` (D4 — an exact refresh-by-id), and the game's **effective platforms**
+    /// (D2 — the platform tie-breaker), read through ``LibraryQuery/effectivePlatformsSQL``
+    /// so the disambiguation shares the one platform rule pills / filters use.
     func timeToBeatFacts(gameIDs: [Int64]) async throws -> [Int64: HLTBGameFacts] {
         guard !gameIDs.isEmpty else { return [:] }
         return try await dbReader.read { db in
             let placeholders = gameIDs.map { _ in "?" }.joined(separator: ",")
+            let args = StatementArguments(gameIDs)
+
+            // Effective platform slugs per game (one grouped pass over the shared rule).
+            var platforms: [Int64: [String]] = [:]
+            for row in try Row.fetchAll(db, sql: """
+                SELECT game_id, platform_id FROM (\(LibraryQuery.effectivePlatformsSQL)) ep
+                WHERE ep.game_id IN (\(placeholders))
+                """, arguments: args) {
+                let gid: Int64 = row["game_id"]
+                platforms[gid, default: []].append(row["platform_id"])
+            }
+
             var out: [Int64: HLTBGameFacts] = [:]
             for row in try Row.fetchAll(db, sql: """
-                SELECT id, title, year, ttb_hastily_s, ttb_normally_s, ttb_completely_s
+                SELECT id, title, year, ttb_hastily_s, ttb_normally_s, ttb_completely_s, hltb_id
                 FROM games WHERE id IN (\(placeholders))
-                """, arguments: StatementArguments(gameIDs)) {
+                """, arguments: args) {
                 let id: Int64 = row["id"]
                 out[id] = HLTBGameFacts(
                     id: id, title: row["title"], year: row["year"],
                     hastily: row["ttb_hastily_s"], normally: row["ttb_normally_s"],
-                    completely: row["ttb_completely_s"])
+                    completely: row["ttb_completely_s"],
+                    hltbID: row["hltb_id"], platformSlugs: platforms[id] ?? [])
             }
             return out
         }
@@ -144,7 +160,25 @@ struct HLTBGameFacts: Sendable, Equatable, Identifiable {
     var hastily: Int?
     var normally: Int?
     var completely: Int?
+    /// The stored HowLongToBeat id (D4) — an exact refresh-by-id when present.
+    var hltbID: Int64?
+    /// The game's effective platform slugs (D2 tie-breaker).
+    var platformSlugs: [String]
 
+    init(id: Int64, title: String, year: Int?, hastily: Int?, normally: Int?, completely: Int?,
+         hltbID: Int64? = nil, platformSlugs: [String] = []) {
+        self.id = id
+        self.title = title
+        self.year = year
+        self.hastily = hastily
+        self.normally = normally
+        self.completely = completely
+        self.hltbID = hltbID
+        self.platformSlugs = platformSlugs
+    }
+
+    /// The effective platforms as a set, for the matcher tie-breaker.
+    var platformSlugSet: Set<String> { Set(platformSlugs) }
     /// A game whose every time is empty — the bulk-scope target.
     var hasNoEstimate: Bool { hastily == nil && normally == nil && completely == nil }
     /// At least one time is empty — the inspector Fetch button is shown.

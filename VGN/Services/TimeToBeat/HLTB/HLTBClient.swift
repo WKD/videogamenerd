@@ -24,6 +24,7 @@ actor HLTBClient: HLTBSearching {
     private let wallClock: @Sendable () -> Date
     private let hitTTL: TimeInterval
     private let missTTL: TimeInterval
+    private let refreshFloor: TimeInterval
     /// A pre-resolved endpoint (tests inject a fixed one; live discovery finds it).
     private let injectedDiscovery: HLTBEndpoint.Discovery?
     /// Pre-resolved per-session auth (tests inject it to skip the `/init` round-trip).
@@ -49,6 +50,7 @@ actor HLTBClient: HLTBSearching {
          wallClock: @Sendable @escaping () -> Date = { Date() },
          hitTTL: TimeInterval = ImportPolicy.hltbHitTTL,
          missTTL: TimeInterval = ImportPolicy.hltbMissTTL,
+         refreshFloor: TimeInterval = ImportPolicy.hltbRefreshFloor,
          discovery: HLTBEndpoint.Discovery? = nil,
          auth: HLTBEndpoint.Auth? = nil,
          maxDiscoveryScripts: Int = 12,
@@ -62,6 +64,7 @@ actor HLTBClient: HLTBSearching {
         self.wallClock = wallClock
         self.hitTTL = hitTTL
         self.missTTL = missTTL
+        self.refreshFloor = refreshFloor
         self.injectedDiscovery = discovery
         self.injectedAuth = auth
         self.maxDiscoveryScripts = maxDiscoveryScripts
@@ -74,14 +77,35 @@ actor HLTBClient: HLTBSearching {
     // MARK: - Search
 
     func search(title: String) async throws -> [HLTBCandidate] {
+        try await search(title: title, policy: .cacheFirst)
+    }
+
+    /// Search with an explicit freshness policy (PLAN §5.3, D1). `.cacheFirst` serves any
+    /// entry inside its TTL; `.refresh` serves the cache only when it is younger than the
+    /// refresh floor (24 h) and otherwise re-fetches (paced); `.bypassOne` ignores the
+    /// cache for this one lookup. A served cache hit costs **zero** requests in every mode.
+    func search(title: String, policy: HLTBFreshnessPolicy) async throws -> [HLTBCandidate] {
         let key = Self.cacheKey(title: title)
-
-        // Cache first: inside the window a search makes zero requests (PLAN §5.3).
-        if let fresh = try await cache.freshEntry(source: HLTBSource.id, key: key, now: wallClock()) {
-            fromCache += 1
-            return (try? HLTBEndpoint.parseCandidates(fresh.body)) ?? []
+        if policy != .bypassOne,
+           let fresh = try await cache.freshEntry(source: HLTBSource.id, key: key, now: wallClock()) {
+            let servable: Bool = {
+                switch policy {
+                case .cacheFirst: return true
+                case .refresh: return wallClock().timeIntervalSince(fresh.fetchedAt) < refreshFloor
+                case .bypassOne: return false
+                }
+            }()
+            if servable {
+                fromCache += 1
+                return (try? HLTBEndpoint.parseCandidates(fresh.body)) ?? []
+            }
         }
+        return try await fetchAndStore(title: title, key: key)
+    }
 
+    /// The one network path: session setup, allow-list, budget, pacing, validation, and —
+    /// on a valid reply only — a cache write. A reject records a redacted stop and throws.
+    private func fetchAndStore(title: String, key: String) async throws -> [HLTBCandidate] {
         let (discovery, auth) = try await ensureSession()
         let request = HLTBEndpoint.searchRequest(title: title, discovery: discovery, auth: auth)
         try allowList.check(request.url!)
@@ -108,11 +132,43 @@ actor HLTBClient: HLTBSearching {
         }
     }
 
+    // MARK: - id-keyed cache (D1/D4)
+
+    /// Persist a chosen / linked candidate under its id-key so an exact refresh-by-id is one
+    /// cached lookup (D1). Stores the candidate's own JSON (incl. its canonical HLTB name)
+    /// at the 180-day hit TTL. Never issues a request.
+    func rememberChosen(_ candidate: HLTBCandidate) async {
+        guard let body = try? JSONEncoder().encode(candidate) else { return }
+        let fetchedAt = wallClock()
+        let record = ImportCacheRecord(
+            source: HLTBSource.id, key: Self.idKey(candidate.id), endpoint: Self.searchEndpoint,
+            paramsJSON: "{}", fetchedAt: fetchedAt, expiresAt: fetchedAt.addingTimeInterval(hitTTL),
+            status: 200, body: body, itemCount: 1, schemaVersion: 1)
+        try? await cache.store(record)
+    }
+
+    /// The candidate remembered for `hltbID`, if still fresh (D4). Zero requests.
+    func linkedCandidate(hltbID: Int64) async -> HLTBCandidate? {
+        guard let entry = try? await cache.freshEntry(
+            source: HLTBSource.id, key: Self.idKey(hltbID), now: wallClock()) else { return nil }
+        return try? JSONDecoder().decode(HLTBCandidate.self, from: entry.body)
+    }
+
+    /// The age of the cached search reply for `title` (fresh or stale), or nil when uncached.
+    func cacheAge(title: String, now: Date) async -> TimeInterval? {
+        guard let entry = try? await cache.entry(source: HLTBSource.id, key: Self.cacheKey(title: title))
+        else { return nil }
+        return now.timeIntervalSince(entry.fetchedAt)
+    }
+
     /// Cache key for a search — the normalised query, so the same title (any case /
     /// spacing) hits the same entry.
     static func cacheKey(title: String) -> String {
         "search:" + TitleNormalizer.normalize(title, level: .canonical)
     }
+
+    /// Cache key for a chosen candidate, keyed by its HLTB id (D1/D4).
+    static func idKey(_ hltbID: Int64) -> String { "id:\(hltbID)" }
 
     static let searchEndpoint = "hltb/search"
     static let discoveryEndpoint = "hltb/discovery"

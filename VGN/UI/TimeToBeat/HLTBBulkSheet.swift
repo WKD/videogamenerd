@@ -28,6 +28,7 @@ struct HLTBBulkSheet: View {
         .sheet(item: $pickFor) { game in
             HLTBPickerSheet(
                 title: game.title, year: game.year, candidates: game.candidates,
+                librarySlugs: game.librarySlugs,
                 onPick: { candidate in
                     model.pick(gameID: game.gameID, candidate: candidate)
                     pickFor = nil

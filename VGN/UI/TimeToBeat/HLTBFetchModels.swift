@@ -11,12 +11,14 @@ enum HLTBWriteMode: Sendable, Equatable {
 }
 
 /// A game the bulk run could not match confidently — offered for a one-by-one pick
-/// after the pass (PLAN §5.3).
+/// after the pass (PLAN §5.3). Carries the game's effective platforms so the picker can
+/// emphasise the overlapping candidate platforms (D2b/D6).
 struct HLTBAmbiguousGame: Sendable, Hashable, Identifiable {
     var gameID: Int64
     var title: String
     var year: Int?
     var candidates: [HLTBCandidate]
+    var librarySlugs: [String] = []
     var id: Int64 { gameID }
 }
 
@@ -30,6 +32,8 @@ struct HLTBPickerRequest: Identifiable, Sendable {
     var candidates: [HLTBCandidate]
     /// Whether accepting the pick fills gaps or replaces the three times.
     var mode: HLTBWriteMode = .fillGaps
+    /// The game's effective platforms (D2b — emphasise matching candidate platforms).
+    var librarySlugs: [String] = []
 }
 
 /// The bulk "Fetch Missing Time Estimates…" / "Refresh Time Estimates…" run (PLAN §5.3):
@@ -70,6 +74,13 @@ final class HLTBBulkFetchModel {
 
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var pendingIDs: [Int64] = []
+    /// The search instance for the current run, reused so a post-run ``pick`` can also
+    /// remember the chosen candidate under its id-key (D1).
+    @ObservationIgnored private var runSearch: (any HLTBSearching)?
+    /// Games whose exact refresh-by-id came back "not found any more" (D4) — surfaced in
+    /// the summary so the owner knows to pick again.
+    private(set) var lostLinks = 0
+    private(set) var linkedByID = 0
 
     init(store: LibraryStore, makeSearch: @escaping @Sendable () -> any HLTBSearching,
          mode: HLTBWriteMode = .fillGaps) {
@@ -101,12 +112,17 @@ final class HLTBBulkFetchModel {
         phase = gameIDs.isEmpty ? .finished : .running
         guard !gameIDs.isEmpty else { return }
         let search = makeSearch()
+        runSearch = search
         task = Task { [weak self] in await self?.run(gameIDs: gameIDs, search: search) }
     }
 
     private func run(gameIDs: [Int64], search: any HLTBSearching) async {
         let facts = (try? await store.timeToBeatFacts(gameIDs: gameIDs)) ?? [:]
-        for id in gameIDs {
+        let service = HLTBFillService(search: search)
+        // D4: id-linked games first — each is one exact lookup (no ladder), stable order.
+        let ordered = gameIDs.filter { facts[$0]?.hltbID != nil }
+                    + gameIDs.filter { facts[$0]?.hltbID == nil }
+        for id in ordered {
             if Task.isCancelled {
                 finish(.stopped, reason: "Cancelled.")
                 return
@@ -114,14 +130,21 @@ final class HLTBBulkFetchModel {
             guard let f = facts[id] else { completed += 1; continue }
             currentTitle = f.title
             do {
-                let candidates = try await search.search(title: f.title)
-                switch HLTBMatcher.match(title: f.title, year: f.year, candidates: candidates) {
-                case .confident(let candidate):
-                    await apply(gameID: id, candidate: candidate)
-                case .ambiguous(let list):
-                    ambiguous.append(HLTBAmbiguousGame(gameID: id, title: f.title, year: f.year, candidates: list))
-                case .notFound:
-                    notFound += 1
+                if let hltbID = f.hltbID {
+                    switch try await service.resolveLinked(
+                        title: f.title, year: f.year, hltbID: hltbID, librarySlugs: f.platformSlugSet) {
+                    case .exact(let candidate):
+                        linkedByID += 1
+                        await apply(gameID: id, candidate: candidate)
+                        await search.rememberChosen(candidate)
+                    case .lost(let outcome):
+                        lostLinks += 1
+                        await handle(outcome, id: id, facts: f, search: search)
+                    }
+                } else {
+                    let outcome = try await service.resolve(
+                        title: f.title, year: f.year, librarySlugs: f.platformSlugSet)
+                    await handle(outcome, id: id, facts: f, search: search)
                 }
             } catch is CancellationError {
                 finish(.stopped, reason: "Cancelled.")
@@ -136,6 +159,22 @@ final class HLTBBulkFetchModel {
             completed += 1
         }
         finish(.finished, reason: nil)
+    }
+
+    /// Route one game's match outcome: apply a confident match (and remember it), list an
+    /// ambiguous one for a pick, or count a miss.
+    private func handle(_ outcome: HLTBMatchOutcome, id: Int64,
+                        facts f: HLTBGameFacts, search: any HLTBSearching) async {
+        switch outcome {
+        case .confident(let candidate):
+            await apply(gameID: id, candidate: candidate)
+            await search.rememberChosen(candidate)
+        case .ambiguous(let list):
+            ambiguous.append(HLTBAmbiguousGame(
+                gameID: id, title: f.title, year: f.year, candidates: list, librarySlugs: f.platformSlugs))
+        case .notFound:
+            notFound += 1
+        }
     }
 
     /// Write one game's estimates in the run's mode, counting the result and (for replace)
@@ -166,11 +205,16 @@ final class HLTBBulkFetchModel {
     /// Cancel the run (finishes the item in flight, then stops).
     func cancel() { task?.cancel() }
 
-    /// Resolve one ambiguous game with the user's chosen candidate.
+    /// Resolve one ambiguous game with the user's chosen candidate — also remembers it
+    /// under its id-key (D1) so a later refresh is exact and cached.
     func pick(gameID: Int64, candidate: HLTBCandidate) {
         guard ambiguous.contains(where: { $0.gameID == gameID }) else { return }
         ambiguous.removeAll { $0.gameID == gameID }
-        Task { [weak self] in await self?.apply(gameID: gameID, candidate: candidate) }
+        let search = runSearch
+        Task { [weak self] in
+            await self?.apply(gameID: gameID, candidate: candidate)
+            await search?.rememberChosen(candidate)
+        }
     }
 
     /// Drop an ambiguous game without filling it.
@@ -191,9 +235,12 @@ final class HLTBBulkFetchModel {
     }
 
     /// "12 filled · 4 not found · 3 ambiguous · stopped: …" ("replaced" in replace mode).
+    /// D6: also surfaces games resolved exactly by their stored id and links HLTB dropped.
     var summaryLine: String {
         let verb = mode == .replace ? "replaced" : "filled"
         var parts = "\(filled) \(verb) · \(notFound) not found · \(ambiguous.count) ambiguous"
+        if linkedByID > 0 { parts = "\(linkedByID) linked by id · " + parts }
+        if lostLinks > 0 { parts += " · \(lostLinks) link\(lostLinks == 1 ? "" : "s") lost" }
         if let reason = stoppedReason { parts += " · stopped: \(reason)" }
         return parts
     }
