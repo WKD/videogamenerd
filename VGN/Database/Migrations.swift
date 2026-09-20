@@ -631,6 +631,32 @@ enum Migrations {
         }
     }
 
+    // MARK: - v15 — "To Revisit" play status (PLAN §4 / §7b, owner request 2026-09-20)
+
+    /// v15 adds the **revisit** flag behind the "To Revisit" status — a game I dropped but
+    /// want to come back to, as opposed to plain Abandoned (done with it). It is a *fifth*
+    /// status in the UI but **not** a fifth `games.status` value: the v1 column carries a
+    /// `CHECK (status IN ('playing','finished','completed','abandoned'))`, so a new value
+    /// would force a full `games` rebuild (FTS triggers, the tier/rank CHECKs, the owner's
+    /// real library). Instead "To Revisit" is `status = 'abandoned' AND revisit = 1`, and
+    /// the four legacy status strings never change — so raw DB status, the CHECK and every
+    /// export/import of the legacy values are untouched.
+    ///
+    ///  - `games.revisit` — `0` = ordinary (incl. plain Abandoned), `1` = flagged "To
+    ///    Revisit". Pure additive `ALTER TABLE ADD COLUMN` (the v8/v9/v14 pattern): no table
+    ///    rebuild, no deferred FK checks, FTS untouched.
+    ///  - **No backfill** — nothing is guessed for existing games (PLAN §4 inv. 5: nothing
+    ///    modifies library data on its own). Existing rows get `revisit = 0`, exactly right
+    ///    (an existing Abandoned game stays Abandoned until the owner flags it).
+    static func registerV15(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v15") { db in
+            try db.execute(sql: """
+                ALTER TABLE games ADD COLUMN revisit INTEGER NOT NULL DEFAULT 0
+                    CHECK (revisit IN (0, 1));
+                """)
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

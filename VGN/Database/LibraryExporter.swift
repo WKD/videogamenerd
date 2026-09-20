@@ -85,6 +85,9 @@ struct LibraryExporter: Sendable {
         var year: Int?
         var played: Bool
         var status: String?
+        /// The "To Revisit" flag (v15): with `status == "abandoned"`, `true` means the owner
+        /// wants to come back to it. Additive; raw `status` keeps the four legacy values.
+        var revisit: Bool
         var tierID: Int64?
         var rankKey: Int64?
         var myPlaytimeS: Int?
@@ -179,7 +182,7 @@ struct LibraryExporter: Sendable {
 
         let games = try Row.fetchAll(db, sql: """
             SELECT id, igdb_id, title, sort_title, alt_titles, summary, release_date, year,
-                   played, status, tier_id, rank_key, my_playtime_s, psn_playtime_s,
+                   played, status, revisit, tier_id, rank_key, my_playtime_s, psn_playtime_s,
                    ttb_hastily_s, ttb_normally_s, ttb_completely_s, ttb_source,
                    igdb_cover_image_id, cover_file, igdb_rating, igdb_rating_count,
                    user_edited, hltb_id, origin, first_played_at, last_played_at,
@@ -192,7 +195,8 @@ struct LibraryExporter: Sendable {
                 id: id, igdbID: r["igdb_id"], title: r["title"], sortTitle: r["sort_title"],
                 altTitles: altRaw.split(separator: "\n").map(String.init),
                 summary: r["summary"], releaseDate: r["release_date"], year: r["year"],
-                played: r["played"], status: r["status"], tierID: r["tier_id"], rankKey: r["rank_key"],
+                played: r["played"], status: r["status"], revisit: r["revisit"],
+                tierID: r["tier_id"], rankKey: r["rank_key"],
                 myPlaytimeS: r["my_playtime_s"], psnPlaytimeS: r["psn_playtime_s"],
                 ttbHastilyS: r["ttb_hastily_s"], ttbNormallyS: r["ttb_normally_s"],
                 ttbCompletelyS: r["ttb_completely_s"], ttbSource: r["ttb_source"],
@@ -232,7 +236,7 @@ struct LibraryExporter: Sendable {
     // MARK: - CSV
 
     static let csvHeader = [
-        "title", "year", "platforms", "owned", "played", "status", "tier",
+        "title", "year", "platforms", "owned", "played", "status", "revisit", "tier",
         "overall_rank", "score", "my_playtime_hours", "igdb_main_hours",
         "igdb_rating", "formats", "compilation", "origin", "last_played",
     ]
@@ -279,7 +283,7 @@ struct LibraryExporter: Sendable {
 
         var lines: [String] = [csvHeader.map(escapeCSV).joined(separator: ",")]
         let rows = try Row.fetchAll(db, sql: """
-            SELECT id, title, year, played, status, tier_id,
+            SELECT id, title, year, played, status, revisit, tier_id,
                    my_playtime_s, psn_playtime_s, ttb_normally_s, igdb_rating, origin,
                    last_played_at
             FROM games ORDER BY sort_title, id
@@ -300,6 +304,7 @@ struct LibraryExporter: Sendable {
                 ownedGames.contains(id) ? "yes" : "no",
                 played ? "yes" : "no",
                 (r["status"] as String?) ?? "",
+                (r["revisit"] as Int64?) == 1 ? "yes" : "no",
                 tierID.flatMap { tierLetter[$0] } ?? "",
                 rankByID[id].map(String.init) ?? "",
                 scores[id]?.csvString ?? "",

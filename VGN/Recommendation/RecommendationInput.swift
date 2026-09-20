@@ -114,10 +114,11 @@ struct Candidate: Hashable, Sendable {
     }
 
     /// The estimate the bracket is tested against: the personal length, minus the
-    /// user's playtime when the game is already `playing` (PLAN §7b remaining time).
+    /// user's playtime when the game is already `playing` — or `toRevisit`, where I've
+    /// already put hours in and only the rest remains (PLAN §7b remaining time).
     func bracketEstimate(style: PlayStyle) -> Int? {
         guard let full = fullEstimate(style: style) else { return nil }
-        if status == .playing, let played = myPlaytimeSeconds {
+        if (status == .playing || status == .toRevisit), let played = myPlaytimeSeconds {
             return max(0, full - played)
         }
         return full
@@ -130,6 +131,7 @@ enum RecCandidateStatus: Hashable, Sendable {
     case backlog        // owned, not played
     case playing
     case abandoned      // opt-in
+    case toRevisit      // dropped but flagged "come back to it" — a candidate by default (PLAN §7b)
     case playedUnknown  // played, no status — excluded by default (toggle)
 }
 

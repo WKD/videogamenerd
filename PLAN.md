@@ -87,7 +87,7 @@ The central idea: **separate the *work* you rank from the *thing* you own.**
 ```
 platforms      id(slug) · name · short · manufacturer · kind(console|handheld|computer|arcade) · generation · igdb_id · sort
 games          id · igdb_id? · title · sort_title · release_date · year · decade(generated)
-               played · status(playing|finished|completed|abandoned)? 
+               played · status(playing|finished|completed|abandoned)? · revisit(0|1)   -- v15: status='abandoned' AND revisit=1 = "To Revisit"
                tier_id? · rank_key?                       -- §7
                my_playtime_s? · psn_playtime_s? · ttb_hastily_s? · ttb_normally_s? · ttb_completely_s? · ttb_source
                cover_file? · added_at · updated_at
@@ -294,7 +294,7 @@ A 1–10 score is an **output** of the ranking, not an input (absolute scores dr
 - **Taste profile** from my rankings: every ranked game gets a score in 0…1 from its global position (percentile), tiered-but-unplaced games get their tier's midpoint. The ranking work *is* the training data — nothing is asked twice.
 
 ### Candidates
-Owned games (any format, incl. ROMs and compilation members) whose status is not *finished* / *completed*: the backlog (owned, unplayed), games marked *playing* (remaining time = estimate − my playtime) and, opt-in, *abandoned* ones ("give it another go?"). Played games with no status are excluded by default (toggle) — "played" may well mean "finished". Games with no time estimate go to a separate **"unknown length"** lane rather than being guessed at.
+Owned games (any format, incl. ROMs and compilation members) whose status is not *finished* / *completed*: the backlog (owned, unplayed), games marked *playing* (remaining time = estimate − my playtime), games I flagged ***To Revisit*** (dropped, but I want to come back — a candidate **by default**, no opt-in, remaining time like *playing* when playtime is known, reason "You wanted to come back to it"), and, opt-in, plain *abandoned* ones ("give it another go?"). Played games with no status are excluded by default (toggle) — "played" may well mean "finished". Games with no time estimate go to a separate **"unknown length"** lane rather than being guessed at. *To Revisit* competes on the normal score with **no boost** (the taste backtest never sees the flag).
 
 ### How a pick is made
 1. **Filter by time.** Keep candidates whose estimate (or remaining time) fits the bracket; smooth falloff just outside it, hard exclusion beyond ~1.5× the upper bound. At my library size this step does most of the work: ~50 candidates become a **shortlist of roughly 5–15**.
@@ -319,7 +319,7 @@ Honest sizing: ~50 ranked games is far too little for anything statistical in th
 - **Personal pace factor — inflate the advertised times.** I usually take longer than IGDB / HowLongToBeat say. Instead of a fixed fudge, *measure* it: for every game I finished that has both my playtime and an estimate, take the ratio mine ÷ advertised; the **median** of those ratios (clamped to 0.8–2.0, shown in Settings with the number of games it rests on, overridable by hand, 1.0 until there are ≥ 5 such games) multiplies every estimate wherever time is used *for planning*: Play Next's time fit, the BY LENGTH shelves, "backlog in hours" in Stats. The raw estimate stays what is stored and displayed (the inspector shows both: "≈ 38 h for you · 30 h advertised"). Could later be refined per genre or per length band (long RPGs drift more than short games). Needs playtime data first — i.e. after the PSN import (§13).
 - **"Finish what you started" in Play Next.** Two extra candidate pools, shown as their own row above or beside the regular picks rather than mixed into them:
   - *Almost there* — played, not finished/100 %, with my playtime ≥ ~70 % of the (pace-adjusted) estimate: the remaining time = estimate − my playtime is what gets fitted to the chosen time bracket, and the reason reads "about 4 h left". Status *Playing* counts; *Abandoned* counts too, with a gentler nudge.
-  - *Worth another try* — abandoned early (playtime < ~25 % of the estimate) but whose traits score high against my taste profile, or that sit in a franchise I ranked S/A since: "you dropped it after 3 h — you loved its sequel".
+  - *Worth another try* — abandoned early (playtime < ~25 % of the estimate) but whose traits score high against my taste profile, or that sit in a franchise I ranked S/A since: "you dropped it after 3 h — you loved its sequel". *(Partly delivered, wave 20: the **To Revisit** status is the hand-chosen version of this — I mark a dropped game "come back to it" and it becomes a Play Next candidate by default. The automatic detection above is still filed.)*
   Today Play Next only considers never-completed games by status and ignores my playtime; both pools need playtime per game (PSN import or hand-entered) and should respect the existing snooze / "not interested" feedback so a nudge never nags. Weighting must be backtestable like the rest (§7b), and the pools are hidden until enough playtime data exists.
 
 - **"Play it again" — replay suggestions** *(owner, 2026-09-19)*. A third extra pool in Play Next: games I already **finished** that are worth revisiting, shown as their own row ("Worth replaying"), never mixed into the backlog picks. Two things decide whether this is worth building:
@@ -431,7 +431,7 @@ Milestone 9 **empty states — done** (wave 17): one shared `EmptyStateView` (SF
 | Game identity | One ranked **Game**, many owned **Products** (Elden Ring PS4 + PS5 = one rank slot). Remasters/remakes are separate Games. |
 | Photo-scan engine | Local **`claude` CLI headless**, subscription-billed (not ACP, not an API key). On-device Vision OCR as fallback. |
 | Tier scale | **S A B C D F** — labels/colours editable later. |
-| Completion status | **Yes, optional**: Playing / Finished / 100 % / Abandoned. Filterable, never required. |
+| Completion status | **Yes, optional**: Playing / Finished / 100 % / Abandoned / To Revisit. Filterable, never required. *To Revisit* (dropped but I want to come back — a Play Next candidate by default) is a flag on Abandoned, not a separate stored value (v15 `games.revisit`); raw status keeps the four legacy strings. |
 | Trophies | Only a "played" signal for PSN import (key for PS3). No trophy data stored or displayed. |
 | Project type | **Plain Xcode project**, folder-synchronised groups, single app target. |
 | Computers | One **Mac** platform, one **PC**, plus distinct retro computers. |

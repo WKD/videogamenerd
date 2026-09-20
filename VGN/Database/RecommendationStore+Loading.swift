@@ -46,7 +46,7 @@ extension RecommendationStore {
     /// applies the opt-in filters.
     static func loadCandidates(db: Database) throws -> [Candidate] {
         let rows = try Row.fetchAll(db, sql: """
-            SELECT g.id, g.igdb_id, g.title, g.year, g.played, g.status,
+            SELECT g.id, g.igdb_id, g.title, g.year, g.played, g.status, g.revisit,
                    g.my_playtime_s, g.ttb_hastily_s, g.ttb_normally_s, g.ttb_completely_s,
                    g.ttb_source,
                    g.igdb_rating, g.igdb_rating_count, g.cover_file,
@@ -75,7 +75,8 @@ extension RecommendationStore {
             let id: Int64 = row["id"]
             let played: Bool = row["played"]
             let statusRaw: String? = row["status"]
-            guard let status = recStatus(played: played, statusRaw: statusRaw) else { return nil }
+            let revisit = (row["revisit"] as Int64?) == 1
+            guard let status = recStatus(played: played, statusRaw: statusRaw, revisit: revisit) else { return nil }
             let igdbID: Int64? = row["igdb_id"]
             let feature = features[id]
             let length = EstimateSanity.lengthInputs(
@@ -99,17 +100,20 @@ extension RecommendationStore {
                 coverFile: row["cover_file"],
                 platformIDs: feature?.platformSlugs ?? [],
                 formats: formats[id] ?? [],
-                playStatus: statusRaw.flatMap(PlayStatus.init(rawValue:)),
+                playStatus: PlayStatus.from(dbStatus: statusRaw, revisit: revisit),
                 ownedOnlyViaSubscription: row["sub_only"],
                 isBatoceraFavourite: row["bato_fav"]
             )
         }
     }
 
-    static func recStatus(played: Bool, statusRaw: String?) -> RecCandidateStatus? {
+    /// Map the stored `(status, revisit)` pair to the engine's candidate status. A
+    /// `'abandoned' AND revisit=1` game is **To Revisit** — a candidate by default (no
+    /// opt-in), unlike plain Abandoned.
+    static func recStatus(played: Bool, statusRaw: String?, revisit: Bool) -> RecCandidateStatus? {
         switch statusRaw {
         case "playing": return .playing
-        case "abandoned": return .abandoned
+        case "abandoned": return revisit ? .toRevisit : .abandoned
         case "finished", "completed": return nil          // never a candidate
         case nil: return played ? .playedUnknown : .backlog
         default: return played ? .playedUnknown : .backlog

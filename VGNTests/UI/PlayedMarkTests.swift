@@ -28,7 +28,7 @@ struct PlayedMarkTests {
     @Test func allCasesInMenuOrder() {
         #expect(PlayedMark.allCases == [
             .played, .status(.playing), .status(.finished),
-            .status(.completed), .status(.abandoned),
+            .status(.completed), .status(.abandoned), .status(.toRevisit),
         ])
     }
 

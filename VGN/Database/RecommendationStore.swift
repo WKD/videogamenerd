@@ -76,16 +76,19 @@ struct RecommendationStore: Sendable {
     func startPlayingCapturingUndo(gameID: Int64) async throws -> StartPlayingUndo {
         try await dbWriter.write { db in
             guard let prior = try Row.fetchOne(
-                db, sql: "SELECT status, played, updated_at FROM games WHERE id = ?",
+                db, sql: "SELECT status, played, revisit, updated_at FROM games WHERE id = ?",
                 arguments: [gameID])
             else { throw StartPlayingError.gameNotFound }
             let undo = StartPlayingUndo(
                 gameID: gameID,
                 previousStatus: prior["status"],
                 previousPlayed: (prior["played"] as Int64) == 1,
+                previousRevisit: (prior["revisit"] as Int64) == 1,
                 previousUpdatedAt: prior["updated_at"],
                 pickedFeedbackID: 0)   // filled below
-            try db.execute(sql: "UPDATE games SET status = 'playing', played = 1, updated_at = ? WHERE id = ?",
+            // Setting Playing clears the revisit flag (a Playing game is not "To Revisit").
+            // Undo restores the exact prior status *and* flag, so "To Revisit" comes back.
+            try db.execute(sql: "UPDATE games SET status = 'playing', played = 1, revisit = 0, updated_at = ? WHERE id = ?",
                            arguments: [Date(), gameID])
             try db.execute(sql: "INSERT INTO rec_feedback (game_id, action, created_at) VALUES (?, 'picked', ?)",
                            arguments: [gameID, Date()])
@@ -119,8 +122,9 @@ struct RecommendationStore: Sendable {
                 if owned == 0 { return .refusedWouldOrphan }
             }
 
-            try db.execute(sql: "UPDATE games SET status = ?, played = ?, updated_at = ? WHERE id = ?",
+            try db.execute(sql: "UPDATE games SET status = ?, played = ?, revisit = ?, updated_at = ? WHERE id = ?",
                            arguments: [undo.previousStatus, undo.previousPlayed ? 1 : 0,
+                                       undo.previousRevisit ? 1 : 0,
                                        undo.previousUpdatedAt, undo.gameID])
             try db.execute(sql: "DELETE FROM rec_feedback WHERE id = ?", arguments: [undo.pickedFeedbackID])
             return .restored
@@ -172,6 +176,9 @@ struct StartPlayingUndo: Sendable, Equatable {
     var gameID: Int64
     var previousStatus: String?
     var previousPlayed: Bool
+    /// The prior `games.revisit` flag, so undoing a "Start playing" restores a
+    /// "To Revisit" game to exactly that (v15).
+    var previousRevisit: Bool
     var previousUpdatedAt: String?
     var pickedFeedbackID: Int64
 

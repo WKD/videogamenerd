@@ -22,7 +22,9 @@ enum RecommendationEngine {
         for candidate in input.candidates {
             // Status rules (PLAN §7b Candidates).
             switch candidate.status {
-            case .backlog, .playing:
+            case .backlog, .playing, .toRevisit:
+                // `toRevisit` is a candidate by default — no "include abandoned" opt-in:
+                // wanting to come back to it is the whole point of the flag (PLAN §7b).
                 break
             case .abandoned:
                 if !options.includeAbandoned { exclusions.byStatus += 1; continue }
@@ -232,13 +234,21 @@ enum RecommendationEngine {
         drivers.sort { $0.magnitude > $1.magnitude }
         var reasons = drivers.prefix(3).map(\.reason)
 
-        // Time reason (always relevant when the game has an estimate).
+        // Time reason (always relevant when the game has an estimate). A `toRevisit` game
+        // with known playtime shows the *remaining* time, exactly like a `playing` one.
         if timeFit != nil, let estimate = bracketEstimate {
-            if candidate.status == .playing, candidate.myPlaytimeSeconds != nil {
+            if (candidate.status == .playing || candidate.status == .toRevisit),
+               candidate.myPlaytimeSeconds != nil {
                 reasons.append(.remainingTime(remainingSeconds: estimate))
             } else {
                 reasons.append(.fitsBracket(estimateSeconds: estimate, bracket: bracket))
             }
+        }
+
+        // The point of "To Revisit": say why it's here (PLAN §7b). A tail reason — it never
+        // changes the score (no boost), it explains the pick.
+        if candidate.status == .toRevisit {
+            reasons.append(.wantedToRevisit)
         }
 
         // A game that leaves with PS Plus is worth flagging (PLAN §13.3/§16) — an informative

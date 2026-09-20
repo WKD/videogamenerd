@@ -113,8 +113,8 @@ extension LibraryStore {
                                arguments: [Date(), id])
             }
             if let status = member.status {
-                try db.execute(sql: "UPDATE games SET status = ?, updated_at = ? WHERE id = ?",
-                               arguments: [status.rawValue, Date(), id])
+                try db.execute(sql: "UPDATE games SET status = ?, revisit = ?, updated_at = ? WHERE id = ?",
+                               arguments: [status.dbStatus, status.dbRevisit, Date(), id])
             }
         } else {
             var record = GameRecord(
@@ -125,7 +125,8 @@ extension LibraryStore {
                 releaseDate: member.releaseDate,
                 year: year,
                 played: member.played,
-                status: member.status?.rawValue,
+                status: member.status?.dbStatus,
+                revisit: member.status == .toRevisit,
                 origin: source.rawValue
             )
             try record.insert(db)

@@ -204,12 +204,15 @@ struct LibraryStatsReport: Sendable, Hashable {
         var playing: Int
         var finished: Int
         var completed: Int   // 100 %
-        var abandoned: Int
+        var abandoned: Int   // dropped, done with it (revisit = 0)
+        /// Dropped but flagged "To Revisit" (abandoned + revisit = 1, v15) — its own slice,
+        /// disjoint from ``abandoned``.
+        var toRevisit: Int
         /// Played games with no status set.
         var noStatus: Int
 
         static let zero = StatusCounts(playing: 0, finished: 0, completed: 0,
-                                       abandoned: 0, noStatus: 0)
+                                       abandoned: 0, toRevisit: 0, noStatus: 0)
     }
 
     struct MonthCount: Sendable, Hashable, Identifiable {

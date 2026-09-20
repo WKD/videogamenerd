@@ -127,7 +127,11 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   v14 adds `games.cover_provisional` (PLAN §5.2/§5.5) — 1 marks an importer-supplied (Delicious)
   cover as a stopgap the background cover job may upgrade; a user-chosen cover is never touched and
   a miss keeps it (the 7-day negative cache stops a refetch loop); pure additive `ADD COLUMN` + a
-  one-shot backfill of Delicious-origin, not-user-chosen covers that never went through a cover job)). `LibraryStore`
+  one-shot backfill of Delicious-origin, not-user-chosen covers that never went through a cover job);
+  v15 `games.revisit` (PLAN §4/§7b, the **"To Revisit"** play status) — a purely additive `ADD COLUMN`
+  flag so a dropped-but-want-to-come-back game is `status='abandoned' AND revisit=1`; the v1 `status`
+  CHECK and its four legacy strings are untouched (no `games` rebuild), no backfill; mapped in one place
+  by `PlayStatus.from(dbStatus:revisit:)` / `dbStatus` / `dbRevisit`)). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`

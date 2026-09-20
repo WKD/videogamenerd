@@ -103,6 +103,7 @@ enum LibraryQuery {
             g.rank_key                                       AS rank_key,
             g.played                                         AS played,
             g.status                                         AS status,
+            g.revisit                                        AS revisit,
             COALESCE(own.owned, 0)                           AS owned,
             COALESCE(own.is_comp, 0)                         AS is_comp,
             COALESCE(own.has_rom, 0)                         AS has_rom,
@@ -281,11 +282,17 @@ enum LibraryQuery {
         }
         // Completion facet (OR within kind): selected statuses OR "Not Played"
         // (played = 0) OR "No Status" (played but no completion status).
+        // Abandoned and To Revisit are disjoint here even though both are 'abandoned' in
+        // SQL: ONE fragment `(status = ? AND revisit = ?)` per status distinguishes them by
+        // the flag (revisit=0 vs 1), and keeps the in-memory evaluator (which compares the
+        // mapped PlayStatus) exactly equivalent.
         var statusOrs: [String] = []
         if !filter.statuses.isEmpty {
-            let ss = filter.statuses.map(\.rawValue).sorted()
-            statusOrs.append("g.status IN (\(placeholders(ss.count)))")
-            args.append(contentsOf: ss.map { $0 as DatabaseValueConvertible })
+            for status in PlayStatus.allCases where filter.statuses.contains(status) {
+                statusOrs.append("(g.status = ? AND g.revisit = ?)")
+                args.append(status.dbStatus as DatabaseValueConvertible)
+                args.append(status.dbRevisit as DatabaseValueConvertible)
+            }
         }
         if filter.includeNotPlayed { statusOrs.append("g.played = 0") }
         if filter.includeNoStatus { statusOrs.append("(g.played = 1 AND g.status IS NULL)") }
@@ -637,6 +644,9 @@ enum LibraryQuery {
     /// optional subscripts so a query that omits them (e.g. the perf baseline) still maps.
     static func gameSummary(from row: Row) -> GameSummary {
         let statusRaw: String? = row["status"]
+        // The revisit flag turns a stored 'abandoned' into the model's `.toRevisit` — the
+        // one place a grid row's raw status becomes a PlayStatus (v15).
+        let revisit = (row["revisit"] as Int64?) == 1
         let platformIDs = dedupedList(row["platform_ids"])
         let changeableCount: Int = row["changeable_count"] ?? 0
         let changeableFormat: String? = row["changeable_format"]
@@ -656,7 +666,7 @@ enum LibraryQuery {
             compilationTitle: row["comp_title"],
             compilationProductID: row["comp_id"],
             platformIDs: platformIDs,
-            status: statusRaw.flatMap(PlayStatus.init(rawValue:)),
+            status: PlayStatus.from(dbStatus: statusRaw, revisit: revisit),
             hasROM: row["has_rom"],
             ownedOnlyViaSubscription: row["sub_only"],
             physicalPlatformIDs: dedupedList(row["physical_plats"]),
