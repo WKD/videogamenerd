@@ -67,6 +67,46 @@ struct PSNOwnAsControlTests {
         m.setRowOwnAs(.digital, externalID: "a")     // one differs
         #expect(m.ownAsSelection == nil)             // neutral / mixed look
     }
+
+    /// The owner's bug (2026-09-20): with NO row of the group ticked, picking a segment used to
+    /// snap back to neutral (the getter read only the ticked rows and ignored the remembered
+    /// session choice). Picking Digital must stick, and a row ticked afterwards adopts it.
+    @Test(.timeLimit(.minutes(1)))
+    func pickingWithNoTickedRowsIsRemembered() async throws {
+        let m = try await model()
+        m.setInclude(false, externalID: "a")
+        m.setInclude(false, externalID: "b")         // untick every played-no-purchase row
+        #expect(!m.canOwnPlayedRows)
+        m.ownAsSelection = .digital                  // pick with nothing ticked
+        #expect(m.ownAsSelection == .digital)        // sticks (was nil before the fix)
+        m.setInclude(true, externalID: "a")          // a row ticked afterwards adopts it
+        #expect(m.commitItems().first { $0.externalID == "a" }?.format == .digital)
+    }
+
+    /// The three-segment control (Not owned | Physical | Digital) lets the owner return to
+    /// "played, not owned" after choosing a format — there is no dead neutral to fall into.
+    @Test(.timeLimit(.minutes(1)))
+    func canReturnToNotOwned() async throws {
+        let m = try await model()
+        m.ownAsChoice = .physical
+        #expect(m.ownAsChoice == .physical)
+        m.ownAsChoice = .notOwned
+        #expect(m.ownAsChoice == .notOwned)
+        #expect(m.ownAsSelection == nil)
+        #expect(m.commitItems().allSatisfy { $0.psn?.createProduct == false })
+    }
+
+    /// Choosing a segment after a per-row override re-unifies the group.
+    @Test(.timeLimit(.minutes(1)))
+    func choosingASegmentReUnifiesAfterMixed() async throws {
+        let m = try await model()
+        m.ownAsSelection = .physical
+        m.setRowOwnAs(.digital, externalID: "a")     // mixed
+        #expect(m.ownAsChoice == nil)                // mixed reads as no segment
+        m.ownAsChoice = .physical                    // choose again → re-unifies
+        #expect(m.ownAsSelection == .physical)
+        #expect(m.commitItems().allSatisfy { $0.format == .physical })
+    }
 }
 
 /// The PSN "Launched" group sends its unticked rows to the Vault at commit (PLAN §16 / D6).

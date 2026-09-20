@@ -132,6 +132,40 @@ struct ClickSweepSheetsTests {
         let fired = await window.sweepBottomBand(height: 110) { secondary > 0 }
         #expect(fired, "the banner's secondary action button never received a click")
     }
+
+    // MARK: PSN review "own the ticked rows as" segmented control (the owner's dead-control fix)
+
+    @Test(.timeLimit(.minutes(2)))
+    func psnReviewOwnAsSegmentSwitchesFormat() async throws {
+        let db = try AppDatabase.inMemory()
+        let staging = ImportStagingStore(db)
+        // One "Played — no purchase found" row (played > 10 min), pre-ticked, so the own-as
+        // control is present and enabled.
+        let rows = [ImportStagingRow(source: ImportSourceID.psn, externalID: "p", name: "Bloodborne",
+                                     platform: "ps4", signals: [.played], playDurationS: 3600)]
+        try await staging.upsert(rows)
+        let result = ImportSyncResult(summary: ImportSyncSummary(source: ImportSourceID.psn),
+                                      matches: [], rows: rows)
+        let model = ImportReviewModel(source: ImportSourceID.psn, sourceLabel: "PlayStation",
+                                      staging: staging, result: result, productFormat: .digital,
+                                      platformChoices: PSNImportPresenter.platformChoices)
+        await model.load()
+        #expect(model.ownAsSelection == nil)   // default: not owned
+
+        // The own-as control is the only NSSegmentedControl in the PSN review sheet; click its
+        // "Digital" segment (index 2 of Not owned | Physical | Digital) and assert the model
+        // switched — the real click→model path the owner's bug broke (an off-screen render can't
+        // show the selection highlight, but the click drives the model).
+        let window = ClickProbeWindow(ImportReviewSheet(model: model)
+            .frame(minWidth: 700, minHeight: 460).toolbar { Button("x") {} },
+            size: NSSize(width: 720, height: 480))
+        defer { window.close() }
+        await window.settleShort()
+        #expect(window.hasSegmentedControl(), "the own-as segmented control should be present")
+        #expect(await window.clickSegment(2, of: 3), "the own-as segmented control was not located")
+        let switched = await window.poll { model.ownAsSelection == .digital }
+        #expect(switched, "clicking the Digital segment did not switch the own-as format")
+    }
 }
 
 /// A network-free ``ChooseCoverProviding`` for the Choose Cover click test.
