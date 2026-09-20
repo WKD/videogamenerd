@@ -58,7 +58,7 @@ struct IGDBBundleMembersTests {
     func forwardBundlesFieldIsIgnored() async throws {
         let (client, transport) = client(Self.gow)
         // Collection.bundles = [Trilogy]: the old code returned "God of War Trilogy" as the only member.
-        let members = try await client.bundleMembers(of: bundle(20068, "God of War Collection", parents: [44653]))
+        let members = try await client.bundleMembers(of: bundle(20068, "God of War Collection", parents: [44653])).members
         #expect(members.map(\.name).sorted() == ["God of War", "God of War II"])
         #expect(transport.requestBodies.allSatisfy { !$0.contains("id = (44653)") })
     }
@@ -66,7 +66,7 @@ struct IGDBBundleMembersTests {
     @Test("Nested bundles are expanded into their games, de-duplicated")
     func nestedBundleExpands() async throws {
         let (client, _) = client(Self.gow)
-        let members = try await client.bundleMembers(ofBundleID: 44653)
+        let members = try await client.bundleMembers(ofBundleID: 44653).members
         #expect(Set(members.map(\.name)) == ["God of War", "God of War II", "God of War III"])
         #expect(members.count == 3)
         #expect(!members.contains { $0.isBundle })
@@ -75,7 +75,7 @@ struct IGDBBundleMembersTests {
     @Test("A nested bundle IGDB knows nothing about stays as a single member")
     func unknownNestedBundleIsKept() async throws {
         let (client, _) = client([1: #"[{"id":2,"name":"Mystery Collection","game_type":3},{"id":3,"name":"Real Game","game_type":0}]"#])
-        let members = try await client.bundleMembers(ofBundleID: 1)
+        let members = try await client.bundleMembers(ofBundleID: 1).members
         #expect(members.map(\.name) == ["Mystery Collection", "Real Game"])
     }
 
@@ -83,7 +83,7 @@ struct IGDBBundleMembersTests {
     func addOnContentIsDropped() async throws {
         let table: [Int64: String] = [45181: #"[{"id":1,"name":"Mass Effect","game_type":0},{"id":2,"name":"Mass Effect: Bring Down the Sky","game_type":1},{"id":3,"name":"Mass Effect 2","game_type":0},{"id":4,"name":"Cerberus Network","game_type":13}]"#]
         let (client, _) = client(table)
-        let members = try await client.bundleMembers(ofBundleID: 45181)
+        let members = try await client.bundleMembers(ofBundleID: 45181).members
         #expect(members.map(\.name) == ["Mass Effect", "Mass Effect 2"])
     }
 
@@ -94,7 +94,7 @@ struct IGDBBundleMembersTests {
             11: #"[{"id":10,"name":"A","game_type":3},{"id":12,"name":"Game","game_type":0}]"#,
         ]
         let (client, _) = client(table)
-        let members = try await client.bundleMembers(ofBundleID: 10)
+        let members = try await client.bundleMembers(ofBundleID: 10).members
         #expect(members.map(\.name) == ["Game"])
     }
 }

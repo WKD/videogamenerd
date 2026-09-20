@@ -18,6 +18,8 @@ final class BundleBatchExpandModel: Identifiable {
         let gameID: Int64
         let title: String
         var members: [CompilationMemberDraft]
+        /// What the member policy dropped/folded for this bundle (PLAN §5.1).
+        var leftOut: [BundleLeftOut] = []
         /// false ⇒ IGDB has no members for it — "not a bundle", auto-dismissed (never expanded).
         var isBundle: Bool
         /// Individually untickable (only meaningful for a bundle row).
@@ -35,7 +37,9 @@ final class BundleBatchExpandModel: Identifiable {
     private(set) var undoRecords: [BundleExpansionUndo] = []
 
     private let store: LibraryStore
-    private let membersOf: @Sendable (BundleExpansionCandidate) async -> [CompilationMemberDraft]
+    /// Resolve a candidate's members and what the policy left out (PLAN §5.1), behind a
+    /// seam so tests never touch the network.
+    private let membersOf: @Sendable (BundleExpansionCandidate) async -> ([CompilationMemberDraft], [BundleLeftOut])
     /// Fired when the batch finishes (confirm or cancel) so the presenter can register undo / banner.
     var onFinished: (BundleBatchExpandModel) -> Void = { _ in }
     /// Fired when the owner cancels or closes without expanding.
@@ -44,7 +48,7 @@ final class BundleBatchExpandModel: Identifiable {
     private var cancelled = false
 
     init(store: LibraryStore,
-         membersOf: @escaping @Sendable (BundleExpansionCandidate) async -> [CompilationMemberDraft]) {
+         membersOf: @escaping @Sendable (BundleExpansionCandidate) async -> ([CompilationMemberDraft], [BundleLeftOut])) {
         self.store = store
         self.membersOf = membersOf
     }
@@ -63,15 +67,15 @@ final class BundleBatchExpandModel: Identifiable {
             if cancelled { break }
             progress = ImportProgress(phase: .matching, completed: index, total: candidates.count,
                                       detail: candidate.title, currentTitle: candidate.title)
-            let members = await membersOf(candidate)
+            let (members, leftOut) = await membersOf(candidate)
             if members.isEmpty {
                 // Not a bundle on IGDB — dismiss for good so it leaves the list (§5.1).
                 try? await store.dismissBundleCandidate(gameID: candidate.gameID)
                 rows.append(Row(gameID: candidate.gameID, title: candidate.title,
-                                members: [], isBundle: false, included: false))
+                                members: [], leftOut: leftOut, isBundle: false, included: false))
             } else {
                 rows.append(Row(gameID: candidate.gameID, title: candidate.title,
-                                members: members, isBundle: true, included: true))
+                                members: members, leftOut: leftOut, isBundle: true, included: true))
             }
         }
         results = rows
@@ -190,6 +194,11 @@ struct BundleBatchExpandSheet: View {
                 Text(row.members.map(\.title).joined(separator: ", "))
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(2)
+                if !row.leftOut.isEmpty {
+                    Text("Left out: " + row.leftOut.map(\.displayText).joined(separator: ", "))
+                        .font(.caption2).foregroundStyle(.tertiary)
+                        .lineLimit(1).truncationMode(.tail)
+                }
             }
         }
         .toggleStyle(.checkbox)

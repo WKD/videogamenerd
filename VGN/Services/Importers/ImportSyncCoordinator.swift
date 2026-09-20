@@ -136,9 +136,10 @@ struct ImportSyncCoordinator: Sendable {
             // list are persisted together — a resumed sync restores both without re-querying.
             var bundle: ImportBundleExpansion?
             if let bundleExpander, let best = outcome.best, best.isBundle {
-                let results = (try? await bundleExpander.members(ofBundleIGDBID: best.igdbID)) ?? []
+                let result = (try? await bundleExpander.members(ofBundleIGDBID: best.igdbID)) ?? BundleMemberResult()
                 bundle = ImportBundleExpansion(bundleIGDBID: best.igdbID, title: best.name,
-                                               members: ImportBundleMapping.members(from: results))
+                                               members: ImportBundleMapping.members(from: result.members),
+                                               leftOut: result.leftOut)
             }
             let persisted = outcome.best != nil ? PersistedImportMatch(outcome: outcome, bundle: bundle) : nil
             try? await staging.recordMatchOutcome(

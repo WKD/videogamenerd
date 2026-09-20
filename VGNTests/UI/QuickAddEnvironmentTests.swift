@@ -65,7 +65,7 @@ struct QuickAddEnvironmentTests {
             _ = try await searcher.search("bloodborne", platformIGDBIDs: nil, limit: 12)
         }
         let members = try await searcher.bundleMembers(bundleIGDBID: 1)
-        #expect(members.isEmpty)
+        #expect(members.members.isEmpty)
     }
 
     @Test func xctestHostBuildsNothing() {

@@ -27,7 +27,11 @@ struct FormatBadge: Sendable, Hashable, Identifiable {
 }
 
 enum FormatBadges {
-    /// The badges for a game, in draw order. Empty when the game owns nothing.
+    /// The **real ownership-format** badges for a game, in draw order — physical → digital
+    /// → ROM. Empty when the game owns no real copy. PS Plus is **not** here: it is a
+    /// licence, not a format, and draws in the cover's top-left corner (owner, wave 19 —
+    /// ``licensing(for:)``). So a PS-Plus-only game shows no format badge (unchanged), and
+    /// the bottom row is at most four (physical + digital + ROM + played).
     static func badges(for game: GameSummary) -> [FormatBadge] {
         var out: [FormatBadge] = []
         if game.hasPhysical { out.append(FormatBadge(kind: .physical, platformIDs: game.physicalPlatformIDs)) }
@@ -35,8 +39,14 @@ enum FormatBadges {
         if game.hasROM || !game.romPlatformIDs.isEmpty {
             out.append(FormatBadge(kind: .rom, platformIDs: game.romPlatformIDs))
         }
-        if game.hasSubscription { out.append(FormatBadge(kind: .psPlus, platformIDs: game.subscriptionPlatformIDs)) }
         return out
+    }
+
+    /// The PS Plus **licensing** badge for a game, or nil (owner, wave 19). PS Plus is a
+    /// licence — it sits alone in the cover's top-left corner (next to the tier chip), not
+    /// in the format row — because the copy vanishes when the subscription ends (PLAN §8/§13.3).
+    static func licensing(for game: GameSummary) -> FormatBadge? {
+        game.hasSubscription ? FormatBadge(kind: .psPlus, platformIDs: game.subscriptionPlatformIDs) : nil
     }
 }
 

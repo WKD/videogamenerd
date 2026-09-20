@@ -16,8 +16,8 @@ struct BatoceraBundlePromoteTests {
     /// A fake expander returning preset members per bundle id.
     private struct FakeExpander: ImportBundleExpanding {
         let membersByID: [Int64: [IGDBSearchResult]]
-        func members(ofBundleIGDBID igdbID: Int64) async throws -> [IGDBSearchResult] {
-            membersByID[igdbID] ?? []
+        func members(ofBundleIGDBID igdbID: Int64) async throws -> BundleMemberResult {
+            BundleMemberResult(members: membersByID[igdbID] ?? [])
         }
     }
 

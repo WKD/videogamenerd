@@ -38,7 +38,7 @@ protocol PhotoScanCommitting: Sendable {
 /// IGDB change-match for the review sheet's alternatives / inline "Search IGDB…".
 protocol PhotoScanSearching: Sendable {
     func search(_ text: String, platformSlug: String?) async throws -> [IGDBSearchResult]
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult]
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult
 }
 
 /// Persistence for the Settings → Photo Scan tab.
@@ -227,11 +227,8 @@ struct LiveScanSearcher: PhotoScanSearching {
         return try await client.searchGames(text, platformIGDBIDs: platformIDs, limit: 12)
     }
 
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] {
-        if let meta = try await client.games(ids: [bundleIGDBID]).first {
-            return try await client.bundleMembers(of: meta)
-        }
-        return try await client.bundleMembers(ofBundleID: bundleIGDBID)
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult {
+        try await client.bundleMembers(ofBundleID: bundleIGDBID)
     }
 }
 

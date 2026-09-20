@@ -9,23 +9,35 @@ struct FormatBadgesTests {
 
     // MARK: Pure ordering
 
-    @Test func badgeOrderIsPhysicalDigitalRomPSPlus() {
+    /// The bottom row is real formats only, in order — physical → digital → ROM. PS Plus
+    /// (a licence, not a format) is NOT here; it draws in the top-left corner (wave 19, D5).
+    @Test func badgeOrderIsPhysicalDigitalRomAndPSPlusIsSeparate() {
         let g = GameSummary(id: 1, title: "All", owned: true, hasROM: true,
                             physicalPlatformIDs: ["ps4"], digitalPlatformIDs: ["ps5"],
                             romPlatformIDs: ["ps2"], subscriptionPlatformIDs: ["ps4"])
-        #expect(FormatBadges.badges(for: g).map(\.kind) == [.physical, .digital, .rom, .psPlus])
+        #expect(FormatBadges.badges(for: g).map(\.kind) == [.physical, .digital, .rom])
+        // PS Plus is exposed separately, for the corner.
+        #expect(FormatBadges.licensing(for: g)?.kind == .psPlus)
+        #expect(FormatBadges.licensing(for: g)?.platformIDs == ["ps4"])
     }
 
-    @Test func subscriptionOnlyShowsOnlyPSPlus() {
+    @Test func subscriptionOnlyShowsNoFormatBadgeButHasLicensing() {
         let g = GameSummary(id: 1, title: "Plus", owned: true,
                             ownedOnlyViaSubscription: true, subscriptionPlatformIDs: ["ps5"])
-        #expect(FormatBadges.badges(for: g).map(\.kind) == [.psPlus])
+        #expect(FormatBadges.badges(for: g).isEmpty)               // no format badge (unchanged)
+        #expect(FormatBadges.licensing(for: g)?.kind == .psPlus)   // the corner shows PS Plus
     }
 
-    @Test func digitalPlusSubscriptionShowsBoth() {
+    @Test func digitalPlusSubscriptionShowsDigitalPlusCornerLicensing() {
         let g = GameSummary(id: 1, title: "Both", owned: true,
                             digitalPlatformIDs: ["ps5"], subscriptionPlatformIDs: ["ps4"])
-        #expect(FormatBadges.badges(for: g).map(\.kind) == [.digital, .psPlus])
+        #expect(FormatBadges.badges(for: g).map(\.kind) == [.digital])
+        #expect(FormatBadges.licensing(for: g)?.kind == .psPlus)
+    }
+
+    @Test func noSubscriptionHasNoLicensingBadge() {
+        let g = GameSummary(id: 1, title: "Owned", owned: true, digitalPlatformIDs: ["pc"])
+        #expect(FormatBadges.licensing(for: g) == nil)
     }
 
     @Test func notOwnedHasNoBadges() {
@@ -75,14 +87,14 @@ struct FormatBadgesTests {
         #expect(ProductFormat.rom.badgeKind == .rom)
     }
 
-    // MARK: Badge-row overflow rule (D1)
+    // MARK: Badge-row overflow rule (D5 — now max 4 at the bottom)
 
-    /// The worst case — physical + digital + ROM + PS Plus + played = 5 badges — never draws
-    /// wider than the tile at any tile width, from the 110 pt minimum to the 230 pt maximum
-    /// (it wraps to a second line at the narrowest sizes rather than overflow).
-    @Test func fiveBadgesFitAtEveryTileWidth() {
+    /// The bottom row now holds at most four badges — physical + digital + ROM + played (PS Plus
+    /// moved to the corner) — and never draws wider than the tile at any width, 110…230 pt (it
+    /// wraps rather than overflow if it ever had to).
+    @Test func fourBadgesFitAtEveryTileWidth() {
         for width in stride(from: FormatBadgeLayout.minTile, through: FormatBadgeLayout.maxTile, by: 5) {
-            #expect(FormatBadgeLayout.fits(count: 5, cellWidth: width), "5 badges overflow at \(width)")
+            #expect(FormatBadgeLayout.fits(count: 4, cellWidth: width), "4 badges overflow at \(width)")
         }
     }
 
@@ -93,11 +105,11 @@ struct FormatBadgesTests {
         #expect(FormatBadgeLayout.diameter(cellWidth: 110) <= FormatBadgeLayout.diameter(cellWidth: 230))
     }
 
-    /// At the narrowest tile five badges cannot share one line (so wrapping is required), while
-    /// at the default 150 pt tile they do fit on one line.
-    @Test func perLineWrapsAtTheNarrowestTileButNotAtTheDefault() {
-        #expect(FormatBadgeLayout.perLine(cellWidth: FormatBadgeLayout.minTile) < 5)
-        #expect(FormatBadgeLayout.perLine(cellWidth: 150) >= 5)
+    /// The four bottom badges share one line even at the narrowest tile (no wrap needed once
+    /// PS Plus left the row), and of course at the default tile.
+    @Test func fourBadgesShareOneLineFromTheNarrowestTile() {
+        #expect(FormatBadgeLayout.perLine(cellWidth: FormatBadgeLayout.minTile) >= 4)
+        #expect(FormatBadgeLayout.perLine(cellWidth: 150) >= 4)
     }
 
     // MARK: Facts from the grid SQL
@@ -142,13 +154,15 @@ struct FormatBadgesTests {
         #expect(digital.digitalPlatformIDs == ["ps5"] && digital.subscriptionPlatformIDs == ["ps4"])
         #expect(digital.singleCopyFormat == .digital)    // the one non-subscription single copy
         #expect(!digital.ownedOnlyViaSubscription)
-        #expect(FormatBadges.badges(for: digital).map(\.kind) == [.digital, .psPlus])
+        #expect(FormatBadges.badges(for: digital).map(\.kind) == [.digital])
+        #expect(FormatBadges.licensing(for: digital)?.kind == .psPlus)
 
         let plus = try byTitle("Plus Only")
         #expect(plus.hasSubscription && !plus.hasPhysical && !plus.hasDigital)
         #expect(plus.ownedOnlyViaSubscription)
         #expect(plus.singleCopyFormat == nil)            // a subscription copy is not reformat-able
-        #expect(FormatBadges.badges(for: plus).map(\.kind) == [.psPlus])
+        #expect(FormatBadges.badges(for: plus).isEmpty)  // PS-Plus-only shows no format badge
+        #expect(FormatBadges.licensing(for: plus)?.kind == .psPlus)
 
         let borrowed = try byTitle("Borrowed")
         #expect(!borrowed.owned)

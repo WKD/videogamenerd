@@ -37,9 +37,9 @@ import Testing
         var count: Int { lock.withLock { _count } }
         let members: [IGDBSearchResult]
         init(members: [IGDBSearchResult]) { self.members = members }
-        func members(ofBundleIGDBID igdbID: Int64) async throws -> [IGDBSearchResult] {
+        func members(ofBundleIGDBID igdbID: Int64) async throws -> BundleMemberResult {
             lock.withLock { _count += 1 }
-            return members
+            return BundleMemberResult(members: members)
         }
     }
 

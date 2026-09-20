@@ -17,13 +17,11 @@ struct LiveCatalogSearcher: CatalogSearching {
         try await client.autocomplete(text, platformIGDBIDs: platformIGDBIDs, limit: limit)
     }
 
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] {
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult {
         // Members come from the reverse lookup (a bundle's own `bundles` field lists its
-        // parents, not its members); nested bundles expand, add-on content is dropped.
-        guard let meta = try await client.games(ids: [bundleIGDBID]).first else {
-            return try await client.bundleMembers(ofBundleID: bundleIGDBID)
-        }
-        return try await client.bundleMembers(of: meta)
+        // parents, not its members); nested bundles expand, then the member policy drops
+        // non-standalone content and folds ports onto their parent (PLAN §5.1).
+        try await client.bundleMembers(ofBundleID: bundleIGDBID)
     }
 
     func hasCredentials() async -> Bool { await credentials() != nil }
@@ -35,7 +33,7 @@ struct OfflineCatalogSearcher: CatalogSearching {
     func search(_ text: String, platformIGDBIDs: [Int]?, limit: Int) async throws -> [IGDBSearchResult] {
         throw IGDBError.missingCredentials
     }
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] { [] }
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult { BundleMemberResult() }
     func hasCredentials() async -> Bool { false }
 }
 

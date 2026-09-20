@@ -297,8 +297,8 @@ final class CompilationEditorModel {
             errorMessage = "This compilation has no IGDB bundle to fill from."
             return
         }
-        let bundleMembers = (try? await catalog.bundleMembers(bundleIGDBID: igdbID)) ?? []
-        bundleDiff = Self.computeBundleDiff(bundleMembers: bundleMembers, currentMembers: members)
+        let expansion = (try? await catalog.bundleMembers(bundleIGDBID: igdbID)) ?? BundleMemberResult()
+        bundleDiff = Self.computeBundleDiff(bundleMembers: expansion.members, currentMembers: members)
         if bundleDiff?.isEmpty == true {
             errorMessage = "The IGDB bundle adds nothing new."
         }

@@ -15,6 +15,9 @@ final class BundleExpansionModel: Identifiable {
     let bundleTitle: String
     /// The member games to create/link, in order.
     let members: [CompilationMemberDraft]
+    /// What the member policy dropped or folded (PLAN §5.1), shown as a quiet secondary
+    /// line so nothing disappears silently ("Left out: Season of Infamy — expansion").
+    let leftOut: [BundleLeftOut]
     /// True when the placeholder carries play data (played / tier / rank / status / playtime
     /// / dates / hand-edits) that the expansion must move to a member.
     let carriesPlayData: Bool
@@ -32,10 +35,12 @@ final class BundleExpansionModel: Identifiable {
     var onCancel: () -> Void = {}
 
     init(gameID: Int64, bundleTitle: String, members: [CompilationMemberDraft],
+         leftOut: [BundleLeftOut] = [],
          carriesPlayData: Bool, isPlayed: Bool = false, isRanked: Bool = false) {
         self.gameID = gameID
         self.bundleTitle = bundleTitle
         self.members = members
+        self.leftOut = leftOut
         self.carriesPlayData = carriesPlayData
         self.isPlayed = isPlayed
         self.isRanked = isRanked
@@ -81,6 +86,10 @@ struct BundleExpansionSheet: View {
             header
             Divider()
             memberList
+            if !model.leftOut.isEmpty {
+                Divider()
+                leftOutSection
+            }
             if model.isRanked {
                 Divider()
                 playDataPicker
@@ -142,6 +151,24 @@ struct BundleExpansionSheet: View {
                 Text(String(year)).font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// A quiet list of what the member policy left out or folded (PLAN §5.1), so nothing
+    /// disappears silently. Bounded text (truncates) — never `fixedSize` on wrapping text.
+    private var leftOutSection: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Left out").font(.caption).foregroundStyle(.secondary)
+            ForEach(model.leftOut) { entry in
+                Text(entry.displayText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     private var playDataPicker: some View {

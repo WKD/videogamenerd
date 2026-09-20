@@ -180,15 +180,12 @@ private struct IGDBLinkRowView: View {
         .opacity(row.isChoosable ? 1 : 0.5)
     }
 
+    /// A short type chip for the result (PLAN §5.1 D4): "Bundle" for a compilation, else the
+    /// shared policy label — "Expansion", "DLC", "Port", "Remaster"… — so a non-standalone or
+    /// port result is clearly marked while staying selectable (a boxed expansion is legitimate).
     private var typeBadge: String? {
-        switch row.result.gameType {
-        case .bundle, .pack: return "Bundle"
-        case .remake: return "Remake"
-        case .remaster: return "Remaster"
-        case .port: return "Port"
-        case .expandedGame: return "Expanded"
-        default: return nil
-        }
+        if row.result.gameType.isCompilation { return "Bundle" }
+        return GameTypePolicy.label(for: row.result.gameType)
     }
 
     private func chip(_ text: String, tint: Color) -> some View {

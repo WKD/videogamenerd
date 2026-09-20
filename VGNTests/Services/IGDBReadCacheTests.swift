@@ -219,12 +219,12 @@ struct IGDBReadThroughTests {
         let cache = InMemoryCatalogCache()
         let client = ReadCacheHarness.client(transport: transport, cache: cache)
 
-        let first = try await client.bundleMembers(ofBundleID: 20196)
+        let first = try await client.bundleMembers(ofBundleID: 20196).members
         let firstCount = transport.requests.filter { $0.url?.absoluteString.contains("api.igdb.com") == true }.count
         #expect(first.count == 9)
         #expect(firstCount >= 1)
 
-        let second = try await client.bundleMembers(ofBundleID: 20196)
+        let second = try await client.bundleMembers(ofBundleID: 20196).members
         let secondCount = transport.requests.filter { $0.url?.absoluteString.contains("api.igdb.com") == true }.count
         #expect(second.map(\.id) == first.map(\.id))        // same members, same order
         #expect(secondCount == firstCount)                  // no new request

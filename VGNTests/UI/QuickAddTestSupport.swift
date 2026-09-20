@@ -36,7 +36,7 @@ actor FakeCatalog: CatalogSearching {
 
     func release() { gate?.resume(); gate = nil }
 
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] { members }
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult { BundleMemberResult(members: members) }
     func hasCredentials() async -> Bool { credentials }
 }
 
