@@ -188,6 +188,17 @@ seconds; `firstPlayedDateTime`/`lastPlayedDateTime` → `games.first_played_at`/
 A 0 % trophy title whose game-list play time is < 30 min stays **Launched** (e.g. Myst,
 5 m 22 s).
 
+**Bundles expand too (W18-A, PLAN §13.3).** A PSN title whose IGDB match is a bundle/pack is expanded
+during matching (the shared `IGDBImportBundleExpander`) and committed as ONE `compilation` Product
+keyed by the PSN external id: digital for a purchase, the PS Plus subscription copy for a claim,
+physical/digital per the review's *own-as* control for a played-no-purchase disc, or **no product**
+for played-not-owned (only the members ticked as played are then created, as played-not-owned games).
+"Which did you play?" is asked once, in the row (a per-member played tick + All/None, default none),
+only when PSN reports the collection played; the collection's play time / dates / 100 % status go to a
+member **only when exactly one** is ticked, otherwise they stay on the `import_titles` record.
+`cleanMatchTitle` also drops the platform tail Sony appends ("… PS4 & PS5", "… (PS4)", "… PS5",
+"for PS4") for MATCHING only — the shown title is unchanged.
+
 ## What a reject looks like
 
 A bogus response is **never cached** and never overwrites a good entry. The client records

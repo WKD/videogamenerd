@@ -330,6 +330,33 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 - [ ] **Favourites finish by themselves (D4).** With *Add my favourites automatically* on and IGDB configured, one sync of your ~247 favourites now matches them **all** (no more 4–5 syncs). While it runs, Settings ▸ Batocera shows **"Matching favourites… N of M · Stop"** (Stop halts it cleanly); the app stays idle (~0 % CPU). It ends with **one** banner: **"N favourites added from Batocera · M need your review"** with **Undo** (undoes the whole run) and **Review…**. If IGDB hiccups mid-run it pauses (the banner says so) and the rest retry next sync — no request storm. Quit mid-run and re-sync: it resumes where it left off, nothing matched twice.
 - [ ] **Open on IGDB from "From the vault" (D7).** In Play Next ▸ **From the vault**, a matched card (PS Plus / GOG / Delicious with an IGDB match, or a matched Batocera entry) shows a small **↗ Open on IGDB** button that opens the game's IGDB page in your browser; a card with no IGDB match shows no such button. *(Interim: the link is an IGDB search-by-name until the shared per-id helper is merged — see LIMITATIONS.)*
 
+## PSN bundles expand too (wave 18, §13.3) [owner]
+- [ ] **A fresh PSN sync expands bundles.** In the `psn-test` profile, run a PSN sync that contains a
+  collection (e.g. *Castlevania Advance Collection*, *BioShock: The Collection*, *Uncharted: The
+  Nathan Drake Collection*). The review row reads **"Bundle · N games — imports as a compilation"**;
+  committing creates **one** compilation Product (digital for a purchase, the PS Plus copy for a
+  claim, physical/digital per *own-as* for a played-no-purchase disc), with the member games listed
+  individually and existing library games linked, not duplicated. A second sync adds nothing.
+- [ ] **"Which did you play?" once, in the row.** For a collection PSN reports as played, the row
+  shows a per-member played tick with **All / None** (default none). Tick exactly one member → its
+  play time / last-played / 100 % status land on that member only; tick several → all are played but
+  none gets the collection's play time; tick none → all owned backlog, play time stays on the record.
+  A collection PSN never played asks nothing.
+- [ ] **Played, not owned.** A played-no-purchase collection left with *own-as* neutral reads
+  "not owned: only the games you tick are added" and creates only the ticked members (as played, not
+  owned) — no compilation Product, and the un-ticked members are not created.
+- [ ] **Title tails.** A cross-gen twin like *The Dark Pictures Anthology: Man of Medan PS4 & PS5*
+  matches the same IGDB game as its sibling (the platform tail is dropped for matching; the shown
+  title still reads "… PS4 & PS5").
+- [ ] **Empty review.** A sync with nothing to review shows "Everything is already in your library."
+  rather than an empty list.
+- [ ] **Not yet built (deferred — see `docs/LIMITATIONS.md`):** *Bundles to Expand ▸ **Expand All
+  Unplayed (N)…*** for PSN bundles **already imported as singles** (e.g. *Castlevania Advance
+  Collection* 75 h, *BioShock: The Collection* 52 h), the per-game expand sheet with played ticks,
+  IGDB-type candidate detection, the remembered single-played member on re-sync, review twin folding,
+  and the compilation view's "N h on the whole collection (PSN)" line. Use the existing per-game
+  *Expand Bundle into Games…* repair path meanwhile.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

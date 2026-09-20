@@ -264,8 +264,9 @@ final class ImportReviewModel {
         self.transientByID = Dictionary(result.rows.map { ($0.externalID, $0) }, uniquingKeysWith: { a, _ in a })
         self.matchByID = Dictionary(
             result.matches.map { ($0.externalID, $0.outcome) }, uniquingKeysWith: { a, _ in a })
-        // PSN never commits a compilation (PLAN §13.3), so bundle expansions are ignored there.
-        self.bundleExpansions = source == ImportSourceID.psn ? [:] : result.bundleExpansions
+        // PSN bundles expand too (PLAN §13.3): a PSN bundle match commits as a compilation, like
+        // GOG/Delicious. (Earlier this zeroed PSN expansions — that exclusion is removed, W18-A.)
+        self.bundleExpansions = result.bundleExpansions
     }
 
     /// Read the staged titles and build the review rows. Call once when the sheet opens.
@@ -389,6 +390,35 @@ final class ImportReviewModel {
         return "n:\(row.sourceTitle.lowercased())|\(platform)"
     }
 
+    // MARK: PSN bundle member ticks — "Which did you play?" (PLAN §13.3 / D2)
+
+    /// Whether this bundle row asks "Which did you play?" — only a PSN bundle whose collection
+    /// PSN reports as played (play time > 0 or trophy progress > 0). A collection never played
+    /// asks nothing (the members are all owned backlog).
+    func psnBundleAsksPlayed(_ row: ImportReviewRow) -> Bool {
+        guard isPSN, row.isBundleExpansion, let t = transientByID[row.externalID] else { return false }
+        return t.signals.contains(.played) || (t.playDurationS ?? 0) > 0
+    }
+
+    /// How many of a bundle row's members are ticked as played.
+    func bundlePlayedCount(_ row: ImportReviewRow) -> Int { row.bundleMembers.filter(\.played).count }
+
+    /// Tick / untick one member as played (keyed by its position in the member list).
+    func setBundleMemberPlayed(_ played: Bool, position: Int, externalID: String) {
+        mutate(externalID) { row in
+            for i in row.bundleMembers.indices where row.bundleMembers[i].position == position {
+                row.bundleMembers[i].played = played
+            }
+        }
+    }
+
+    /// The All / None action for a bundle row's member list.
+    func setAllBundleMembersPlayed(_ played: Bool, externalID: String) {
+        mutate(externalID) { row in
+            for i in row.bundleMembers.indices { row.bundleMembers[i].played = played }
+        }
+    }
+
     // MARK: Buckets
 
     func rows(in bucket: ImportReviewBucket) -> [ImportReviewRow] {
@@ -397,6 +427,11 @@ final class ImportReviewModel {
     var presentBuckets: [ImportReviewBucket] {
         [.new, .alreadyMatched, .ignored].filter { b in rows.contains { !$0.vaulted && $0.bucket == b } }
     }
+
+    /// **(D6)** Nothing to review — the sync produced no staged titles and there is nothing else
+    /// (no vaulted rows, no proposed removals) to show. The sheet then renders the shared
+    /// ``EmptyStateView`` ("Everything is already in your library") instead of an empty list.
+    var hasNothingToReview: Bool { rows.isEmpty && proposedRemovals.isEmpty }
 
     // MARK: The Vault — "Send to the Vault" (the fourth fate, PLAN §16)
 
@@ -1007,7 +1042,13 @@ struct ImportReviewSheet: View {
 
     @ViewBuilder
     private var list: some View {
-        if model.isPSN {
+        if model.hasNothingToReview {
+            EmptyStateView(
+                systemImage: "checkmark.circle",
+                title: "Nothing to review",
+                message: "Everything is already in your library.",
+                accessibilityID: "review.emptyState")
+        } else if model.isPSN {
             psnList
         } else {
             List {
@@ -1465,6 +1506,7 @@ private struct PSNReviewRowView: View {
                         Text(reason.label).font(.caption2).foregroundStyle(.secondary)
                     }
                 }
+                bundleSection
             }
             Spacer(minLength: 8)
             if row.vaulted {
@@ -1517,6 +1559,40 @@ private struct PSNReviewRowView: View {
                 .font(.title3)
         }
         .buttonStyle(.borderless)
+    }
+
+    /// The bundle-expansion UI (PLAN §13.3 / D1+D2): the "imports as a compilation" line and,
+    /// when PSN says the collection was played, the "Which did you play?" member list with a
+    /// played tick per member and an All / None control (default none).
+    @ViewBuilder
+    private var bundleSection: some View {
+        if row.isBundleExpansion {
+            let playedNotOwned = group == .playedNoPurchase && row.ownAsFormat == nil
+            Label(playedNotOwned
+                    ? "Bundle · \(row.bundleMembers.count) games — not owned: only the games you tick are added"
+                    : "Bundle · \(row.bundleMembers.count) games — imports as a compilation",
+                  systemImage: "square.stack.3d.up")
+                .font(.caption2).foregroundStyle(.secondary)
+            if model.psnBundleAsksPlayed(row) {
+                HStack(spacing: 6) {
+                    Text("Which did you play?").font(.caption2).foregroundStyle(.secondary)
+                    Button("All") { model.setAllBundleMembersPlayed(true, externalID: row.externalID) }
+                        .controlSize(.mini)
+                    Button("None") { model.setAllBundleMembersPlayed(false, externalID: row.externalID) }
+                        .controlSize(.mini)
+                }
+                ForEach(Array(row.bundleMembers.enumerated()), id: \.offset) { _, member in
+                    Toggle(isOn: Binding(
+                        get: { member.played },
+                        set: { model.setBundleMemberPlayed($0, position: member.position,
+                                                           externalID: row.externalID) }
+                    )) {
+                        Text(member.title).font(.caption2)
+                    }
+                    .toggleStyle(.checkbox)
+                }
+            }
+        }
     }
 }
 

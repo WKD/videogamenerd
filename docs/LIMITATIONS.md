@@ -141,6 +141,31 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   live backend (the cache store exposes no per-key delete and is lane A's file); the paged
   "Library" set is matched by key prefix. If lane A later adds a typed `invalidate(source:key:)`,
   switch to it.
+- **PSN bundles expand too — partly done (W18-A, 2026-09-20).** The PSN review sheet now expands a
+  bundle match into a compilation (one Product per ownership kind; no product for played-not-owned;
+  members deduped) and asks "Which did you play?" once in the row with the exactly-one play-data
+  routing; `cleanMatchTitle` drops the platform tails; re-sync is idempotent (PLAN §13.3, tests in
+  `PSNBundleReviewTests`). **Deferred to a follow-up lane:**
+  - **Bundles to Expand ▸ Expand All Unplayed + the per-game expand sheet for singles already in the
+    library** (PLAN §13.3 D4) is **not** built — a PSN bundle already imported as singles is still
+    only reachable through the existing per-game *Expand Bundle into Games…* repair path, which has
+    no batch action and does not use the per-member played ticks. **[follow-up]**
+  - **Candidate detection is still title-only** (`looksLikeBundleTitle`); it does not yet also key
+    off IGDB's `game_type` / the persisted `match_json`, so an untitled bundle like *Castlevania
+    Requiem* is not surfaced as a candidate. **[follow-up]**
+  - **The single-played member is not remembered across syncs.** A re-sync starts with all member
+    ticks off, so it will not re-route updated play time to the member the owner picked at import
+    unless they re-tick it. Persisting the choice (in `match_json` / `app_state`) is deferred.
+    **[follow-up]**
+  - **Cross-gen twin folding in the review is not added** — a twin whose cleaned title matches an
+    already-matched row still appears as its own row rather than folding under an "also: PS4 & PS5
+    version" note. (The Vault ingestion already folds twins; the review sheet does not.) **[follow-up]**
+  - **The compilation view's "N h on the whole collection (PSN)" line is not shown.** The play time
+    is stored on the `import_titles` record (keyed by `(source, external_id)`) but no view reads it
+    back yet. **[follow-up]**
+  - A re-synced compilation reuses its existing `(source, external_id)` Product and does **not**
+    rewrite its `subscription` (a PS Plus claim that became a purchase keeps the old flag) — the same
+    behaviour as a single import copy. **[watch]**
 - **Import bundle expansion (GOG + Delicious) — done** *(2026-09-20)*. `ScanMatch` now carries the
   IGDB `game_type`; the sync coordinator fetches a bundle match's members during matching (behind
   the `ImportBundleExpanding` seam, shared IGDB client) and the review row commits as a compilation
