@@ -346,8 +346,13 @@ private struct SingleGameInspector: View {
                     Text(copyPrimaryLine(copy)).font(.callout)
                     if let sub = copy.subscription {
                         // PLAN §13.3: a subscription copy (PS Plus) leaves with the membership.
-                        Label("\(sub.label) — expires with the subscription", systemImage: "plus.circle.fill")
-                            .font(.caption).foregroundStyle(.secondary)
+                        // The shared PS Plus badge asset in place of a system "+" (wave 17).
+                        Label {
+                            Text("\(sub.label) — expires with the subscription")
+                        } icon: {
+                            PSPlusBadgeView(size: 13, shadow: false)
+                        }
+                        .font(.caption).foregroundStyle(.secondary)
                     }
                     if copy.isCompilation {
                         // PLAN §8: "Part of *Metal Gear Solid: The Legacy Collection* (PS3) · n games".

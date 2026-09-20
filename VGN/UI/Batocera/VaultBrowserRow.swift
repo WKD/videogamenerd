@@ -61,13 +61,9 @@ struct VaultBrowserRow: View {
         .contextMenu { contextMenu }
     }
 
-    /// The PlayStation-blue "+" in a yellow circle (PLAN §13.3 grid-badge colours).
+    /// The shared PS Plus badge (PLAN §13.3), drawn from the `PSPlusBadge` asset (wave 17).
     private var psPlusBadge: some View {
-        Text("+")
-            .font(.system(size: 10, weight: .heavy, design: .rounded))
-            .foregroundStyle(Color(hex: "#0070D1") ?? .blue)
-            .frame(width: 15, height: 15)
-            .background(Color(hex: "#FFC300") ?? .yellow, in: Circle())
+        PSPlusBadgeView(size: 15, shadow: false)
             .appKitTooltip("PS Plus — expires with the subscription")
             .accessibilityIdentifier("vault.psPlusMarker.\(entry.id)")
     }
