@@ -28,6 +28,16 @@ final class DiscoverModel {
     /// Injectable clock for the ISO-week rotation seed (deterministic in tests).
     var now: () -> Date = { Date() }
 
+    /// The owner's play style / weekly pace, for the PS Plus deadline finishability (PLAN §16).
+    private let playStyle: PlayStyle
+    private let pace: PlayPace
+    /// Prioritise PS Plus games with the constant boost when no cancellation date is set
+    /// (PLAN §16 — the "Prioritise PS Plus games" fallback, on by default). Mirrors Play Next.
+    private let prioritisePSPlus: Bool
+    /// Months until the owner plans to leave PS Plus (nil ⇒ no date), read fresh each recompute.
+    private let deadlineMonthsLeft: @MainActor () -> Double?
+    @ObservationIgnored nonisolated(unsafe) private var deadlineObserver: NSObjectProtocol?
+
     private(set) var items: [DiscoverItem] = []
     private(set) var rankedCount = 0
     private(set) var poolCount = 0
@@ -38,18 +48,49 @@ final class DiscoverModel {
     @ObservationIgnored private var loadTask: Task<Void, Never>?
 
     init(backend: any DiscoverBackend, thumbnails: BatoceraThumbnailLoader? = nil,
-         cardCount: Int = 8, poolLimit: Int = 12_000) {
+         cardCount: Int = 8, poolLimit: Int = 12_000,
+         playStyle: PlayStyle = UserDefaultsPlayPacePreferences().playStyle(),
+         pace: PlayPace = UserDefaultsPlayPacePreferences().playPace(),
+         prioritisePSPlus: Bool = DiscoverModel.prioritisePSPlusDefault(),
+         deadlineMonthsLeft: @escaping @MainActor () -> Double? = { PSPlusDeadlinePreferences().monthsLeft() }) {
         self.backend = backend
         self.thumbnails = thumbnails
         self.cardCount = cardCount
         self.poolLimit = poolLimit
+        self.playStyle = playStyle
+        self.pace = pace
+        self.prioritisePSPlus = prioritisePSPlus
+        self.deadlineMonthsLeft = deadlineMonthsLeft
+    }
+
+    deinit {
+        if let deadlineObserver { NotificationCenter.default.removeObserver(deadlineObserver) }
+    }
+
+    /// The "Prioritise PS Plus games" default (shared with Play Next's persisted toggle, on by
+    /// default). Read here so the vault scorer's constant fallback matches the picks.
+    static func prioritisePSPlusDefault() -> Bool {
+        AppPreferences.defaults.object(forKey: "playNext.preferExpiringSubscription") as? Bool ?? true
     }
 
     /// Whether the row should be shown at all (PLAN §15 visibility rule).
     var isVisible: Bool { hasLoaded && rankedCount > 0 && !items.isEmpty }
 
     /// Load + score once. Idempotent per call site (a reload cancels the prior run).
-    func load() { recompute() }
+    func load() {
+        observeDeadlineChanges()
+        recompute()
+    }
+
+    /// Recompute once when the PS Plus cancellation date changes in Settings (PLAN §16).
+    private func observeDeadlineChanges() {
+        guard deadlineObserver == nil else { return }
+        deadlineObserver = NotificationCenter.default.addObserver(
+            forName: PSPlusDeadlinePreferences.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.recompute() }
+        }
+    }
 
     /// "Shuffle" — re-roll the rotation within the current week (PLAN §15).
     func shuffle() { shuffleCount += 1; recompute() }
@@ -68,6 +109,10 @@ final class DiscoverModel {
         let poolLimit = self.poolLimit
         let cardCount = self.cardCount
         let seed = Self.rotationSeed(date: now(), shuffle: shuffleCount)
+        let playStyle = self.playStyle
+        let pace = self.pace
+        let prioritisePSPlus = self.prioritisePSPlus
+        let monthsLeft = deadlineMonthsLeft()
         loadTask = Task { [weak self] in
             do {
                 let ranked = try await backend.rankedGames()
@@ -77,8 +122,11 @@ final class DiscoverModel {
 
                 // At most half the visible cards may be pinned favourites, so the row still
                 // discovers (PLAN §15).
-                let options = DiscoverScorer.Options(seed: seed, playedSystems: played,
-                                                     maxPinnedFavourites: max(1, cardCount / 2))
+                let options = DiscoverScorer.Options(
+                    seed: seed, playedSystems: played,
+                    maxPinnedFavourites: max(1, cardCount / 2),
+                    playStyle: playStyle, pace: pace,
+                    psPlusMonthsLeft: monthsLeft, prioritisePSPlus: prioritisePSPlus)
                 // Score off the main actor (pure, ~11 000 entries — PLAN §15 perf).
                 let top = await Task.detached(priority: .userInitiated) {
                     Array(DiscoverScorer.score(entries: pool, ranked: ranked, options: options)

@@ -76,6 +76,8 @@ enum PSNReviewGroup: String, CaseIterable, Sendable, Hashable {
     case psPlus
     /// Already in your library — the import only adds played / play time / dates.
     case alreadyInLibrary
+    /// Moved to the Vault by the 10-minute rule (PLAN §16) — browsable there, never imported here.
+    case inTheVault
     /// Filtered noise (with a reason).
     case ignored
 
@@ -87,6 +89,7 @@ enum PSNReviewGroup: String, CaseIterable, Sendable, Hashable {
         case .purchased: return "Purchased"
         case .psPlus: return "PS Plus"
         case .alreadyInLibrary: return "Already in your library"
+        case .inTheVault: return "In the Vault"
         case .ignored: return "Ignored"
         }
     }
@@ -96,6 +99,7 @@ enum PSNReviewGroup: String, CaseIterable, Sendable, Hashable {
         case .psPlus: return "expires with the subscription"
         case .launched: return "a game you merely launched — tick any you actually played"
         case .playedNoPurchase: return "imported as played, not owned"
+        case .inTheVault: return "barely played (under 10 min) — browse them in the Vault"
         default: return nil
         }
     }
@@ -137,6 +141,12 @@ final class ImportReviewModel {
     /// A file source shows a header toggle to use its own cover art where a game has none.
     let showsSourceCoverToggle: Bool
     var useSourceCovers: Bool
+    /// Whether the header shows the **Mac when available / Always PC** platform switch — only for
+    /// importers whose rows can actually be re-mapped between pc and mac (GOG; Delicious for its
+    /// hybrid discs). Off for PSN / Batocera, where it is meaningless (coordinator, 2026-09-20).
+    let showsPlatformPolicy: Bool
+    /// Select the PS Plus Vault sidebar row and close the sheet ("Show in the Vault", PLAN §16).
+    @ObservationIgnored var onShowInVault: () -> Void = {}
     /// Ran after a successful commit (Delicious live: apply the source's covers). The Bool
     /// is `useSourceCovers`.
     @ObservationIgnored private let afterCommit: (@Sendable (ImportCommitResult, Bool) async -> Void)?
@@ -184,6 +194,7 @@ final class ImportReviewModel {
          platformChoices: [String] = ["pc", "mac"],
          detectShelfDuplicates: Bool = false,
          showsSourceCoverToggle: Bool = false,
+         showsPlatformPolicy: Bool = false,
          romPromotion: Bool = false,
          rowDetailByID: [String: String] = [:],
          customCommit: (@Sendable ([ImportReviewCommitRow]) async throws -> ImportCommitResult)? = nil,
@@ -198,6 +209,7 @@ final class ImportReviewModel {
         self.platformChoices = platformChoices
         self.detectShelfDuplicates = detectShelfDuplicates
         self.showsSourceCoverToggle = showsSourceCoverToggle
+        self.showsPlatformPolicy = showsPlatformPolicy
         self.romPromotion = romPromotion
         self.rowDetailByID = rowDetailByID
         self.customCommit = customCommit
@@ -333,6 +345,9 @@ final class ImportReviewModel {
     /// PS Plus (a subscription claim) → owned+played → purchased → launched-0 % →
     /// played-only → (fallback) purchased.
     func psnGroup(for row: ImportReviewRow) -> PSNReviewGroup {
+        // A claim the 10-minute rule sent to the Vault shows in its own collapsed group, not as
+        // an ordinary Ignored row (PLAN §16).
+        if transientByID[row.externalID]?.ignoreReason == .vaultedSubscription { return .inTheVault }
         if row.ignored { return .ignored }
         if row.matchedGameID != nil { return .alreadyInLibrary }
         let t = transientByID[row.externalID]
@@ -342,6 +357,11 @@ final class ImportReviewModel {
         if t?.launchedNotPlayed == true { return .launched }
         if signals.contains(.played) { return .playedNoPurchase }
         return .purchased
+    }
+
+    /// Ticked (will-import) count in a PSN group, for the "ticked / total" header.
+    func psnTickedCount(in group: PSNReviewGroup) -> Int {
+        rows.filter { psnGroup(for: $0) == group && $0.isCommittable }.count
     }
 
     func psnRows(in group: PSNReviewGroup) -> [ImportReviewRow] {
@@ -567,6 +587,12 @@ final class ImportReviewModel {
                 // File sources (Delicious) can apply their own covers to games left
                 // without one — a background step, never blocking the success banner.
                 if let after { await after(result, useCovers) }
+                // Promotion-on-play (PLAN §16): a PS Plus claim that crossed the 10-minute gate
+                // was just imported as an owned-via-subscription copy — link its Vault row to the
+                // new game so the browser shows "In Library". Idempotent; no-op for other sources.
+                if source == ImportSourceID.psn {
+                    try? await RomCatalogStore(store.database).linkPromotedFromProducts(source: source)
+                }
                 successMessage = psnBanner ?? Self.successMessage(from: result, sourceLabel: sourceLabel)
                 committed = true
                 onLibraryChanged()
@@ -611,6 +637,8 @@ final class ImportReviewModel {
 struct ImportReviewSheet: View {
     @Bindable var model: ImportReviewModel
     var onClose: () -> Void = {}
+    /// The "In the Vault (N)" group is collapsed by default (PLAN §16 — read-only, out of the way).
+    @State private var vaultExpanded = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -652,12 +680,16 @@ struct ImportReviewSheet: View {
                 }
             }
             Spacer()
-            Picker("Platform", selection: $model.platformPolicy) {
-                ForEach(ImportPlatformPolicy.allCases, id: \.self) { Text($0.label).tag($0) }
+            // The pc/mac platform switch is meaningful only where rows can be re-mapped between
+            // pc and mac (GOG; Delicious hybrid discs) — hidden for PSN / Batocera (coordinator).
+            if model.showsPlatformPolicy {
+                Picker("Platform", selection: $model.platformPolicy) {
+                    ForEach(ImportPlatformPolicy.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
         }
         .padding(12)
     }
@@ -687,15 +719,19 @@ struct ImportReviewSheet: View {
     private var psnList: some View {
         List {
             ForEach(model.presentPSNGroups, id: \.self) { group in
-                Section {
-                    ForEach(model.psnRows(in: group)) { row in
-                        PSNReviewRowView(model: model, row: row, group: group)
+                if group == .inTheVault {
+                    Section { inTheVaultGroup }
+                } else {
+                    Section {
+                        ForEach(model.psnRows(in: group)) { row in
+                            PSNReviewRowView(model: model, row: row, group: group)
+                        }
+                        if group == .playedNoPurchase {
+                            ownAsRow
+                        }
+                    } header: {
+                        psnGroupHeader(group)
                     }
-                    if group == .playedNoPurchase {
-                        ownAsRow
-                    }
-                } header: {
-                    psnGroupHeader(group)
                 }
             }
             if !model.proposedRemovals.isEmpty {
@@ -718,17 +754,42 @@ struct ImportReviewSheet: View {
         .listStyle(.inset)
     }
 
+    /// The collapsed, read-only "In the Vault (N)" group (PLAN §16): the barely-played claims
+    /// the 10-minute rule moved to the Vault, with a button that opens the Vault browser.
+    private var inTheVaultGroup: some View {
+        let rows = model.psnRows(in: .inTheVault)
+        return DisclosureGroup(isExpanded: $vaultExpanded) {
+            ForEach(rows) { row in
+                PSNReviewRowView(model: model, row: row, group: .inTheVault)
+            }
+        } label: {
+            HStack {
+                Image(systemName: "archivebox").foregroundStyle(.secondary)
+                Text("In the Vault").font(.headline)
+                Text("\(rows.count)").foregroundStyle(.secondary)
+                Spacer()
+                Button("Show in the Vault") { model.onShowInVault(); onClose() }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("review.showInVault")
+            }
+        }
+    }
+
     private func psnGroupHeader(_ group: PSNReviewGroup) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        let total = model.psnRows(in: group).count
+        let hasTicks = group != .ignored && group != .alreadyInLibrary && group != .inTheVault
+        return VStack(alignment: .leading, spacing: 1) {
             HStack {
                 if group == .psPlus {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(Color(hex: "#0070D1") ?? .blue)
                 }
                 Text(group.label).font(.headline)
-                Text("\(model.psnRows(in: group).count)").foregroundStyle(.secondary)
+                // "ticked / total" for groups with checkboxes; a plain total otherwise (coordinator).
+                Text(hasTicks ? "\(model.psnTickedCount(in: group)) / \(total)" : "\(total)")
+                    .foregroundStyle(.secondary)
                 Spacer()
-                if group != .ignored && group != .alreadyInLibrary {
+                if hasTicks {
                     Button("All") { model.selectAllPSN(in: group) }.controlSize(.small)
                     Button("None") { model.selectNonePSN(in: group) }.controlSize(.small)
                 }
@@ -976,9 +1037,12 @@ private struct PSNReviewRowView: View {
     let row: ImportReviewRow
     let group: PSNReviewGroup
 
+    /// Read-only groups have no include checkbox and no ignore/restore menu.
+    private var isReadOnly: Bool { group == .inTheVault }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            if group != .ignored { includeCheckbox }
+            if group != .ignored && !isReadOnly { includeCheckbox }
             ImportCoverThumb(imageID: row.proposedMatch?.coverImageID)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -1008,18 +1072,20 @@ private struct PSNReviewRowView: View {
                 }
             }
             Spacer(minLength: 8)
-            Menu {
-                MatchAlternativesSection(alternatives: row.alternatives) { alt in
-                    model.chooseAlternative(alt, externalID: row.externalID)
-                }
-                Divider()
-                if group == .ignored {
-                    Button("Restore") { model.restore(row.externalID) }
-                } else {
-                    Button("Ignore", role: .destructive) { model.ignore(row.externalID) }
-                }
-            } label: { Image(systemName: "ellipsis.circle") }
-                .menuStyle(.borderlessButton).fixedSize()
+            if !isReadOnly {
+                Menu {
+                    MatchAlternativesSection(alternatives: row.alternatives) { alt in
+                        model.chooseAlternative(alt, externalID: row.externalID)
+                    }
+                    Divider()
+                    if group == .ignored {
+                        Button("Restore") { model.restore(row.externalID) }
+                    } else {
+                        Button("Ignore", role: .destructive) { model.ignore(row.externalID) }
+                    }
+                } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton).fixedSize()
+            }
         }
         .padding(.vertical, 2)
     }

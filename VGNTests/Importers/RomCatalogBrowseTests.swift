@@ -126,5 +126,17 @@ struct RomCatalogBrowseTests {
         #expect(after.0 == before.0)   // every library count is unchanged
         // And the Vault's own count is never part of SidebarCounts.
         #expect(before.0.count(for: .vault(.batocera)) == nil)
+
+        // PLAN §16: PS Plus Vault rows are equally invisible to the library (extend the guard).
+        _ = try await store.syncPSNVault(
+            entries: (0..<200).map {
+                RomCatalogEntry.makePSNVault(externalID: "ent:\($0)", platform: "ps5",
+                                             name: "PS \($0)", coverURL: nil, membership: "ps_plus")
+            },
+            presentExternalIDs: Set((0..<200).map { "ent:\($0)" }))
+        #expect(try await store.sourceCounts().psn == 200)
+        let afterPSN = try await libraryCounts()
+        #expect(afterPSN.0 == before.0)                       // still every library count unchanged
+        #expect(before.0.count(for: .vault(.psn)) == nil)     // never part of SidebarCounts
     }
 }

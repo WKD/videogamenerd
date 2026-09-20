@@ -160,9 +160,10 @@ enum DiscoverScorer {
             timeTerm = weights.timeFitWeight * (fit.fit - 1)
         }
 
-        // PS Plus deadline ramp / constant fallback (PLAN §16) — only for PS Plus entries.
+        // PS Plus deadline ramp / constant fallback (PLAN §16) — only for PS Plus subscription
+        // entries (a hand-vaulted *owned* purchase never gets it).
         var subBonus = 0.0
-        let isPSPlus = entry.vaultSource == .psn
+        let isPSPlus = entry.isPSPlusSubscription
         if isPSPlus {
             if options.psPlusMonthsLeft != nil {
                 subBonus = PSPlusDeadlineBoost.boost(monthsLeft: options.psPlusMonthsLeft,

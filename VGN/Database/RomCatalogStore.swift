@@ -23,7 +23,8 @@ struct RomCatalogStore: Sendable {
         release_year, rating, players, play_count, game_time_s, last_played_at, favorite,
         image_path, thumbnail_path, first_seen_at, last_seen_at, removed_at, promoted_game_id,
         dismissed_at, not_interested, external_id, cover_url, membership, cross_gen_note,
-        igdb_id, length_main_s, length_complete_s, traits_json, igdb_rating, match_state, matched_at
+        igdb_id, length_main_s, length_complete_s, traits_json, igdb_rating, match_state, matched_at,
+        owned
         """
 
     // MARK: - Sync (upsert + removal, one transaction per system)
@@ -651,6 +652,92 @@ struct RomCatalogStore: Sendable {
         }
     }
 
+    /// Link any Vault row of `source` to a library game that now owns a product with the same
+    /// `external_id` — the **promotion-on-play** bridge (PLAN §16): after a PS Plus claim crosses
+    /// the 10-minute gate and is imported as an owned-via-subscription copy, its Vault row points
+    /// at the new game so the browser shows "In Library". Idempotent; only fills empty links.
+    func linkPromotedFromProducts(source: String) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE rom_catalog
+                SET promoted_game_id = (
+                    SELECT pg.game_id FROM products p
+                    JOIN product_games pg ON pg.product_id = p.id
+                    WHERE p.source = ? AND p.external_id = rom_catalog.external_id
+                    ORDER BY pg.position LIMIT 1)
+                WHERE source = ? AND external_id IS NOT NULL AND promoted_game_id IS NULL
+                  AND EXISTS (
+                    SELECT 1 FROM products p JOIN product_games pg ON pg.product_id = p.id
+                    WHERE p.source = ? AND p.external_id = rom_catalog.external_id)
+                """, arguments: [source, source, source])
+        }
+    }
+
+    // MARK: - The Vault: manual "Send to the Vault" (PLAN §16 — three fates)
+
+    /// The result of a manual send, so the review sheet's one-step Undo removes exactly the rows
+    /// it created and leaves refreshed ones alone.
+    struct VaultSendResult: Sendable, Equatable {
+        var insertedIDs: [Int64] = []
+        var updatedIDs: [Int64] = []
+        var affectedIDs: [Int64] { insertedIDs + updatedIDs }
+    }
+
+    /// Upsert entries the owner sent to the Vault by hand (PLAN §16). Keyed by
+    /// `(source, system, relative_path)`; a present row refreshes, a new one is inserted. Carries
+    /// the `owned` flag (a purchase never gets the PS Plus boost), any IGDB id the review row
+    /// already had, `membership`, cover URL and cross-gen note. Never marks anything removed.
+    @discardableResult
+    func sendToVault(_ entries: [RomCatalogEntry]) async throws -> VaultSendResult {
+        guard !entries.isEmpty else { return VaultSendResult() }
+        return try await dbWriter.write { db in
+            var result = VaultSendResult()
+            let now = Date()
+            for e in entries {
+                let existing = try Int64.fetchOne(db, sql: """
+                    SELECT id FROM rom_catalog WHERE source = ? AND system = ? AND relative_path = ?
+                    """, arguments: [e.source, e.system, e.relativePath])
+                if let id = existing {
+                    try db.execute(sql: """
+                        UPDATE rom_catalog SET
+                            platform_id = ?, name = ?, sort_title = ?, normalised_title = ?,
+                            cover_url = ?, membership = ?, cross_gen_note = ?, external_id = ?,
+                            igdb_id = COALESCE(?, igdb_id), owned = ?, last_seen_at = ?, removed_at = NULL
+                        WHERE id = ?
+                        """, arguments: [
+                            e.platformID, e.name, e.sortTitle, e.normalisedTitle, e.coverURL,
+                            e.membership, e.crossGenNote, e.externalIDColumn ?? e.relativePath,
+                            e.igdbID, e.owned, now, id])
+                    result.updatedIDs.append(id)
+                } else {
+                    try db.execute(sql: """
+                        INSERT INTO rom_catalog
+                            (source, system, platform_id, relative_path, name, sort_title,
+                             normalised_title, cover_url, membership, cross_gen_note, external_id,
+                             igdb_id, owned, first_seen_at, last_seen_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, arguments: [
+                            e.source, e.system, e.platformID, e.relativePath, e.name, e.sortTitle,
+                            e.normalisedTitle, e.coverURL, e.membership, e.crossGenNote,
+                            e.externalIDColumn ?? e.relativePath, e.igdbID, e.owned, now, now])
+                    result.insertedIDs.append(db.lastInsertedRowID)
+                }
+            }
+            return result
+        }
+    }
+
+    /// Hard-delete Vault rows (the Undo of a manual "Send to the Vault"). Only used to reverse a
+    /// send this session created, so a soft `removed_at` is not enough (the row must not linger).
+    func deleteEntries(ids: [Int64]) async throws {
+        guard !ids.isEmpty else { return }
+        try await dbWriter.write { db in
+            let placeholders = databaseQuestionMarks(count: ids.count)
+            try db.execute(sql: "DELETE FROM rom_catalog WHERE id IN (\(placeholders))",
+                           arguments: StatementArguments(ids))
+        }
+    }
+
     // MARK: - Row decode
 
     static func entry(from r: Row) -> RomCatalogEntry {
@@ -673,7 +760,8 @@ struct RomCatalogStore: Sendable {
             lengthCompleteSeconds: r["length_complete_s"], traitsJSON: r["traits_json"],
             igdbRating: r["igdb_rating"],
             matchState: (r["match_state"] as String?).flatMap(VaultMatchState.init(rawValue:)),
-            matchedAt: r["matched_at"])
+            matchedAt: r["matched_at"],
+            owned: (r["owned"] as Int64? ?? 0) != 0)
     }
 }
 

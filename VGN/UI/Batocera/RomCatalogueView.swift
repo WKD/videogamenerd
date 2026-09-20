@@ -43,6 +43,9 @@ struct RomCatalogueContent: View {
             Divider()
             list
         }
+        .sheet(item: $model.findMatchModel) { linkModel in
+            IGDBLinkSheet(model: linkModel)
+        }
     }
 
     // MARK: Controls
@@ -130,7 +133,7 @@ struct RomCatalogueContent: View {
 
     @ViewBuilder
     private var selectionActions: some View {
-        Button("Add to Library…") { env.addToLibrary?(Array(model.selection)) }
+        Button("Add to Library…") { addSelectionToLibrary() }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
             .disabled(model.selection.isEmpty)
@@ -150,15 +153,7 @@ struct RomCatalogueContent: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(model.entries) { entry in
-                    RomCatalogueRow(
-                        entry: entry, env: env,
-                        isSelected: model.selection.contains(entry.id),
-                        loader: model.thumbnails,
-                        onTap: { model.selectOnly(entry.id) },
-                        onCommandTap: { model.toggle(entry.id) },
-                        onAdd: { env.addToLibrary?(model.actionIDs(for: entry.id)) },
-                        onNotInterested: { markNotInterested(entry.id) },
-                        onInspect: { gid in env.inspectGame?(gid) })
+                    row(for: entry)
                     Divider()
                     .onAppear { if entry.id == model.entries.last?.id { model.loadMore() } }
                 }
@@ -169,12 +164,71 @@ struct RomCatalogueContent: View {
         }
     }
 
+    @ViewBuilder
+    private func row(for entry: RomCatalogEntry) -> some View {
+        if entry.vaultSource == .psn {
+            VaultBrowserRow(
+                entry: entry, env: env,
+                isSelected: model.selection.contains(entry.id),
+                onTap: { model.selectOnly(entry.id) },
+                onCommandTap: { model.toggle(entry.id) },
+                onAdd: { model.addPSPlusToLibrary(ids: model.actionIDs(for: entry.id)) },
+                onNotInterested: { markNotInterested(entry.id) },
+                onFindMatch: { openFindMatch(entry) },
+                onInspect: { gid in env.inspectGame?(gid) })
+        } else {
+            RomCatalogueRow(
+                entry: entry, env: env,
+                isSelected: model.selection.contains(entry.id),
+                loader: model.thumbnails,
+                onTap: { model.selectOnly(entry.id) },
+                onCommandTap: { model.toggle(entry.id) },
+                onAdd: { env.addToLibrary?(model.actionIDs(for: entry.id)) },
+                onNotInterested: { markNotInterested(entry.id) },
+                onInspect: { gid in env.inspectGame?(gid) })
+        }
+    }
+
+    /// "Add to Library…" for the top-bar multi-selection, routed by source: PS Plus commits
+    /// owned-via-subscription copies; Batocera opens the promotion review.
+    private func addSelectionToLibrary() {
+        let ids = Array(model.selection)
+        guard !ids.isEmpty else { return }
+        if model.source == .psn {
+            model.addPSPlusToLibrary(ids: ids)
+            model.clearSelection()
+        } else {
+            env.addToLibrary?(ids)
+        }
+    }
+
+    /// Open the manual "Find match…" sheet for a PS Plus entry, reusing the reconcile link
+    /// sheet's search UI (PLAN §16). On choosing a game, its traits are fetched and persisted.
+    private func openFindMatch(_ entry: RomCatalogEntry) {
+        guard let seam = env.findMatch else { return }
+        let title = PSNMapping.cleanMatchTitle(entry.name)
+        let platforms = [entry.platformID].compactMap { $0 }
+        let linkModel = IGDBLinkModel(
+            gameID: entry.id, currentTitle: title,
+            platformSlugs: platforms, year: entry.releaseYear,
+            isLinked: entry.igdbID != nil, prefill: title,
+            searcher: seam.searcher, platformIGDBIDs: seam.platformIGDBIDs(entry.platformID))
+        linkModel.onChoose = { choice in
+            let apply = seam.apply
+            Task {
+                await apply(entry.id, choice.igdbID)
+                model.findMatchModel = nil
+                model.reload()
+            }
+        }
+        linkModel.onCancel = { model.findMatchModel = nil }
+        model.findMatchModel = linkModel
+    }
+
     private func markNotInterested(_ id: Int64) {
-        guard let entry = model.entries.first(where: { $0.id == id }) else { return }
         let catalog = env.catalog
         Task { try? await catalog.setNotInterested(catalogID: id) }
         model.reload()
-        _ = entry
     }
 }
 

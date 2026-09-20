@@ -55,6 +55,25 @@ enum BatoceraBuilder {
             ? LiveDiscoverBackend(recommendation: recommendation, catalog: catalog, library: library)
             : InertDiscoverBackend()
 
+        // The Vault's PS Plus manual "Find match…" seam — IGDB search + apply — only when IGDB
+        // is configured in live mode (PLAN §16).
+        var findMatch: VaultFindMatchSeam?
+        if isLive, let graph, let platformCatalog,
+           secrets.hasValue(for: .igdbClientID), secrets.hasValue(for: .igdbClientSecret) {
+            let searcher = LiveCatalogSearcher(client: graph.igdbClient, credentials: graph.credentials)
+            let metadata = IGDBVaultMetadataFetcher(client: graph.igdbClient)
+            findMatch = VaultFindMatchSeam(
+                searcher: searcher,
+                platformIGDBIDs: { slug in slug.flatMap { platformCatalog.entry(forSlug: $0)?.igdbIDs } ?? [] },
+                apply: { catalogID, igdbID in
+                    let info = (try? await metadata.info(igdbIDs: [igdbID]))?[igdbID]
+                    try? await catalog.setVaultMatch(
+                        id: catalogID, igdbID: info?.igdbID ?? igdbID, traits: info?.traits ?? [],
+                        lengthMainSeconds: info?.lengthMainSeconds,
+                        lengthCompleteSeconds: info?.lengthCompleteSeconds, igdbRating: info?.igdbRating)
+                })
+        }
+
         let environment = BatoceraEnvironment(
             catalog: catalog,
             thumbnails: thumbnails,
@@ -63,7 +82,8 @@ enum BatoceraBuilder {
             romsRoot: romsRoot,
             addToLibrary: { [weak presenter] ids in presenter?.addToLibrary(catalogIDs: ids) },
             inspectGame: { [weak vm] id in vm?.selectOnly(id); vm?.showInspector() },
-            showCatalogue: { [weak vm] in vm?.select(.vault(.batocera)) })
+            showCatalogue: { [weak vm] in vm?.select(.vault(.batocera)) },
+            findMatch: findMatch)
 
         let settings = BatoceraSettingsModel(backend: backend)
         // After a sync the presenter auto-adds favourites with a confident match (with an Undo

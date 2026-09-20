@@ -366,6 +366,34 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   empties the Vault. A legitimate sync with zero remaining PS Plus claims would (correctly)
   remove them; `removed_at` is recoverable, not a delete.
 
+## 5b. The Vault — wave 15 (UI wired)
+- **The "Not yet wired" list above is now done [done].** The IGDB trait pass
+  (`VaultTraitMatcher` + `VaultTraitMatchModel`, Settings status line + "Match more now"),
+  the PS Plus browser row (remote cover, "+" marker, IGDB facts, match state, Add to
+  Library…, Not Interested, Find match…), the Settings deadline picker threaded into both
+  scorers, the review sheet's collapsed "In the Vault (N)" group + "Show in the Vault",
+  promotion-on-play linking, and the "Prioritise PS Plus games" rename (on by default) are
+  all wired. Matching progress now shows a determinate bar + "Matching N of M · Title" + ETA.
+- **No PlayStation Store link [by design].** A correct product URL is not derivable from the
+  stored fields — the PSN external id is an entitlement id, not a store/concept id
+  (`conceptId` is null on every purchase row, `docs/psn-import.md`). The action is omitted.
+- **"Send to the Vault" is foundations-only [pending].** The explicit fourth fate (PLAN §16
+  "Three fates for a review row") has its data layer in — migration **v12** adds
+  `rom_catalog.owned`, `RomCatalogStore.sendToVault` / `deleteEntries` exist, `DiscoverScorer`
+  skips the PS Plus term for `owned` entries (`RomCatalogEntry.isPSPlusSubscription`), and the
+  browser shows an "Owned" marker instead of "+". **Not built:** the per-row / group "Send to
+  the Vault" action in the review sheet, `ImportDecision.vault` (persisting the decision so
+  later syncs don't re-propose and it shows in the "In the Vault (N)" group), the group-action
+  undo, and — because the Vault sidebar/browser models only two sources (`batocera` / `psn`) —
+  vaulting **GOG / Delicious** rows (they would land under a source with no Vault home;
+  extending needs a general Vault source beyond the two-case `VaultSource`).
+- **Resume-after-cancel re-queries [pending].** The matching progress sheet's Cancel stops the
+  pass promptly and the coordinator returns the matches gathered so far, but match outcomes are
+  **not persisted per item** (they flow transiently into the review sheet), so a re-run
+  re-queries IGDB for every unmatched row rather than resuming. True resume needs a persisted
+  per-title match outcome (a staging column) so already-attempted rows are skipped and their
+  alternatives restored.
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.

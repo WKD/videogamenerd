@@ -157,7 +157,7 @@ struct PlayNextBracketBar: View {
                 get: { model.includePlayedWithoutStatus },
                 set: { model.setIncludePlayedWithoutStatus($0) }))
             Divider()
-            Toggle("Prefer expiring PS Plus games", isOn: Binding(
+            Toggle("Prioritise PS Plus games", isOn: Binding(
                 get: { model.preferExpiringSubscription },
                 set: { model.setPreferExpiringSubscription($0) }))
         } label: {

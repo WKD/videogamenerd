@@ -63,6 +63,9 @@ struct ImportSyncCoordinator: Sendable {
         let toMatch = titles.filter { $0.bucket == .new }
         var matches: [ImportMatchResult] = []
         for (index, title) in toMatch.enumerated() {
+            // Cancel stops promptly after the current item, not only at the next await; the
+            // matches gathered so far are returned so the caller can open the review with them.
+            if Task.isCancelled { break }
             onProgress(ImportProgress(phase: .matching, completed: index, total: toMatch.count,
                                       detail: title.name))
             let row = rowsByExternalID[title.externalID]

@@ -35,6 +35,7 @@ enum PSNImportBuilder {
         let backend: any ImportBackend
         var login: PSNLoginConfig?
         var expiryProvider: @Sendable () async -> Date? = { nil }
+        var vaultMatch: VaultTraitMatchModel?
         #if DEBUG
         var buildSteps: PSNBuildStepsModel?
         #endif
@@ -71,6 +72,16 @@ enum PSNImportBuilder {
             backend = LivePSNImportBackend(
                 auth: auth, importer: importer, coordinator: coordinator,
                 matcher: matcher, cache: cache, staging: staging)
+
+            // The Vault IGDB trait-matching pass (PLAN §16) exists only when IGDB can match —
+            // it fills PS Plus entries with traits / rating / time-to-beat so they can be
+            // suggested in "From the vault". Built here, attached to the account model below.
+            if configured {
+                let traitMatcher = VaultTraitMatcher(
+                    catalog: RomCatalogStore(database), matcher: matcher,
+                    metadata: IGDBVaultMetadataFetcher(client: graph.igdbClient))
+                vaultMatch = VaultTraitMatchModel(catalog: RomCatalogStore(database), matcher: traitMatcher)
+            }
             login = PSNLoginConfig(
                 loginURL: auth.loginURL,
                 policy: auth.navigationPolicy,
@@ -94,6 +105,9 @@ enum PSNImportBuilder {
         let liveBuilt = backend is LivePSNImportBackend
         let account = PSNAccountModel(backend: backend, login: login)
         account.sessionExpiryProvider = expiryProvider
+        account.vaultMatch = vaultMatch
+        // Fill any PS Plus entries left from an earlier sync once at launch (PLAN §16).
+        vaultMatch?.refreshAndRun()
         #if DEBUG
         account.buildSteps = buildSteps
         #endif
