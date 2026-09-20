@@ -54,10 +54,11 @@ protocol LibraryDataSource: Sendable {
     /// A cheap aggregate snapshot for the sidebar stats popover (PLAN §6.4).
     func libraryStats() async -> LibraryStats
 
-    /// Live present-entry count of the Batocera ROM catalogue (PLAN §15). A **separate**
-    /// observation from `sidebarCounts` — the catalogue is a distinct shelf, so its writes
-    /// never disturb the library counts stream and its number never enters `SidebarCounts`.
-    func romCatalogueCount() -> AsyncStream<Int>
+    /// Live present-entry counts of **The Vault**, per source (PLAN §16). A **separate**
+    /// observation from `sidebarCounts` — the Vault is a distinct shelf, so its writes never
+    /// disturb the library counts stream and its numbers never enter `SidebarCounts`. One
+    /// observation feeds both THE VAULT rows and their visibility.
+    func vaultSourceCounts() -> AsyncStream<VaultSourceCounts>
 }
 
 extension LibraryDataSource {
@@ -66,8 +67,8 @@ extension LibraryDataSource {
     func scoreLineStream(for gameID: Int64) -> AsyncStream<DerivedScoreLine?> { onceStream(nil) }
     func scoresStream() -> AsyncStream<[Int64: DerivedScoreValue]> { onceStream([:]) }
     func libraryStats() async -> LibraryStats { .empty }
-    /// Preview / non-catalogue sources report an empty catalogue (the Batocera section hides).
-    func romCatalogueCount() -> AsyncStream<Int> { onceStream(0) }
+    /// Preview / non-Vault sources report an empty Vault (both THE VAULT rows hide).
+    func vaultSourceCounts() -> AsyncStream<VaultSourceCounts> { onceStream(VaultSourceCounts()) }
 }
 
 /// Emits a single value then finishes — the shape a static/preview source uses.
@@ -109,8 +110,8 @@ enum LibraryFilterEvaluator {
             // Ranking destinations render a placeholder, not the grid; scope to
             // played games so any incidental query is still sensible.
             if !game.played { return false }
-        case .romCatalogue:
-            // The ROM catalogue renders its own browser (a separate table), never the grid.
+        case .vault:
+            // The Vault renders its own browser (a separate table), never the grid.
             return false
         }
         // Text

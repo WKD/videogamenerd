@@ -1,5 +1,13 @@
 # Batocera ROM catalogue & promotion (PLAN §15, phase 1)
 
+> **Wave 14 (PLAN §16 — The Vault):** the "ROM Catalogue" is now one of two sources in **The
+> Vault** (the other is PS Plus, `docs/psn-import.md`). The sidebar section is **THE VAULT**
+> with a **Batocera ROMs** row and a **PS Plus** row; the shared table is still `rom_catalog`
+> (migration v11 added the nullable PS Plus columns). Batocera behaviour is otherwise
+> unchanged. The Play Next "Discover on your Batocera" row will become **"From the vault"**
+> over both sources (scorer done; the row's UI rewrite is pending — see `docs/LIMITATIONS.md`).
+
+
 Phase 1 = **services + database + model + tests**, no UI. It reads the owner's Batocera
 share read-only, keeps every ROM in a **separate catalogue** (`rom_catalog`), and promotes
 only the ROMs actually played (> 5 min) or favourited into the real library through the

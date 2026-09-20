@@ -135,6 +135,10 @@ enum PlayNextReason: Hashable, Sendable {
     case batoceraFavourite
     /// A never-played Batocera favourite pinned at the head of the Discover row (PLAN §15).
     case batoceraFavouritePinned
+    /// A PS Plus game with a cancellation date set — "leaves with PS Plus · ~N months left ·
+    /// about H h for you" (PLAN §16). `monthsLeft` / `personalLengthSeconds` are nil when
+    /// unknown, and the formatter omits those clauses.
+    case leavesWithSubscriptionDeadline(monthsLeft: Int?, personalLengthSeconds: Int?)
 }
 
 // MARK: - Suggestion + result

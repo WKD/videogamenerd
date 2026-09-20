@@ -165,8 +165,16 @@ struct RecommendationOptions: Hashable, Sendable {
     /// Max entries in the unknown-length lane.
     var maxUnknownLength: Int
     /// Prefer games owned only via PS Plus (a small, backtest-neutral nudge that only
-    /// reorders near-ties, PLAN §13.3). Off by default.
+    /// reorders near-ties, PLAN §13.3 — the "Prioritise PS Plus games" fallback when no
+    /// cancellation date is set). Off by default so the taste backtest stays neutral; the UI
+    /// passes it on.
     var preferExpiringSubscription: Bool
+    /// Months until the owner plans to leave PS Plus (nil ⇒ no date; the constant fallback
+    /// above applies instead). When set, PS Plus games get the ``PSPlusDeadlineBoost`` ramp
+    /// instead of the constant (PLAN §16). Default nil keeps the backtest neutral.
+    var psPlusMonthsLeft: Double?
+    /// The owner's weekly pace, for the deadline finishability (§15). Default `.default`.
+    var psPlusPace: PlayPace
 
     init(
         includeAbandoned: Bool = false,
@@ -175,7 +183,9 @@ struct RecommendationOptions: Hashable, Sendable {
         now: Double = Date().timeIntervalSince1970,
         maxAlternatives: Int = 4,
         maxUnknownLength: Int = 8,
-        preferExpiringSubscription: Bool = false
+        preferExpiringSubscription: Bool = false,
+        psPlusMonthsLeft: Double? = nil,
+        psPlusPace: PlayPace = .default
     ) {
         self.includeAbandoned = includeAbandoned
         self.includePlayedWithoutStatus = includePlayedWithoutStatus
@@ -184,6 +194,8 @@ struct RecommendationOptions: Hashable, Sendable {
         self.maxAlternatives = maxAlternatives
         self.maxUnknownLength = maxUnknownLength
         self.preferExpiringSubscription = preferExpiringSubscription
+        self.psPlusMonthsLeft = psPlusMonthsLeft
+        self.psPlusPace = psPlusPace
     }
 }
 

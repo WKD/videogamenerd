@@ -63,7 +63,7 @@ enum BatoceraBuilder {
             romsRoot: romsRoot,
             addToLibrary: { [weak presenter] ids in presenter?.addToLibrary(catalogIDs: ids) },
             inspectGame: { [weak vm] id in vm?.selectOnly(id); vm?.showInspector() },
-            showCatalogue: { [weak vm] in vm?.select(.romCatalogue) })
+            showCatalogue: { [weak vm] in vm?.select(.vault(.batocera)) })
 
         let settings = BatoceraSettingsModel(backend: backend)
         // After a sync the presenter auto-adds favourites with a confident match (with an Undo

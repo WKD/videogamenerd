@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// The ROM Catalogue browser (PLAN §15) — the sidebar "Batocera ▸ ROM Catalogue" destination.
-/// A wholly separate view from the library grid: it reads only `rom_catalog` (through
-/// ``RomCatalogueModel``), shows the shelf per system with search / sort / filters, and offers
-/// "Add to Library…", "Not Interested" and "Show in Finder". The library, its counts, stats,
+/// The Vault browser (PLAN §16) — the sidebar "THE VAULT ▸ Batocera ROMs / PS Plus"
+/// destination. A wholly separate view from the library grid: it reads only `rom_catalog`
+/// (through ``RomCatalogueModel``), scoped to the selected source, shows the shelf per system
+/// with search / sort / filters, and offers "Add to Library…", "Not Interested" and (per
+/// source) "Show in Finder" / "Open in PlayStation Store". The library, its counts, stats,
 /// ranking and export never see any of it.
 struct RomCatalogueView: View {
+    /// The Vault source this browser is scoped to (PLAN §16).
+    var source: VaultSource = .batocera
     @Environment(\.batoceraEnvironment) private var env
     @State private var model: RomCatalogueModel?
 
@@ -14,14 +17,15 @@ struct RomCatalogueView: View {
             if let env, let model {
                 RomCatalogueContent(env: env, model: model)
             } else {
-                ContentUnavailableView("ROM Catalogue unavailable",
-                                       systemImage: "externaldrive",
-                                       description: Text("The Batocera catalogue isn't wired up."))
+                ContentUnavailableView("The Vault is unavailable",
+                                       systemImage: "archivebox",
+                                       description: Text("The Vault isn't wired up."))
             }
         }
-        .task {
-            guard model == nil, let env else { return }
-            let m = RomCatalogueModel(catalog: env.catalog, thumbnails: env.thumbnails)
+        // Rebuild the model when the source changes (switching Vault rows reuses this view).
+        .task(id: source) {
+            guard let env else { return }
+            let m = RomCatalogueModel(catalog: env.catalog, source: source, thumbnails: env.thumbnails)
             model = m
             m.start()
         }

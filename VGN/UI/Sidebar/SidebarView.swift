@@ -54,18 +54,21 @@ struct SidebarView: View {
 
             lengthSection
 
-            // "Batocera" — the ROM catalogue browser (PLAN §15). Shown ONLY when the
-            // catalogue is non-empty; its count comes from a SEPARATE observation
-            // (`vm.romCatalogueCount`), never the library counts, so 11 000 ROMs never touch
-            // any library number.
-            if vm.romCatalogueCount > 0 {
-                Section("Batocera") {
-                    taggedRow(.romCatalogue) {
-                        Label(Self.title(for: .romCatalogue), systemImage: Self.icon(for: .romCatalogue))
-                            .badge(vm.romCatalogueCount)
+            // "THE VAULT" — the Vault browser, one row per source (PLAN §16). Each row shown
+            // ONLY when that source is non-empty; the counts come from a SEPARATE observation
+            // (`vm.vaultCounts`), never the library counts, so 11 000 ROMs + PS Plus claims
+            // never touch any library number.
+            if vm.vaultCounts.total > 0 {
+                Section("THE VAULT") {
+                    ForEach(vm.vaultCounts.nonEmptySources) { src in
+                        taggedRow(.vault(src)) {
+                            Label(src.rowTitle, systemImage: src.icon)
+                                .badge(vm.vaultCounts.count(src))
+                        }
+                        .appKitTooltip("Games within reach that aren't your backlog — a browsable "
+                                       + "shelf that never counts in your library, stats or ranking. "
+                                       + "Add the ones you want.")
                     }
-                    .appKitTooltip("Your Batocera ROMs — a browsable shelf that never counts "
-                                   + "in your library, stats or ranking. Add the ones you want.")
                 }
             }
 
@@ -201,7 +204,7 @@ struct SidebarView: View {
         case .duel: return "Duel"
         case .length(let shelf): return shelf.name
         case .unmeasured: return LengthShelf.unmeasuredName
-        case .romCatalogue: return "ROM Catalogue"
+        case .vault(let source): return source.rowTitle
         case .platform(let slug): return PlatformLabels.info(slug)?.name ?? slug
         }
     }
@@ -220,7 +223,7 @@ struct SidebarView: View {
         case .duel: return "flag.2.crossed"
         case .length(let shelf): return shelf.symbol
         case .unmeasured: return LengthShelf.unmeasuredSymbol
-        case .romCatalogue: return "externaldrive"
+        case .vault(let source): return source.icon
         case .platform: return "gamecontroller"
         }
     }

@@ -330,6 +330,42 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   `BatoceraFavouriteAutoAdd.batchCap = 60`; the owner's ~247 favourites take ~4 syncs to fully
   match. Tunable in one place if that feels slow.
 
+## 5b. The Vault (PLAN §16, wave 14)
+
+- **Data / logic / ingestion are in; some UI is not yet wired [doing].** Migration **v11**
+  generalises `rom_catalog` to hold PS Plus entries (nullable columns, additive, FTS
+  untouched); the store has the Vault methods (`syncPSNVault`, `sourceCounts[Observation]`,
+  `unmatchedPSN`, `setVaultMatch` / `setVaultNoMatch`, `psnMatchProgress`,
+  `setPromotedByExternalID`, `vaultPool`); the sidebar is **THE VAULT** with per-source rows;
+  PS Plus ingestion runs after a PSN sync through the coordinator; `PSPlusDeadlineBoost` is
+  wired into the engine and the vault scorer. **Not yet wired this wave:**
+  - **IGDB trait-matching pass for PS Plus entries** — the store side is ready
+    (`unmatchedPSN(limit:)` / `setVaultMatch` / `setVaultNoMatch`, ≤ 60 per run, `match_state`
+    guards re-query), but the background service that drives the existing matcher + rate
+    limiter (like `BatoceraFavouriteAutoAdd`) and the Settings status line
+    ("Vault: N of M matched") are **not built**. Until then PS Plus entries stay unmatched, so
+    they are browsable but never suggested in "From the vault" (`isSuggestable == false`).
+  - **Browser PS-Plus row** — the browser is source-scoped, but the PS Plus row rendering
+    (remote cover through the cover cache, "PS Plus"/"+" marker, IGDB year/genre once matched,
+    *Add to Library…* via the PSN review, *Open in PlayStation Store*) is **not built**; the
+    system picker shows platform slugs.
+  - **Play Next "From the vault" row** — `DiscoverScorer` scores both sources and `vaultPool`
+    returns both, but `DiscoverModel`/`DiscoverRow` still read the Batocera-only pool and show
+    "Discover on your Batocera". The one combined row (and its rename) is **not wired**.
+  - **Settings deadline picker** — the engine and scorer accept `psPlusMonthsLeft` / pace, but
+    the *"I plan to leave PS Plus around [month year]"* picker + `AppPreferences` persistence
+    and the store threading months-left into `RecommendationOptions` are **not built**; the
+    old "Prefer expiring PS Plus games" toggle is **not yet renamed** to "Prioritise PS Plus
+    games" / defaulted on in the UI (the engine default stays off for backtest neutrality).
+  - **Review-sheet "In the Vault (N)" group** and **promotion-on-play linking**
+    (`setPromotedByExternalID` exists but is not called from the commit path) are **not wired**.
+- **Vault removal on an empty purchases fetch [watch].** `syncPSNVault` marks absent claims
+  `removed_at`. The importer only builds vault entries when purchases were actually fetched
+  (`includePurchases && !purchases.isEmpty`) and the presenter only upserts when
+  `vaultPresentIDs` is non-empty, so a skipped/rate-limited purchases page never wrongly
+  empties the Vault. A legitimate sync with zero remaining PS Plus claims would (correctly)
+  remove them; `removed_at` is recoverable, not a delete.
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.

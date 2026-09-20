@@ -167,9 +167,16 @@ struct PSNImporter: LibraryImporter, Sendable {
 
         progress(ImportProgress(phase: .staging))
         let rows = PSNMapping.stagingRows(trophyTitles: trophyTitles, gameList: gameList, purchases: purchases)
+        // The Vault (PLAN §16): the barely-touched PS Plus claims, separate from the staging
+        // rows. Only when purchases were actually fetched — an empty purchases list (fetch
+        // skipped / rate-limited) must not clear the whole Vault.
+        let vault = includePurchases && !purchases.isEmpty
+            ? PSNMapping.vaultEntries(trophyTitles: trophyTitles, gameList: gameList, purchases: purchases)
+            : (entries: [RomCatalogEntry](), presentExternalIDs: Set<String>())
         return ImportFetchResult(
             rows: rows, fromCache: await client.fromCache,
-            fromNetwork: await client.fromNetwork, budgetUsed: await client.budgetUsed)
+            fromNetwork: await client.fromNetwork, budgetUsed: await client.budgetUsed,
+            vaultEntries: vault.entries, vaultPresentIDs: vault.presentExternalIDs)
     }
 
     private func makeClient() -> PSNClient {

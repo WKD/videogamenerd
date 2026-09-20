@@ -54,6 +54,51 @@ enum PSNMapping {
         return index.ordered.compactMap { $0.row() }
     }
 
+    /// Build the PS Plus **Vault** entries from the three lists (PLAN §16). A vaulted game is a
+    /// PS Plus claim (never a bought copy) played at or below the 10-minute gate — including
+    /// never launched. Cross-gen twins are one entry (the same merge as ``stagingRows``), so a
+    /// re-sync is stable. Returns the entries plus the set of external ids currently vaulted,
+    /// for ``RomCatalogStore/syncPSNVault(entries:presentExternalIDs:)`` to remove claims that
+    /// vanished (or crossed the gate into the review sheet).
+    static func vaultEntries(trophyTitles: [PSNTrophyTitle],
+                             gameList: [PSNGameListTitle],
+                             purchases: [PSNPurchasedGame])
+        -> (entries: [RomCatalogEntry], presentExternalIDs: Set<String>) {
+        // The same merge as `stagingRows` (identical platform pick incl. the title-id fallback
+        // for `unknown` / `not_found` categories), so the Vault and the review sheet agree.
+        let index = MergeIndex()
+        for title in trophyTitles {
+            let p = platformSlugs(title.trophyTitlePlatform)
+            index.upsert(concept: nil, title: nil, name: title.trophyTitleName)
+                .absorbTrophy(title, slugs: p.all, combined: p.combined)
+        }
+        for title in gameList {
+            let slug = slug(fromCategory: title.category) ?? slug(fromTitleId: title.titleId)
+            index.upsert(concept: title.concept?.id, title: title.titleId, name: title.name)
+                .absorbGameList(title, slug: slug)
+        }
+        for purchase in purchases {
+            let (slug, _) = platformSlug(purchase.platform ?? "")
+            index.upsert(concept: purchase.conceptId, title: purchase.titleId, name: purchase.name)
+                .absorbPurchase(purchase, slug: slug)
+        }
+
+        var entries: [RomCatalogEntry] = []
+        var present = Set<String>()
+        for merged in index.ordered where merged.isVaulted {
+            let ext = merged.externalID
+            present.insert(ext)
+            entries.append(RomCatalogEntry.makePSNVault(
+                externalID: ext,
+                platform: merged.bestSlug ?? "",
+                name: merged.name,
+                coverURL: merged.coverURL,
+                membership: ProductSubscription.psPlus.rawValue,
+                crossGenNote: merged.vaultCrossGenNote))
+        }
+        return (entries, present)
+    }
+
     // MARK: - Join index
 
     /// A small union index keyed by concept id, title id and canonical name. A source item
@@ -316,6 +361,8 @@ enum PSNMapping {
         var anyEntitlementId: String?
         var isPreOrder = false
         var isActive = true
+        /// The PS Store cover URL (first purchase that carries one) — for the Vault (PLAN §16).
+        var coverURL: String?
 
         init(name: String) { self.name = name }
 
@@ -364,6 +411,68 @@ enum PSNMapping {
             if let unknown = m.unknownRaw { unknownMembership = unknownMembership ?? unknown }
             isPreOrder = isPreOrder || (p.isPreOrder ?? false)
             if p.isActive == false { isActive = false }
+            if coverURL == nil, let url = p.image?.url, !url.isEmpty { coverURL = url }
+        }
+
+        /// The game-list `category` classification (`.game` / `.app` / `.unknownCategory`).
+        var categoryKind: PSNMapping.CategoryKind { PSNMapping.classifyCategory(category) }
+
+        /// The bare PS Plus gate: a PS Plus claim, never bought, at or below the 10-minute gate
+        /// (including never launched). The *decision* to vault also honours the higher-priority
+        /// noise guards — see ``ignoreReason``.
+        private var meetsVaultGate: Bool {
+            guard purchaseSeen, !boughtSeen, plusSeen else { return false }
+            return (playDurationS ?? 0) <= PSNMapping.vaultGateSeconds
+        }
+
+        /// The **single source of truth** for the staging row's ignore reason, shared by
+        /// ``row()`` and ``isVaulted`` so the review sheet and the Vault can never disagree. A
+        /// PS Plus claim that is *also* an app / pre-order / inactive is ignored for **that**
+        /// higher-priority reason and does **not** go to the Vault.
+        var ignoreReason: ImportIgnoreReason? {
+            if categoryKind == .app { return .mediaApp }
+            if let n = PSNMapping.nameNoise(name) { return n }
+            if purchaseSeen, isPreOrder { return .preOrder }
+            if purchaseSeen, !isActive { return .inactiveEntitlement }
+            if meetsVaultGate { return .vaultedSubscription }
+            return nil
+        }
+
+        /// Whether this merged game goes to **The Vault** (PLAN §16) — exactly when the staging
+        /// row's ignore reason is ``ImportIgnoreReason/vaultedSubscription``.
+        var isVaulted: Bool { ignoreReason == .vaultedSubscription }
+
+        /// The other platforms of a **combined trophy** string, newest-first, for the "also on"
+        /// note (shared by the staging note and the Vault note).
+        var alsoOnPlatforms: [String] {
+            guard combinedPlatform, let best = bestSlug else { return [] }
+            return platforms.subtracting([best])
+                .sorted { PSNMapping.generationRankPublic($0) > PSNMapping.generationRankPublic($1) }
+                .map { $0.uppercased() }
+        }
+
+        /// The combined-platform annotation shared by the staging review note and the Vault:
+        /// "PS4 & PS5 versions" for a cross-gen purchase, else "also on …" for a combined
+        /// trophy string, else nil.
+        var platformAnnotation: String? {
+            if purchasePlatforms.count > 1 {
+                let names = purchasePlatforms
+                    .sorted { PSNMapping.generationRankPublic($0) < PSNMapping.generationRankPublic($1) }
+                    .map { $0.uppercased() }
+                return names.joined(separator: " & ") + " versions"
+            }
+            let others = alsoOnPlatforms
+            return others.isEmpty ? nil : "also on " + others.joined(separator: ", ")
+        }
+
+        /// The Vault entry's note: the same platform annotation **and** "category unknown"
+        /// flag the staging row's review note carries (the ownership text is always "PS Plus"
+        /// for a Vault entry, so it is omitted here).
+        var vaultCrossGenNote: String? {
+            var parts: [String] = []
+            if let p = platformAnnotation { parts.append(p) }
+            if categoryKind == .unknownCategory { parts.append("category unknown") }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
 
         /// The chosen entitlement id for a cross-gen game: the **PS5** one wins, else PS4,
@@ -429,33 +538,21 @@ enum PSNMapping {
             if played { signals.insert(.played) }
             if owned { signals.insert(.owned) }
 
-            // Noise, in priority order. `unknown` / `not_found` are NOT apps — they stay games
-            // (flagged "category unknown"); only app-keyword categories are ignored.
-            let categoryKind = PSNMapping.classifyCategory(category)
-            var ignore: ImportIgnoreReason?
-            if categoryKind == .app { ignore = .mediaApp }
-            if ignore == nil { ignore = PSNMapping.nameNoise(name) }
-            if ignore == nil, purchaseSeen, isPreOrder { ignore = .preOrder }
-            if ignore == nil, purchaseSeen, !isActive { ignore = .inactiveEntitlement }
-            if ignore == nil, vaulted { ignore = .vaultedSubscription }
+            // Noise, in priority order — the single source of truth shared with the Vault
+            // (`ignoreReason`). `unknown` / `not_found` are NOT apps: they stay games (flagged
+            // "category unknown"); only app-keyword categories are ignored.
+            let ignore = ignoreReason
 
             let statusPrefill: PlayStatus? = (progress == 100) ? .completed : nil
 
             let clean = PSNMapping.cleanMatchTitle(name)
             let matchTitle = (clean != name && !clean.isEmpty) ? clean : nil
 
-            // Other platforms of a combined trophy string, newest-first, for the "also on" note.
-            let alsoOn: [String] = combinedPlatform
-                ? platforms.subtracting([slug].compactMap { $0 })
-                    .sorted { PSNMapping.generationRankPublic($0) > PSNMapping.generationRankPublic($1) }
-                    .map { $0.uppercased() }
-                : []
-
             let note = PSNMapping.reviewNote(
                 owned: owned, played: played, launchedNotPlayed: launchedNotPlayed,
                 subscription: subscription, service: serviceAccess,
                 purchasePlatforms: purchasePlatforms, crossGen: crossGen,
-                otherPlatforms: alsoOn, categoryUnknown: categoryKind == .unknownCategory)
+                otherPlatforms: alsoOnPlatforms, categoryUnknown: categoryKind == .unknownCategory)
 
             return ImportStagingRow(
                 source: ImportSourceID.psn,
