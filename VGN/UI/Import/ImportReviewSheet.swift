@@ -188,6 +188,17 @@ final class ImportReviewModel {
     var removalConfirming = false
     private(set) var removalsApplied = 0
 
+    /// **(D5, PLAN §13.3)** The format the *Played — no purchase found* group's ticked rows are
+    /// owned as, or nil = **played, not owned** (the PLAN default). Per sheet session; the
+    /// two-segment "Own the ticked rows as" control binds to ``ownAsSelection``. A row ticked
+    /// afterwards adopts this choice; a per-row change makes the segment read mixed/neutral.
+    private(set) var playedNoPurchaseOwnAs: ProductFormat?
+
+    /// **(D6, PLAN §16)** At commit, the *Launched* group's unticked (not-ignored) rows are sent
+    /// to the Vault automatically ("unticked means Vault"). This switch (per sheet session, on by
+    /// default) turns that off for one commit; a ticked Launched row always imports normally.
+    var sendLaunchedToVault = true
+
     @ObservationIgnored private let transientByID: [String: ImportStagingRow]
     @ObservationIgnored private let matchByID: [String: ScanMatchOutcome]
     /// **(Bundles, PLAN §5.1)** external id → the bundle expansion resolved during matching.
@@ -404,9 +415,22 @@ final class ImportReviewModel {
         let signals = t?.signals ?? []
         if t?.subscription != nil { return .psPlus }
         if signals.contains(.owned) { return signals.contains(.played) ? .played : .purchased }
-        if t?.launchedNotPlayed == true { return .launched }
+        if isLaunchedGroupRow(t) { return .launched }
         if signals.contains(.played) { return .playedNoPurchase }
         return .purchased
+    }
+
+    /// The *Launched* group's gate, widened to PLAN §16: a trophy title at 0 %
+    /// (`launchedNotPlayed`) **or** a played-but-barely row whose play time is within the
+    /// Vault's 10-minute gate (`ImportPolicy.vaultPlaytimeGateSeconds`) — the *Prey* case
+    /// (game-list `service = other`, 8 min 32 s, trophies 0 %). Owned games are classified
+    /// earlier (purchases are backlog, never launched), so this only reaches played-not-owned.
+    private func isLaunchedGroupRow(_ t: ImportStagingRow?) -> Bool {
+        guard let t else { return false }
+        if t.launchedNotPlayed { return true }
+        if t.signals.contains(.played), let secs = t.playDurationS,
+           secs <= ImportPolicy.vaultPlaytimeGateSeconds { return true }
+        return false
     }
 
     /// Ticked (will-import) count in a PSN group, for the "ticked / total" header.
@@ -453,14 +477,43 @@ final class ImportReviewModel {
         return parts.isEmpty ? "no change" : parts.joined(separator: " · ")
     }
 
-    /// The "Own the ticked rows as ▸ Physical / Digital" group action for the
-    /// *Played — no purchase found* group (PLAN §13.3): the ticked played-only rows commit
-    /// an owned copy of `format` in addition to being marked played.
-    func ownTickedAs(_ format: ProductFormat) {
+    /// The two-segment "Own the ticked rows as ▸ Physical | Digital" control (PLAN §13.3 / D5):
+    /// its value is the common own-as of the *Played — no purchase found* group's ticked rows —
+    /// `.physical` / `.digital` when they agree, or **nil** (played, not owned — the default;
+    /// also the mixed look) when there are none or they differ. Setting it re-applies to every
+    /// ticked row of the group immediately and becomes the choice rows ticked afterwards adopt.
+    var ownAsSelection: ProductFormat? {
+        get { commonOwnAsOfTickedPlayedNoPurchase }
+        set { applyOwnAs(newValue) }
+    }
+
+    private var commonOwnAsOfTickedPlayedNoPurchase: ProductFormat? {
+        let ticked = rows.filter { psnGroup(for: $0) == .playedNoPurchase && $0.include }
+        guard let first = ticked.first?.ownAsFormat,
+              ticked.allSatisfy({ $0.ownAsFormat == first }) else { return nil }
+        return first
+    }
+
+    /// Apply an own-as format (nil = played-only) to every ticked played-no-purchase row and
+    /// remember it as the session choice.
+    func applyOwnAs(_ format: ProductFormat?) {
+        playedNoPurchaseOwnAs = format
         for i in rows.indices where psnGroup(for: rows[i]) == .playedNoPurchase && rows[i].include {
             rows[i].ownAsFormat = format
         }
     }
+
+    /// Back-compat group action (kept for the older call sites/tests): own the ticked rows as
+    /// `format`. Routes through ``applyOwnAs(_:)``.
+    func ownTickedAs(_ format: ProductFormat) { applyOwnAs(format) }
+
+    /// A per-row override of the "own as" choice (nil = played-only). Makes the group's segment
+    /// read neutral/mixed when rows differ (PLAN §13.3 / D5). Only meaningful for a played-no-
+    /// purchase row.
+    func setRowOwnAs(_ format: ProductFormat?, externalID: String) {
+        mutate(externalID) { $0.ownAsFormat = format }
+    }
+
     /// Whether the group action can do anything (a ticked played-no-purchase row exists).
     var canOwnPlayedRows: Bool {
         rows.contains { psnGroup(for: $0) == .playedNoPurchase && $0.include }
@@ -487,8 +540,15 @@ final class ImportReviewModel {
         }
     }
     var committableCount: Int { rows.filter(\.isCommittable).count }
-    var canCommit: Bool { !committed && !isCommitting && committableCount > 0 }
-    var commitButtonTitle: String { "Import \(committableCount) Game\(committableCount == 1 ? "" : "s")" }
+    /// Commit is enabled when there is something to import **or** Launched rows to vault (PLAN §16
+    /// — a sync of only barely-launched titles can still commit the Vault sends).
+    var canCommit: Bool { !committed && !isCommitting && (committableCount > 0 || launchedVaultCount > 0) }
+    var commitButtonTitle: String {
+        if committableCount == 0 && launchedVaultCount > 0 {
+            return "Send \(launchedVaultCount) to the Vault"
+        }
+        return "Import \(committableCount) Game\(committableCount == 1 ? "" : "s")"
+    }
 
     // MARK: Edits
 
@@ -498,7 +558,15 @@ final class ImportReviewModel {
     }
 
     func setInclude(_ include: Bool, externalID: String) {
-        mutate(externalID) { if !$0.ignored { $0.include = include } }
+        mutate(externalID) { row in
+            guard !row.ignored else { return }
+            row.include = include
+            // A played-no-purchase row adopts the group's current "own as" choice when ticked,
+            // and drops it when unticked (PLAN §13.3 / D5).
+            if isPSN, psnGroup(for: row) == .playedNoPurchase {
+                row.ownAsFormat = include ? playedNoPurchaseOwnAs : nil
+            }
+        }
     }
 
     func setPlatform(_ slug: String, externalID: String) {
@@ -611,18 +679,44 @@ final class ImportReviewModel {
     private func sendToVault(externalIDs ids: [String]) {
         let toSend = ids.compactMap { id in rows.first { $0.externalID == id && !$0.vaulted && !$0.ignored } }
         guard !toSend.isEmpty else { return }
+        for id in toSend.map(\.externalID) { mutate(id) { $0.vaulted = true; $0.include = false } }
+        Task { await writeVaultSend(toSend) }
+    }
+
+    // MARK: The PSN "Launched" group → Vault at commit (PLAN §16, D6)
+
+    /// The *Launched* group's rows that auto-vault at commit: unticked, not ignored, not already
+    /// vaulted — only when ``sendLaunchedToVault`` is on. A ticked Launched row imports normally.
+    var launchedRowsForVault: [ImportReviewRow] {
+        guard isPSN, sendLaunchedToVault else { return [] }
+        return rows.filter { psnGroup(for: $0) == .launched && !$0.include && !$0.ignored && !$0.vaulted }
+    }
+    /// How many Launched rows will go to the Vault at commit (banner / button).
+    var launchedVaultCount: Int { launchedRowsForVault.count }
+
+    /// Send the Launched group's unticked rows to the Vault (PLAN §16 "unticked means Vault"),
+    /// awaited inside the commit so the banner count is exact. Same persisted `.vault` decision
+    /// and reversible step as the manual send; a no-op when the switch is off. Returns the count.
+    @discardableResult
+    func autoVaultLaunchedRows() async -> Int {
+        let toSend = launchedRowsForVault
+        guard !toSend.isEmpty else { return 0 }
+        for id in toSend.map(\.externalID) { mutate(id) { $0.vaulted = true; $0.include = false } }
+        await writeVaultSend(toSend)
+        return toSend.count
+    }
+
+    /// The shared write for both vault-send paths (manual + auto): build the Vault rows, persist
+    /// the `.vault` decision, and record the reversible step. Fires `onLibraryChanged` once.
+    private func writeVaultSend(_ toSend: [ImportReviewRow]) async {
+        guard !toSend.isEmpty else { return }
         let entries = toSend.map(vaultEntry(for:))
         let sentIDs = toSend.map(\.externalID)
-        for id in sentIDs { mutate(id) { $0.vaulted = true; $0.include = false } }
         let store = RomCatalogStore(staging.database)
-        let staging = self.staging, src = source
-        let changed = onLibraryChanged
-        Task {
-            let result = (try? await store.sendToVault(entries)) ?? RomCatalogStore.VaultSendResult()
-            for id in sentIDs { try? await staging.setDecision(source: src, externalID: id, .vault) }
-            vaultUndoStack.append(VaultSend(externalIDs: sentIDs, insertedIDs: result.insertedIDs))
-            changed()
-        }
+        let result = (try? await store.sendToVault(entries)) ?? RomCatalogStore.VaultSendResult()
+        for id in sentIDs { try? await staging.setDecision(source: source, externalID: id, .vault) }
+        vaultUndoStack.append(VaultSend(externalIDs: sentIDs, insertedIDs: result.insertedIDs))
+        onLibraryChanged()
     }
 
     /// Bring one row back from the Vault (PLAN §16) — reverses a send: the row returns to its
@@ -694,6 +788,7 @@ final class ImportReviewModel {
     private func setIncludePSN(_ include: Bool, group: PSNReviewGroup) {
         for i in rows.indices where !rows[i].ignored && psnGroup(for: rows[i]) == group {
             rows[i].include = include
+            if group == .playedNoPurchase { rows[i].ownAsFormat = include ? playedNoPurchaseOwnAs : nil }
         }
     }
 
@@ -788,13 +883,18 @@ final class ImportReviewModel {
                 // File sources (Delicious) can apply their own covers to games left
                 // without one — a background step, never blocking the success banner.
                 if let after { await after(result, useCovers) }
+                // The Launched group's unticked rows go to the Vault (PLAN §16) — after the
+                // import, before the banner, so its count is exact. Reversible via the sheet's Undo.
+                let vaulted = isPSN ? await autoVaultLaunchedRows() : 0
                 // Promotion-on-play (PLAN §16): a PS Plus claim that crossed the 10-minute gate
                 // was just imported as an owned-via-subscription copy — link its Vault row to the
                 // new game so the browser shows "In Library". Idempotent; no-op for other sources.
                 if source == ImportSourceID.psn {
                     try? await RomCatalogStore(store.database).linkPromotedFromProducts(source: source)
                 }
-                successMessage = psnBanner ?? Self.successMessage(from: result, sourceLabel: sourceLabel)
+                var message = psnBanner ?? Self.successMessage(from: result, sourceLabel: sourceLabel)
+                if vaulted > 0 { message += " · \(vaulted) sent to the Vault" }
+                successMessage = message
                 committed = true
                 onLibraryChanged()
             } catch {
@@ -1021,6 +1121,14 @@ struct ImportReviewSheet: View {
             if let footnote = group.footnote {
                 Text(footnote).font(.caption).foregroundStyle(.secondary)
             }
+            // The Launched group's unticked rows go to the Vault at commit (PLAN §16 — D6),
+            // with a per-commit switch to turn it off.
+            if group == .launched {
+                Toggle("Unticked rows go to the Vault", isOn: $model.sendLaunchedToVault)
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
+                    .accessibilityIdentifier("review.launchedToVault")
+            }
         }
     }
 
@@ -1028,11 +1136,20 @@ struct ImportReviewSheet: View {
     private var ownAsRow: some View {
         HStack(spacing: 8) {
             Text("Own the ticked rows as").font(.caption).foregroundStyle(.secondary)
-            // Physical is the default: these are played games with no digital licence, so most
-            // likely discs (PLAN §13.3 rule 3 / item 2 — `service: other`).
-            Button("Physical") { model.ownTickedAs(.physical) }
-                .controlSize(.small).buttonStyle(.borderedProminent)
-            Button("Digital") { model.ownTickedAs(.digital) }.controlSize(.small)
+            // A real two-segment toggle bound to model state (D5): it shows the current choice
+            // and re-applies to every ticked row immediately (and to rows ticked afterwards).
+            // Neutral (neither highlighted) = played, not owned — the PLAN §13.3 default; a per-
+            // row change shows the same neutral (mixed) look. `service: other` ⇒ probably a disc.
+            Picker("Own the ticked rows as", selection: $model.ownAsSelection) {
+                Text("Physical").tag(ProductFormat?.some(.physical))
+                Text("Digital").tag(ProductFormat?.some(.digital))
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            if model.ownAsSelection == nil {
+                Text("(played, not owned)").font(.caption2).foregroundStyle(.tertiary)
+            }
         }
         .disabled(!model.canOwnPlayedRows)
     }
@@ -1090,6 +1207,13 @@ struct ImportReviewSheet: View {
             }
             Spacer()
             if model.committed {
+                // The import commit is final (the review sheet IS its confirmation step — no
+                // import-undo exists), but the Vault sends it made are one reversible step
+                // (PLAN §16 / D6): this un-vaults them and deletes the rows it created.
+                if model.canUndoVaultSend {
+                    Button("Undo Vault Sends") { model.undoLastVaultSend() }
+                        .accessibilityIdentifier("review.undoVaultSends")
+                }
                 Button("Done") { onClose() }.keyboardShortcut(.defaultAction)
             } else {
                 Button("Cancel") { onClose() }.keyboardShortcut(.cancelAction)
@@ -1350,6 +1474,15 @@ private struct PSNReviewRowView: View {
                     }
                     if model.canRematch(row) {
                         Button("Re-match") { model.rematch(row.externalID) }
+                    }
+                    // A played-no-purchase row can be owned as a specific format per row, or kept
+                    // played-only — overriding the group segment (PLAN §13.3 / D5).
+                    if group == .playedNoPurchase {
+                        Menu("Own as") {
+                            Button("Physical") { model.setRowOwnAs(.physical, externalID: row.externalID) }
+                            Button("Digital") { model.setRowOwnAs(.digital, externalID: row.externalID) }
+                            Button("Played only") { model.setRowOwnAs(nil, externalID: row.externalID) }
+                        }
                     }
                     Divider()
                     if group == .ignored {
