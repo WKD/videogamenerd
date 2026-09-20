@@ -8,16 +8,39 @@ import GRDB
 extension LibraryStore {
 
     /// Set `cover_file` only if the game currently has none, without touching the
-    /// `user_edited` marker. Returns true if it wrote.
+    /// `user_edited` marker, and mark it **provisional** (`cover_provisional = 1`, v14) so
+    /// the background cover job still runs and may upgrade it to a provider-found cover
+    /// (owner request — a Delicious box-art cover must not stick when a better one exists).
+    /// Returns true if it wrote.
     @discardableResult
     func setImportedCoverIfEmpty(gameID: Int64, coverFile: String) async throws -> Bool {
         try await dbWriter.write { db in
             let current = try String.fetchOne(
                 db, sql: "SELECT cover_file FROM games WHERE id = ?", arguments: [gameID])
             guard (current ?? "").isEmpty else { return false }
-            try db.execute(sql: "UPDATE games SET cover_file = ?, updated_at = ? WHERE id = ?",
-                           arguments: [coverFile, Date(), gameID])
+            try db.execute(
+                sql: "UPDATE games SET cover_file = ?, cover_provisional = 1, updated_at = ? WHERE id = ?",
+                arguments: [coverFile, Date(), gameID])
             return true
+        }
+    }
+
+    /// Replace a game's cover with one the provider chain found, clearing the
+    /// **provisional** marker (v14) — used by background enrichment to upgrade an
+    /// importer-supplied cover. Does **not** mark the cover `user_edited` (a provider
+    /// cover, unlike a hand-picked one, may itself be replaced by a later refresh).
+    /// Returns the file it replaced (so the caller can delete the now-orphaned original),
+    /// or `nil` when nothing changed.
+    @discardableResult
+    func setProviderCover(gameID: Int64, coverFile: String) async throws -> String? {
+        try await dbWriter.write { db in
+            let previous = try String.fetchOne(
+                db, sql: "SELECT cover_file FROM games WHERE id = ?", arguments: [gameID])
+            try db.execute(
+                sql: "UPDATE games SET cover_file = ?, cover_provisional = 0, updated_at = ? WHERE id = ?",
+                arguments: [coverFile, Date(), gameID])
+            let old = (previous ?? "")
+            return (old.isEmpty || old == coverFile) ? nil : old
         }
     }
 

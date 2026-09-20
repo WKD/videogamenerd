@@ -384,7 +384,8 @@ struct ImportStagingStore: Sendable {
                     result.productsAdded += 1
                     let memberSource = ProductSource(rawValue: item.source) ?? .manual
                     var firstMemberGameID: Int64?
-                    for member in members {
+                    // Members of a bundle-derived compilation order by first release date (§5.1).
+                    for member in LibraryStore.orderedByReleaseDate(members) {
                         let outcome = try LibraryStore.upsertCompilationMember(
                             member, productID: productID, platformID: item.platformID,
                             source: memberSource, db: db)

@@ -144,11 +144,18 @@ struct EnrichmentHarness {
     let creds: MutableCreds
     let coversDirectory: URL
 
+    /// A harness whose cover chain has no providers, so the cover job always misses —
+    /// used to test that a provisional (importer) cover is kept on a miss (D2).
+    static func makeEmptyChain() async throws -> EnrichmentHarness {
+        try await make(coverProviders: [])
+    }
+
     static func make(
         backoff: EnrichmentBackoff = EnrichmentBackoff(maxAttempts: 3, baseDelay: 60),
         jitter: Double = 0.5,
         imageDelay: TimeInterval = 0,
-        creds: MutableCreds = MutableCreds()
+        creds: MutableCreds = MutableCreds(),
+        coverProviders: [any CoverProvider] = [IGDBCoverProvider()]
     ) async throws -> EnrichmentHarness {
         let db = try AppDatabase.inMemory()
         try await db.seedPlatforms(from: TestDB.platforms)
@@ -171,7 +178,7 @@ struct EnrichmentHarness {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("vgn-enrich-\(UUID().uuidString)")
         let coverStore = CoverStore(
-            chain: CoverProviderChain(providers: [IGDBCoverProvider()]),
+            chain: CoverProviderChain(providers: coverProviders),
             transport: transport,
             coversDirectory: root.appendingPathComponent("covers"),
             thumbsDirectory: root.appendingPathComponent("thumbs")

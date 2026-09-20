@@ -121,6 +121,7 @@ struct AppDatabase: Sendable {
         Migrations.registerV11(in: &migrator)
         Migrations.registerV12(in: &migrator)
         Migrations.registerV13(in: &migrator)
+        Migrations.registerV14(in: &migrator)
         return migrator
     }
 }

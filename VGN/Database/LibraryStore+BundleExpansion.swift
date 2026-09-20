@@ -238,6 +238,11 @@ extension LibraryStore {
                 productIDs = [db.lastInsertedRowID]
             }
 
+            // Members of a bundle-derived compilation order by first release date (§5.1).
+            // Array order is preserved (only `position` changes), so the index mapping and
+            // `playDataTargetIndex` below stay valid.
+            let orderedMembers = Self.orderedByReleaseDate(members)
+
             // Convert each product and attach every member; map member index → game id
             // (stable across products because upsert dedupes by igdb id).
             var memberGameIDByIndex: [Int: Int64] = [:]
@@ -251,7 +256,7 @@ extension LibraryStore {
                 let productSource = ProductSource(rawValue: prow["source"]) ?? .manual
                 try db.execute(sql: "UPDATE products SET kind = 'compilation', title = ?, updated_at = ? WHERE id = ?",
                                arguments: [bundleTitle, Date(), pid])
-                for (index, member) in members.enumerated() {
+                for (index, member) in orderedMembers.enumerated() {
                     let outcome = try Self.upsertCompilationMember(
                         member, productID: pid, platformID: productPlatform, source: productSource, db: db)
                     if memberGameIDByIndex[index] == nil { memberGameIDByIndex[index] = outcome.gameID }

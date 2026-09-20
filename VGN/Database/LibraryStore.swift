@@ -134,8 +134,9 @@ struct LibraryStore: Sendable {
             try record.insert(db)
             let productID = record.id!
 
+            // Members of a bundle-derived compilation order by first release date (§5.1).
             var outcomes: [AddOutcome] = []
-            for member in members {
+            for member in Self.orderedByReleaseDate(members) {
                 let outcome = try Self.upsertCompilationMember(member, productID: productID,
                                                                platformID: product.platformID,
                                                                source: product.source, db: db)
@@ -405,12 +406,14 @@ struct LibraryStore: Sendable {
     // MARK: - Manual edits (mark user_edited so enrichment never clobbers them)
 
     /// Import / choose a cover by hand (PLAN §5.2 "Choose cover…" / drag-drop).
-    /// Sets `cover_file` and marks the `cover` field user-edited so background
-    /// enrichment never replaces it.
+    /// Sets `cover_file`, clears the **provisional** marker (v14 — a hand-picked cover is
+    /// never a stopgap), and marks the `cover` field user-edited so background enrichment
+    /// never replaces it.
     func setUserCover(gameID: Int64, coverFile: String) async throws {
         try await dbWriter.write { db in
-            try db.execute(sql: "UPDATE games SET cover_file = ?, updated_at = ? WHERE id = ?",
-                           arguments: [coverFile, Date(), gameID])
+            try db.execute(
+                sql: "UPDATE games SET cover_file = ?, cover_provisional = 0, updated_at = ? WHERE id = ?",
+                arguments: [coverFile, Date(), gameID])
             try Self.markUserEdited(.cover, gameID: gameID, db: db)
         }
     }
