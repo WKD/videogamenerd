@@ -355,6 +355,7 @@ Sidebar entry **Play Next** (LIBRARY section). Bracket picker on top; one **hero
 - **Escape hatch:** romlord ran `LazyVGrid` fine to 5–10 k cells; if it ever stutters, swap in an `NSCollectionView` wrapper behind the same view-model (contained change).
 - **Never block on network:** inserts are local and instant; enrichment (metadata, cover, time-to-beat) is a background job queue persisted in the DB, resumes after relaunch, retries with backoff.
 - **Safety:** automatic DB snapshot on launch (keep last 10), JSON/CSV export — this library will represent years of curation.
+- **Empty / progress / narrow-inspector polish (wave 17):** every "no games / no results" area uses the shared `EmptyStateView` (`VGN/UI/Support/`) with actions wired to existing commands; all four importers share one fixed-width matching-progress modal (`ImportMatchingProgressView`) that never resizes as titles scroll; the inspector reflows its action buttons and playtime table at the minimum column width (300 pt). Play Next cards carry an "Open on IGDB" button (`IGDBWebLink`).
 
 ---
 
@@ -378,6 +379,8 @@ Each ends with a runnable app and a commit/push.
 | 10 | **Delicious Library import** (§5.5) | First file importer: read-only `.deliciouslibrary2` reader, platform + title/edition mapping, shared review sheet with the "discard duplicate copies" rule + own-cover fallback, migration v7 (drop the `products.source` CHECK) | An old Delicious catalogue imports as owned physical games with the right platforms; re-import adds nothing |
 
 Order rationale: 0–4 deliver the whole core loop (add → browse → rank) with manual entry only; 5–8 are independent accelerators and can be reordered freely (e.g. PSN before photos).
+
+Milestone 9 **empty states — done** (wave 17): one shared `EmptyStateView` (SF Symbol · title · one sentence · up to two wired actions, static) across the library grid, sidebar smart lists, ranking, Play Next, Stats and the Vault browser; a single fixed-size import-matching progress modal for GOG/PSN/Delicious/Batocera; and the inspector reflows at a narrow column (§8). See `docs/ACCEPTANCE.md` for the owner tour.
 
 ---
 
