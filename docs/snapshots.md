@@ -127,7 +127,7 @@ comparing), which keeps the set small.
 | `RankingSnapshotTests` | Duel (placement / refine / border / empty), disputes sheet, Triage (active / done), Tier Board (small / empty / 300 tiles), The Top (unfiltered / filtered / short), tier legend, unavailable |
 | `PlayNextSnapshotTests` | Hero + alternatives (wide + compact), small-library banner, empty (nothing fits / no rankings), unavailable, Ask Claude (asking / agreed / disagreed / failed) |
 | `ScanSnapshotTests` | Input, progress rows, review sheet (all three buckets + greyed duplicates), review compact |
-| `MiscSnapshotTests` | Settings (Accounts + Photo Scan tabs), compilation editor, ownership / batch-mark-owned / copy-removal / group-compilation sheets, stats popover, database-error screen, shared components (chips, placeholder covers, ranking covers) |
+| `MiscSnapshotTests` | Settings (Accounts + Photo Scan tabs), compilation editor, ownership / batch-mark-owned / copy-removal / group-compilation / **bundle-expansion** sheets, the **shared import matching-progress modal** (matching w/ long title + fetching), stats popover, database-error screen, shared components (chips, placeholder covers, ranking covers) |
 | `StatsSnapshotTests` | Library Stats dashboard (populated + empty scope) — the new full-window stats view (`stats-popover` in Misc is the sidebar popover) |
 | `BatoceraSnapshotTests` | ROM catalogue browser, Discover card, Settings ▸ Batocera pane |
 | `GOGSnapshotTests` | Import-from-GOG review sheet, account pane (signed-out / signed-in / rejected) |
