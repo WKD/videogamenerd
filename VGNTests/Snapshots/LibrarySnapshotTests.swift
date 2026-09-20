@@ -187,9 +187,14 @@ struct LibrarySnapshotTests {
                         platformIDs: ["pc"]),
             GameSummary(id: 108, title: "Not owned", year: 2025, played: false, owned: false,
                         platformIDs: ["pc"]),
+            // The worst case: physical + digital + ROM + PS Plus + played = 5 badges.
+            GameSummary(id: 109, title: "Everything", year: 2013, played: true, owned: true,
+                        platformIDs: ["ps3"], hasROM: true,
+                        physicalPlatformIDs: ["ps3"], digitalPlatformIDs: ["ps3"],
+                        romPlatformIDs: ["ps3"], subscriptionPlatformIDs: ["ps3"]),
         ]
         await SnapshotHarness.capture(group: group, "library-cell-badges",
-                                      size: SnapSize(width: 700, height: 420), settle: 4) {
+                                      size: SnapSize(width: 700, height: 480), settle: 4) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 180))], spacing: 14) {
                 ForEach(variants) { g in
                     GameCell(model: GameCellModel(summary: g), coverLoader: NoopCoverLoader())
@@ -197,6 +202,27 @@ struct LibrarySnapshotTests {
             }
             .padding()
             .frame(width: 660)
+        }
+    }
+
+    /// The five-badge worst case at the smallest tile (110 pt): the badge row wraps to a second
+    /// line rather than overflow the tile (wave 19, D1/D4).
+    @Test func cellBadgeStatesMinTile() async {
+        let everything = GameSummary(id: 110, title: "Everything Small", year: 2013,
+                                     played: true, owned: true, platformIDs: ["ps3"], hasROM: true,
+                                     physicalPlatformIDs: ["ps3"], digitalPlatformIDs: ["ps3"],
+                                     romPlatformIDs: ["ps3"], subscriptionPlatformIDs: ["ps3"])
+        await SnapshotHarness.capture(group: group, "library-cell-badges-min",
+                                      size: SnapSize(width: 300, height: 230), settle: 4) {
+            HStack(spacing: 14) {
+                GameCell(model: GameCellModel(summary: everything),
+                         coverLoader: NoopCoverLoader(), cellWidth: 110)
+                    .frame(width: 110)
+                GameCell(model: GameCellModel(summary: everything),
+                         coverLoader: NoopCoverLoader(), cellWidth: 150)
+                    .frame(width: 150)
+            }
+            .padding()
         }
     }
 

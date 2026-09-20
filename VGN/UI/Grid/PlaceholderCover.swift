@@ -2,8 +2,11 @@ import SwiftUI
 
 /// Generated cover art for games with no artwork yet — which is the entire
 /// library on day one (PLAN §5.2 "the library starts with no covers"). Title
-/// initials on a stable, per-title tinted gradient, with a faint platform tag.
-/// Deterministic, so a game always gets the same tile.
+/// initials on a stable, per-title tinted gradient. Deterministic, so a game always
+/// gets the same tile. It no longer prints a large platform label: it sat exactly on
+/// the grid tile's badge row and collided with the badges, and the platform is already
+/// shown by the pill under the title (wave 19 / D2). `platformID` is kept in the API
+/// (callers pass it) but is not drawn.
 struct PlaceholderCover: View {
     let title: String
     var platformID: String?
@@ -36,15 +39,6 @@ struct PlaceholderCover: View {
                     .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
-                if let platformID {
-                    VStack {
-                        Spacer()
-                        Text(PlatformLabels.short(platformID))
-                            .font(.system(size: max(8, side * 0.09), weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .padding(.bottom, side * 0.06)
-                    }
-                }
             }
         }
     }

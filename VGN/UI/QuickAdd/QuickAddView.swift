@@ -209,12 +209,9 @@ struct QuickAddView: View {
         .accessibilityValue(model.flags.owned ? model.flags.format.label : "None")
     }
 
+    // The shared format glyphs (D3) — same disc / download-arrow / chip the grid badges use.
     private static func icon(for format: ProductFormat) -> String {
-        switch format {
-        case .physical: return "opticaldisc"
-        case .digital: return "arrow.down.circle"
-        case .rom: return "memorychip"
-        }
+        format.badgeKind.symbolName
     }
 
     private var shortcutHint: String {

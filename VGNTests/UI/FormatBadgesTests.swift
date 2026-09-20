@@ -46,6 +46,60 @@ struct FormatBadgesTests {
         #expect(NSImage(named: "PSPlusBadge") != nil)
     }
 
+    // MARK: Shared glyph mapping (D3)
+
+    /// The one glyph set the grid, Quick Add and the rest of the app share — and, crucially,
+    /// none of them is a *filled circle* (the old white-blob bug: a filled-circle glyph painted
+    /// white inside the tinted badge circle is unreadable).
+    @Test func sharedGlyphsAreDistinctAndNotFilledCircles() {
+        #expect(FormatBadgeKind.physical.symbolName == "opticaldisc")
+        #expect(FormatBadgeKind.digital.symbolName == "arrow.down.to.line")
+        #expect(FormatBadgeKind.rom.symbolName == "memorychip")
+        for kind in [FormatBadgeKind.physical, .digital, .rom] {
+            #expect(!kind.symbolName.hasSuffix(".fill"), "\(kind) uses a filled glyph")
+        }
+        // The digital badge must not be the circled arrow (draws as a dot in a circle).
+        #expect(!FormatBadgeKind.digital.symbolName.contains("circle"))
+    }
+
+    @Test func sharedGlyphsResolveToRealSFSymbols() {
+        for kind in [FormatBadgeKind.physical, .digital, .rom] {
+            #expect(NSImage(systemSymbolName: kind.symbolName, accessibilityDescription: nil) != nil,
+                    "missing SF Symbol \(kind.symbolName)")
+        }
+    }
+
+    @Test func productFormatMapsToTheBadgeKind() {
+        #expect(ProductFormat.physical.badgeKind == .physical)
+        #expect(ProductFormat.digital.badgeKind == .digital)
+        #expect(ProductFormat.rom.badgeKind == .rom)
+    }
+
+    // MARK: Badge-row overflow rule (D1)
+
+    /// The worst case — physical + digital + ROM + PS Plus + played = 5 badges — never draws
+    /// wider than the tile at any tile width, from the 110 pt minimum to the 230 pt maximum
+    /// (it wraps to a second line at the narrowest sizes rather than overflow).
+    @Test func fiveBadgesFitAtEveryTileWidth() {
+        for width in stride(from: FormatBadgeLayout.minTile, through: FormatBadgeLayout.maxTile, by: 5) {
+            #expect(FormatBadgeLayout.fits(count: 5, cellWidth: width), "5 badges overflow at \(width)")
+        }
+    }
+
+    /// Badges stay a legible size (never below 18 pt) and grow gently with the tile.
+    @Test func badgeDiameterStaysLegibleAndScales() {
+        #expect(FormatBadgeLayout.diameter(cellWidth: FormatBadgeLayout.minTile) >= 18)
+        #expect(FormatBadgeLayout.diameter(cellWidth: FormatBadgeLayout.maxTile) <= 24)
+        #expect(FormatBadgeLayout.diameter(cellWidth: 110) <= FormatBadgeLayout.diameter(cellWidth: 230))
+    }
+
+    /// At the narrowest tile five badges cannot share one line (so wrapping is required), while
+    /// at the default 150 pt tile they do fit on one line.
+    @Test func perLineWrapsAtTheNarrowestTileButNotAtTheDefault() {
+        #expect(FormatBadgeLayout.perLine(cellWidth: FormatBadgeLayout.minTile) < 5)
+        #expect(FormatBadgeLayout.perLine(cellWidth: 150) >= 5)
+    }
+
     // MARK: Facts from the grid SQL
 
     @Test func perFormatFactsComeFromTheGridQuery() async throws {
