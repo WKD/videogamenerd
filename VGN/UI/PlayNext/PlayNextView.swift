@@ -39,7 +39,7 @@ struct PlayNextScreen: View {
 
     var body: some View {
         PlayNextBody(model: model, loader: env.coverLoader, inspect: env.inspect,
-                     paceModel: env.paceModel)
+                     paceModel: env.paceModel, openURL: env.openURL)
     }
 }
 
@@ -52,6 +52,9 @@ struct PlayNextBody: View {
     var inspect: (@MainActor (Int64) -> Void)?
     /// The shared pace controller; a change to its pace recomputes the picks once.
     var paceModel: PlayPaceModel?
+    /// Opens a URL in the browser (the card "Open on IGDB" action). Defaults to a no-op so the
+    /// previews and any caller that doesn't wire it never open a browser.
+    var openURL: (@MainActor (URL) -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.rankingActions) private var rankingActions
@@ -138,7 +141,8 @@ struct PlayNextBody: View {
                         onStart: { act { await model.startPlaying(hero) } },
                         onNot: { act { await model.notThisOne(hero) } },
                         onNever: { act { await model.never(hero) } },
-                        onInspect: { inspect?(hero.id) })
+                        onInspect: { inspect?(hero.id) },
+                        openURL: openURL)
                         .accessibilityIdentifier(A11yID.playNextHero)
                 }
                 alternatives(result)
@@ -174,7 +178,8 @@ struct PlayNextBody: View {
                                 onStart: { act { await model.startPlaying(alt) } },
                                 onNot: { act { await model.notThisOne(alt) } },
                                 onNever: { act { await model.never(alt) } },
-                                onInspect: { inspect?(alt.id) })
+                                onInspect: { inspect?(alt.id) },
+                                openURL: openURL)
                         }
                     }
                     .padding(.vertical, 2)
@@ -196,7 +201,8 @@ struct PlayNextBody: View {
                                 onStart: { act { await model.startPlaying(game) } },
                                 onNot: { act { await model.notThisOne(game) } },
                                 onNever: { act { await model.never(game) } },
-                                onInspect: { inspect?(game.id) })
+                                onInspect: { inspect?(game.id) },
+                                openURL: openURL)
                         }
                     }
                     .padding(.vertical, 4)
@@ -237,15 +243,13 @@ struct PlayNextBody: View {
     // MARK: Empty states
 
     private var noRankingsState: some View {
-        ContentUnavailableView {
-            Label("No rankings yet", systemImage: "trophy")
-        } description: {
-            Text("Play Next learns from your tiers. Rank a few games first, then come back for a pick.")
-        } actions: {
-            if let goToDuel = rankingActions.goToDuel {
-                Button("Start ranking") { goToDuel() }.buttonStyle(.borderedProminent)
-            }
-        }
+        let copy = PlayNextEmptyCopy.noRankings(rankedCount: model.rankedCount)
+        return EmptyStateView(
+            systemImage: "trophy", title: copy.title, message: copy.message,
+            actions: rankingActions.goToDuel.map {
+                [EmptyStateAction(title: "Start ranking", systemImage: "square.stack.3d.up.fill",
+                                  isProminent: true, action: $0)]
+            } ?? [])
         .frame(maxWidth: .infinity, minHeight: 320)
         .accessibilityIdentifier(A11yID.playNextEmpty)
     }
@@ -253,24 +257,21 @@ struct PlayNextBody: View {
     @ViewBuilder
     private func emptyState(for result: PlayNextResult) -> some View {
         if result.exclusions.byTime > 0 {
-            ContentUnavailableView {
-                Label("Nothing fits ‘\(result.bracket.label)’", systemImage: "hourglass")
-            } description: {
-                Text("\(result.exclusions.byTime) owned games were too long for this bracket. Try a longer one.")
-            } actions: {
-                if let next = nextShelf(after: model.bracketShelf) {
-                    Button("Try ‘\(next.name)’") { model.selectShelf(next) }
-                        .buttonStyle(.borderedProminent)
-                }
-            }
+            let copy = PlayNextEmptyCopy.bracketTooLong(count: result.exclusions.byTime,
+                                                        bracket: result.bracket.label)
+            EmptyStateView(
+                systemImage: "hourglass", title: copy.title, message: copy.message,
+                actions: nextShelf(after: model.bracketShelf).map { next in
+                    [EmptyStateAction(title: "Try ‘\(next.name)’", isProminent: true) {
+                        model.selectShelf(next)
+                    }]
+                } ?? [])
             .frame(maxWidth: .infinity, minHeight: 320)
             .accessibilityIdentifier(A11yID.playNextEmpty)
         } else {
-            ContentUnavailableView {
-                Label("Nothing to play here yet", systemImage: "tray")
-            } description: {
-                Text("No owned, unfinished games to suggest. Add some to your library, or include abandoned games from the options menu.")
-            }
+            EmptyStateView(
+                systemImage: "tray", title: PlayNextEmptyCopy.nothingToPlay.title,
+                message: PlayNextEmptyCopy.nothingToPlay.message)
             .frame(maxWidth: .infinity, minHeight: 320)
             .accessibilityIdentifier(A11yID.playNextEmpty)
         }
@@ -375,7 +376,7 @@ struct SmallLibraryBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Only \(count) games ranked — these picks lean on general acclaim.")
                     .font(.callout)
-                Text("Rank more in Duel or Triage to sharpen your recommendations.")
+                Text(PlayNextEmptyCopy.smallLibraryHint(rankedCount: count))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
@@ -436,6 +437,39 @@ struct TasteModelLine: View {
         }
         .padding()
         .frame(width: 320)
+    }
+}
+
+/// Pure copy for the Play Next empty / small-library states (owner 2026-09-20) — second
+/// person, concrete, no exclamation marks, and it says how many more games are needed. Kept
+/// free of any view so it is unit-tested directly.
+enum PlayNextEmptyCopy {
+    /// The zero-ranked state: how many rankings are needed for a first pick.
+    static func noRankings(rankedCount: Int) -> (title: String, message: String) {
+        let more = max(0, TasteBacktest.minSamples - rankedCount)
+        let games = more == 1 ? "game" : "games"
+        return ("No rankings yet",
+                "Play Next learns from your tiers. Rank \(more) \(games) to get a first pick, then come back.")
+    }
+
+    /// The chosen bracket excludes every candidate for being too long.
+    static func bracketTooLong(count: Int, bracket: String) -> (title: String, message: String) {
+        let verb = count == 1 ? "was" : "were"
+        let games = count == 1 ? "game" : "games"
+        return ("Nothing fits ‘\(bracket)’",
+                "\(count) owned \(games) \(verb) too long for this bracket. Try a longer one.")
+    }
+
+    /// No candidates at all in the bracket.
+    static let nothingToPlay = (
+        title: "Nothing to play here yet",
+        message: "There are no owned, unfinished games to suggest. Add some to your library, or include abandoned games from the options menu.")
+
+    /// The under-15-ranked banner's second line: how many more to trust the taste signal.
+    static func smallLibraryHint(rankedCount: Int) -> String {
+        let more = max(0, TasteBacktest.minSamples - rankedCount)
+        let games = more == 1 ? "game" : "games"
+        return "Rank \(more) more \(games) in Duel or Triage to sharpen your recommendations."
     }
 }
 

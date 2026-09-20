@@ -441,11 +441,21 @@ struct ImportProgress: Sendable, Hashable, Codable {
     /// Total units, when known.
     var total: Int?
     var detail: String
+    /// **(matching phase)** The title currently being matched, on its own so the shared
+    /// progress view can middle-truncate it independently of the never-truncated counter
+    /// (owner 2026-09-20). Empty outside matching.
+    var currentTitle: String
+    /// **(matching phase)** Titles restored from the persisted per-title cache this run
+    /// (PLAN §5.1 resume) — shown as the "· N already matched" detail. 0 when none.
+    var alreadyMatched: Int
 
-    init(phase: Phase, completed: Int = 0, total: Int? = nil, detail: String = "") {
+    init(phase: Phase, completed: Int = 0, total: Int? = nil, detail: String = "",
+         currentTitle: String = "", alreadyMatched: Int = 0) {
         self.phase = phase
         self.completed = completed
         self.total = total
         self.detail = detail
+        self.currentTitle = currentTitle
+        self.alreadyMatched = alreadyMatched
     }
 }

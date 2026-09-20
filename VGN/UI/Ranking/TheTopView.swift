@@ -105,11 +105,14 @@ struct TheTopView: View {
         if model.isLoading {
             ProgressView().controlSize(.large).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.rows.isEmpty {
-            ContentUnavailableView {
-                Label("Nothing ranked yet", systemImage: "list.number")
-            } description: {
-                Text("Tier and rank some games and they'll chart here.")
-            }
+            EmptyStateView(
+                systemImage: "list.number",
+                title: "Nothing ranked yet",
+                message: "Tier and rank some games and they'll chart here, from your number one down.",
+                actions: [
+                    EmptyStateAction(title: "Start ranking", systemImage: "square.stack.3d.up.fill",
+                                     isProminent: true) { model.goToDuel() },
+                ])
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {

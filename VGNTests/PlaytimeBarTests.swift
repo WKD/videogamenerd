@@ -91,6 +91,42 @@ import Testing
         #expect(line.summary(locale: Locale(identifier: "en_US")) == "~8.5 · unplaced in A")
     }
 
+    // MARK: - Me-vs-average one-line summary (owner 2026-09-20)
+
+    @Test func comparisonSummaryPercentOfNearestEstimateAbove() {
+        // main 100 h, completionist 200 h, rushed 50 h; my 62 h → 62 % of main (nearest above).
+        let bar = PlaytimeBar.make(mineSeconds: 62 * h, rushed: 50 * h, main: 100 * h,
+                                   completionist: 200 * h)
+        let c = bar.comparisonSummary()
+        #expect(c?.mineText == "You 62 h")
+        #expect(c?.comparison == "62 % of main")
+        #expect(c?.beyond == false)
+    }
+
+    @Test func comparisonSummaryBeyondEveryEstimate() {
+        // my 282 h exceeds completionist (200 h) → 141 % of completionist, emphasised.
+        let bar = PlaytimeBar.make(mineSeconds: 282 * h, rushed: 50 * h, main: 100 * h,
+                                   completionist: 200 * h)
+        let c = bar.comparisonSummary()
+        #expect(c?.comparison == "141 % of completionist")
+        #expect(c?.beyond == true)
+    }
+
+    @Test func comparisonSummaryMidRangePicksNextEstimateUp() {
+        // my 150 h sits between main and completionist → nearest above is completionist.
+        let bar = PlaytimeBar.make(mineSeconds: 150 * h, rushed: 50 * h, main: 100 * h,
+                                   completionist: 200 * h)
+        #expect(bar.comparisonSummary()?.comparison == "75 % of completionist")
+        #expect(bar.comparisonSummary()?.beyond == false)
+    }
+
+    @Test func comparisonSummaryNilWithoutTimeOrEstimates() {
+        #expect(PlaytimeBar.make(mineSeconds: nil, rushed: 50 * h, main: 100 * h,
+                                 completionist: 200 * h).comparisonSummary() == nil)
+        #expect(PlaytimeBar.make(mineSeconds: 62 * h, rushed: nil, main: nil,
+                                 completionist: nil).comparisonSummary() == nil)
+    }
+
     // MARK: - HowLongToBeat link
 
     @Test func hltbURLEncodesTitle() {

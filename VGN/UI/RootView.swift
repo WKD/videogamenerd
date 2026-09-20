@@ -21,7 +21,7 @@ struct RootView: View {
                 .navigationTitle(SidebarView.title(for: vm.selection))
                 .inspector(isPresented: $vm.inspectorPresented) {
                     InspectorView(vm: vm)
-                        .inspectorColumnWidth(min: 260, ideal: 300, max: 440)
+                        .inspectorColumnWidth(min: 300, ideal: 340, max: 480)
                 }
                 .toolbar { toolbarContent }
         }

@@ -290,6 +290,30 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 - [ ] **Stats "Backlog to beat".** Open Library Stats (⌥⌘S). The **Backlog to beat** figure reads "≈ H h" with "At your play style" and a basis line "N games, M without an estimate". Change your play style (BY LENGTH header popover or Settings ▸ General) and the figure updates while the window is open. "Me vs. average" still uses the plain advertised IGDB time.
 - [ ] **Sample mode leaves your real prefs alone.** Launch with `-VGNSampleData YES`, change the play pace / play style, then quit and launch the real app — your real pace/style/sort/PS-Plus-deadline should be unchanged.
 
+## Empty states · progress modal · narrow inspector · Open on IGDB (wave 17 — lane B) [owner]
+- [ ] **Import progress modal doesn't resize.** Run a real GOG / PlayStation / Delicious / Batocera
+  sync. While it matches, the sheet stays a **fixed width** — it does **not** grow/shrink as each game
+  title appears. The counter reads "Matching N of M" (steady, monospaced), the game title middle-
+  truncates on one line, and after ~10 titles an "about N min left" line appears. Resuming a cancelled
+  sync also shows "· K already matched". Batocera now shows the title + ETA like the others.
+- [ ] **Inspector at the minimum width.** Drag the inspector column as narrow as it goes (min is now
+  300 pt). The action buttons (Change IGDB Match… · Refresh metadata · Choose Cover… · Expand Bundle…)
+  stack **one per line**, each fully readable — never squeezed letter-by-letter. The Playtime section
+  reads as one table (Main / Completionist / Rushed, values right-aligned, "—" when missing) and the
+  me-vs-average line ("You 84 h 49 · 141 % of completionist") does not wrap; hover a bar tick for its
+  "Main ≈ 39 h" tooltip.
+- [ ] **A tour of empty states.** Launch with `-VGNSampleData YES` and also with an **empty profile**
+  (a throwaway run with no games). Visit: an empty library (Quick Add), a search/filter with no
+  matches (Clear filters / Search all), each empty sidebar smart list (Backlog, Unranked → Start
+  ranking, Unlinked, Owned/Played, Unmeasured & BY LENGTH → Fetch Missing Time Estimates…), Play Next
+  with nothing ranked (says how many more to rank) and with an over-long bracket, Stats with a scope
+  that has no games, The Top with nothing ranked, and both Vault browsers when nothing is set up /
+  everything is filtered. Copy should read cleanly (second person, no exclamation marks) and each
+  button should do the right thing.
+- [ ] **Open on IGDB from Play Next.** On a Play Next pick that is matched to IGDB, the small
+  "Open on IGDB" icon button opens the game's IGDB page in your browser (and does **not** select the
+  card). A manual / unmatched pick shows **no** such button.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

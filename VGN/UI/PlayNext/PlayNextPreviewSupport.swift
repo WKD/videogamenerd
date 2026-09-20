@@ -76,13 +76,14 @@ enum PlayNextSamples {
         platforms: [String] = ["ps5"], formats: [ProductFormat] = [.digital],
         status: PlayStatus? = nil, estimate: Int? = 190_800, full: Int? = nil,
         score: Double = 0.8, strength: MatchStrength = .strong,
-        reasons: [PlayNextReason], hasMetadata: Bool = true
+        reasons: [PlayNextReason], hasMetadata: Bool = true, igdbID: Int64? = nil
     ) -> PlayNextSuggestion {
         PlayNextSuggestion(
             id: id, title: title, year: year, coverFile: nil,
             platformIDs: platforms, formats: formats, status: status,
             estimateSeconds: estimate, fullEstimateSeconds: full ?? estimate,
-            score: score, matchStrength: strength, reasons: reasons, hasMetadata: hasMetadata)
+            score: score, matchStrength: strength, reasons: reasons, hasMetadata: hasMetadata,
+            igdbID: igdbID)
     }
 
     static let exemplars: [Int64: ExemplarInfo] = [

@@ -115,10 +115,15 @@ struct ImportSyncCoordinator: Sendable {
             // matches gathered so far (incl. the reused ones) are returned and persisted, so a
             // restart resumes rather than re-querying.
             if Task.isCancelled { break }
+            // The title and the resume count travel in their own fields so the shared
+            // progress view can render the counter, the middle-truncated title and the
+            // "· N already matched" detail as separate, non-jittering lines (owner
+            // 2026-09-20). `detail` keeps the combined string for any plain consumer.
             let detail = reusedCount > 0
                 ? "\(title.name) · \(reusedCount) already matched" : title.name
             onProgress(ImportProgress(phase: .matching, completed: index, total: queryTitles.count,
-                                      detail: detail))
+                                      detail: detail, currentTitle: title.name,
+                                      alreadyMatched: reusedCount))
             let row = rowsByExternalID[title.externalID]
             // A file importer matches a cleaned title (`matchTitle`) while `name` keeps
             // the noisy original for display (PLAN §5.5); GOG leaves `matchTitle` nil.

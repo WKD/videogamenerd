@@ -164,55 +164,20 @@ extension View {
     }
 }
 
-/// A small progress sheet with Cancel, shown while a sync runs (PLAN §13.5). During the
-/// matching phase it shows a determinate bar, "Matching N of M · Title" and an estimated time
-/// remaining once the rate settles (coordinator 2026-09-20).
+/// A small progress sheet with Cancel, shown while a sync runs (PLAN §13.5). A thin wrapper
+/// over the shared ``ImportMatchingProgressView`` (owner 2026-09-20 — all sync progress
+/// modals share one fixed-size layout: a determinate bar, "Matching N of M" + the
+/// middle-truncated title, "· N already matched", and an ETA once the rate settles).
 struct PSNSyncProgressSheet: View {
     let progress: ImportProgress?
     var onCancel: () -> Void = {}
     /// Injected for deterministic previews/tests; the app uses the wall clock.
     var now: () -> Date = { Date() }
 
-    @State private var matchingStart: Date?
-
     var body: some View {
-        VStack(spacing: 14) {
-            if progress?.phase == .matching {
-                matchingBody
-            } else {
-                ProgressView().controlSize(.large)
-                Text(phaseLabel).font(.headline)
-                if let detail = progress?.detail, !detail.isEmpty {
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Button("Cancel") { onCancel() }.keyboardShortcut(.cancelAction)
-                .accessibilityIdentifier("psn.sync.cancel")
-        }
-        .padding(28)
-        .frame(minWidth: 340)
-        .onChange(of: progress?.phase) { _, phase in
-            if phase == .matching, matchingStart == nil { matchingStart = now() }
-        }
-    }
-
-    @ViewBuilder
-    private var matchingBody: some View {
-        let completed = progress?.completed ?? 0
-        let total = progress?.total
-        let fraction = ImportMatchProgress.fraction(completed: completed, total: total)
-        if let fraction {
-            ProgressView(value: fraction).controlSize(.large).frame(width: 240)
-        } else {
-            ProgressView().controlSize(.large)
-        }
-        Text(ImportMatchProgress.label(completed: completed, total: total, title: progress?.detail ?? ""))
-            .font(.headline).lineLimit(1)
-        if let start = matchingStart,
-           let eta = ImportMatchProgress.etaText(completed: completed, total: total,
-                                                 elapsedSeconds: now().timeIntervalSince(start)) {
-            Text(eta).font(.caption).foregroundStyle(.secondary)
-        }
+        ImportMatchingProgressView(progress: progress, phaseLabel: phaseLabel,
+                                   cancelIdentifier: "psn.sync.cancel",
+                                   onCancel: onCancel, now: now)
     }
 
     private var phaseLabel: String {

@@ -131,22 +131,19 @@ extension View {
     }
 }
 
-/// A small progress sheet with Cancel, shown while a sync runs (PLAN §14.4).
+/// A small progress sheet with Cancel, shown while a sync runs (PLAN §14.4). A thin wrapper
+/// over the shared ``ImportMatchingProgressView`` (owner 2026-09-20 — every sync progress
+/// modal shares one fixed-size layout, so the sheet never resizes as titles scroll past).
 struct GOGSyncProgressSheet: View {
     let progress: ImportProgress?
     var onCancel: () -> Void = {}
+    /// Injected for deterministic previews/tests; the app uses the wall clock.
+    var now: () -> Date = { Date() }
 
     var body: some View {
-        VStack(spacing: 14) {
-            ProgressView().controlSize(.large)
-            Text(phaseLabel).font(.headline)
-            if let detail = progress?.detail, !detail.isEmpty {
-                Text(detail).font(.caption).foregroundStyle(.secondary)
-            }
-            Button("Cancel") { onCancel() }.keyboardShortcut(.cancelAction)
-        }
-        .padding(28)
-        .frame(minWidth: 320)
+        ImportMatchingProgressView(progress: progress, phaseLabel: phaseLabel,
+                                   cancelIdentifier: "gog.sync.cancel",
+                                   onCancel: onCancel, now: now)
     }
 
     private var phaseLabel: String {

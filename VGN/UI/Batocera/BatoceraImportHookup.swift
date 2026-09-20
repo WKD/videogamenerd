@@ -333,28 +333,20 @@ extension View {
     }
 }
 
-/// A small progress sheet with Cancel, shown while candidates are matched to IGDB.
+/// A small progress sheet with Cancel, shown while candidates are matched to IGDB. A thin
+/// wrapper over the shared ``ImportMatchingProgressView`` (owner 2026-09-20 — every sync
+/// progress modal shares one fixed-size layout; the coordinator already forwards the current
+/// title + resume count in `progress`, this sheet just never rendered them before).
 struct BatoceraReviewProgressSheet: View {
     let progress: ImportProgress?
     var onCancel: () -> Void = {}
+    /// Injected for deterministic previews/tests; the app uses the wall clock.
+    var now: () -> Date = { Date() }
 
     var body: some View {
-        VStack(spacing: 14) {
-            ProgressView(value: fraction).controlSize(.large)
-                .frame(width: 220)
-            Text(phaseLabel).font(.headline)
-            if let progress, progress.phase == .matching, let total = progress.total, total > 0 {
-                Text("\(progress.completed) of \(total)").font(.caption).foregroundStyle(.secondary)
-            }
-            Button("Cancel") { onCancel() }.keyboardShortcut(.cancelAction)
-        }
-        .padding(28)
-        .frame(minWidth: 320)
-    }
-
-    private var fraction: Double? {
-        guard let progress, let total = progress.total, total > 0 else { return nil }
-        return Double(progress.completed) / Double(total)
+        ImportMatchingProgressView(progress: progress, phaseLabel: phaseLabel,
+                                   cancelIdentifier: "batocera.sync.cancel",
+                                   onCancel: onCancel, now: now)
     }
 
     private var phaseLabel: String {

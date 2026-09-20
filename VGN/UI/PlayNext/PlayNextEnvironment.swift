@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import GRDB
 import SwiftUI
@@ -38,6 +39,9 @@ final class PlayNextEnvironment {
     /// One-shot: the "By Length" shelf last selected in the sidebar, consumed once when
     /// Play Next opens so it preselects the matching bracket.
     let bracketHint: (@MainActor () -> LengthShelf?)?
+    /// Opens a URL in the default browser (the card "Open on IGDB" action). Injectable so a
+    /// test can assert the URL without opening a real browser window.
+    let openURL: @MainActor (URL) -> Void
 
     init(
         recommendation: RecommendationStore,
@@ -47,7 +51,8 @@ final class PlayNextEnvironment {
         secondOpinion: any SecondOpinionProviding,
         inspect: (@MainActor (Int64) -> Void)? = nil,
         paceModel: PlayPaceModel? = nil,
-        bracketHint: (@MainActor () -> LengthShelf?)? = nil
+        bracketHint: (@MainActor () -> LengthShelf?)? = nil,
+        openURL: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     ) {
         self.recommendation = recommendation
         self.library = library
@@ -57,6 +62,7 @@ final class PlayNextEnvironment {
         self.inspect = inspect
         self.paceModel = paceModel
         self.bracketHint = bracketHint
+        self.openURL = openURL
     }
 
     /// The data seam the model reads/writes through.

@@ -471,6 +471,29 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   sample library has a candidate, which the current sample data has none of). No snapshot needed
   re-baselining this wave; a future sidebar snapshot that seeds a bundle candidate should add it.
 
+## 5g. Empty states / progress / inspector polish (wave 17 — lane B)
+- **Vault empty states have no button.** The "source not set up" Vault empties (Batocera / PS Plus)
+  point the owner at **Settings ▸ Batocera / PlayStation** in the sentence but show **no button**:
+  there is no programmatic "open a specific Settings tab" seam today (`SettingsView` is a plain
+  `TabView` with no selection binding). **[follow-up: add a Settings tab-selection seam, then wire
+  these two buttons + the inspector could reuse it.]**
+- **Import review sheet "nothing to review" not done here.** `ImportReviewSheet.swift` is owned by
+  the W16-B lane; the empty branch ("Everything is already in your library") should be added there.
+- **Tier Board / Duel / Triage keep their own empty views.** The Top, Play Next, Stats, the grid and
+  the Vault now use the shared `EmptyStateView`; the Tier Board still communicates emptiness with
+  per-row "Drop games here" placeholders + the header **Place N** button (no full-board overlay), and
+  `DuelEmptyStateView` / the Triage "complete" summary are bespoke (already rich, with Refine / Go to
+  Triage / Start duels actions) and were left as-is rather than reshaped to the shared view.
+- **Grid no-results shows at most two buttons.** The shared `EmptyStateView` caps actions at two, so a
+  scoped search with facets prefers **Search all games** + **Clear filters** over also offering the
+  **Add "query"** quick-add (which still appears when there is room). Behaviour, not a defect.
+- **"From the vault" Play Next row.** The owner asked for an "Open on IGDB" button on it too, but Play
+  Next has **no vault row today** — nothing to add there yet. The button is on the hero + alternative
+  cards, gated on the game having an IGDB id.
+- **IGDB link is a search URL.** "Open on IGDB" (cards + reconcile sheet) opens IGDB's *search* page
+  keyed on the title (`IGDBWebLink`), not a direct game page — IGDB has no stable public URL from the
+  numeric id alone. One scheme, shared.
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.
