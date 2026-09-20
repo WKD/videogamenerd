@@ -65,7 +65,8 @@ final class GOGImportPresenter {
                 if Task.isCancelled { self.reset(); return }
                 self.reviewModel = ImportReviewModel(
                     source: backend.source, sourceLabel: backend.sourceLabel,
-                    staging: backend.staging, result: result, onLibraryChanged: onLibraryChanged)
+                    staging: backend.staging, result: result,
+                    showsPlatformPolicy: true, onLibraryChanged: onLibraryChanged)
                 self.progress = nil
                 self.isSyncing = false
                 await self.account?.refresh()

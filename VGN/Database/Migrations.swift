@@ -558,6 +558,18 @@ enum Migrations {
         }
     }
 
+    /// v12 (PLAN §16 "Send to the Vault"): a nullable `owned` flag on `rom_catalog` so a game
+    /// the owner sends to the Vault by hand is remembered as **really owned** (not a subscription
+    /// claim) — it never gets the PS Plus boost / deadline. Pure additive `ALTER TABLE ADD
+    /// COLUMN` (the v8/v9/v11 pattern): no table rebuild, no deferred FK checks, FTS untouched.
+    /// `owned = 1` for a hand-vaulted purchase; NULL / 0 for everything else (ROMs, PS Plus
+    /// claims — `membership` still tells PS Plus apart).
+    static func registerV12(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v12") { db in
+            try db.execute(sql: "ALTER TABLE rom_catalog ADD COLUMN owned INTEGER NOT NULL DEFAULT 0;")
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

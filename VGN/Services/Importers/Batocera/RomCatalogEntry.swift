@@ -65,6 +65,10 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
     var matchState: VaultMatchState?
     /// When the trait pass last touched the row.
     var matchedAt: Date?
+    /// The owner sent this row to the Vault by hand and **really owns** it (a purchase / a GOG or
+    /// Delicious game), so it never gets the PS Plus boost / deadline (PLAN §16, v12). A PS Plus
+    /// claim keeps `owned = false` and its `membership`.
+    var owned: Bool = false
 
     /// The `rom_catalog.source` as a typed value (nil for an unknown source string).
     var vaultSource: VaultSource? { VaultSource(storage: source) }
@@ -135,7 +139,7 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
          externalIDColumn: String? = nil, coverURL: String? = nil, membership: String? = nil,
          crossGenNote: String? = nil, igdbID: Int64? = nil, lengthMainSeconds: Int? = nil,
          lengthCompleteSeconds: Int? = nil, traitsJSON: String? = nil, igdbRating: Double? = nil,
-         matchState: VaultMatchState? = nil, matchedAt: Date? = nil) {
+         matchState: VaultMatchState? = nil, matchedAt: Date? = nil, owned: Bool = false) {
         self.id = id
         self.source = source
         self.system = system
@@ -179,7 +183,12 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
         self.igdbRating = igdbRating
         self.matchState = matchState
         self.matchedAt = matchedAt
+        self.owned = owned
     }
+
+    /// Whether this Vault entry should get the PS Plus boost / deadline: a PS Plus claim that is
+    /// not a hand-vaulted purchase (PLAN §16). A `owned` entry never does.
+    var isPSPlusSubscription: Bool { vaultSource == .psn && !owned }
 
     /// Build a fresh catalogue entry from a folded gamelist representative (PLAN §15). The
     /// sort / normalised titles come from the shared `SortTitle` / `TitleNormalizer` stages,

@@ -89,6 +89,7 @@ final class DeliciousImportPresenter {
                     staging: staging, result: result,
                     productFormat: .physical, platformChoices: platformChoices,
                     detectShelfDuplicates: true, showsSourceCoverToggle: afterCommit != nil,
+                    showsPlatformPolicy: true,
                     afterCommit: afterCommit, onLibraryChanged: onLibraryChanged)
                 self.progress = nil
                 self.isSyncing = false

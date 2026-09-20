@@ -182,6 +182,8 @@ final class AppEnvironment {
                     if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
                 })
             settings.psnAccount = psnWiring.account
+            // "Show in the Vault" from the PSN review sheet selects the PS Plus Vault row (PLAN §16).
+            psnWiring.presenter.onShowInVault = { [weak vm] in vm?.select(.vault(.psn)) }
 
             // Delicious Library file import (PLAN §5.5): available in live AND sample mode
             // (a file needs no account). A committed import notifies enrichment like GOG.

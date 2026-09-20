@@ -22,7 +22,16 @@ struct VaultBrowserRow: View {
             VaultCoverThumb(entry: entry, loader: env.vaultCovers)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
-                    psPlusBadge
+                    if entry.owned {
+                        Text("Owned")
+                            .font(.caption2).bold()
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.green.opacity(0.2), in: Capsule())
+                            .appKitTooltip("You own this — sent to the Vault by hand")
+                            .accessibilityIdentifier("vault.ownedMarker.\(entry.id)")
+                    } else {
+                        psPlusBadge
+                    }
                     Text(entry.name).font(.body).lineLimit(1)
                 }
                 HStack(spacing: 6) {

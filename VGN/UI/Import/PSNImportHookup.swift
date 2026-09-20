@@ -24,6 +24,10 @@ final class PSNImportPresenter {
     /// The PlayStation platform slugs offered in the review sheet's per-row platform menu.
     static let platformChoices = ["ps5", "ps4", "ps3", "ps2", "ps1", "vita", "psp"]
 
+    /// Select the PS Plus Vault sidebar row ("Show in the Vault" in the review sheet, PLAN §16).
+    /// Wired by the composition root to the library view model.
+    @ObservationIgnored var onShowInVault: () -> Void = {}
+
     /// Non-nil while the review sheet is up.
     var reviewModel: ImportReviewModel?
     /// The latest progress while a sync runs (nil once the review sheet opens).
@@ -93,12 +97,14 @@ final class PSNImportPresenter {
                     // can be suggested in "From the vault" (PLAN §16). Capped, one run at a time.
                     self.account?.vaultMatch?.refreshAndRun()
                 }
-                self.reviewModel = ImportReviewModel(
+                let review = ImportReviewModel(
                     source: backend.source, sourceLabel: backend.sourceLabel,
                     staging: backend.staging, result: result,
                     productFormat: .digital,
                     platformChoices: Self.platformChoices,
                     onLibraryChanged: onLibraryChanged)
+                review.onShowInVault = self.onShowInVault
+                self.reviewModel = review
                 self.progress = nil
                 self.isSyncing = false
                 await self.account?.refresh()
