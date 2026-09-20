@@ -19,4 +19,11 @@ enum IGDBImageURL {
     static func cover(imageID: String, size: IGDBImageSize = .coverBig2x) -> URL? {
         URL(string: "\(base)/\(size.rawValue)/\(imageID).jpg")
     }
+
+    /// Artwork / screenshot URL for an `image_id` (PLAN §5.2 "Choose Cover…"): the same
+    /// image CDN, a large default token. Artworks are landscape and have no fixed size,
+    /// so the token only scales — the true dimensions come from the IGDB query.
+    static func artwork(imageID: String, size: IGDBImageSize = .p1080) -> URL? {
+        URL(string: "\(base)/\(size.rawValue)/\(imageID).jpg")
+    }
 }

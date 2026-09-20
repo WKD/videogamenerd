@@ -182,6 +182,7 @@ struct ChooseCoverSheet: View {
 
     private func sublabel(for candidate: CoverCandidate) -> String? {
         var parts: [String] = []
+        if let kind = candidate.kind { parts.append(kind) }
         if let region = candidate.region { parts.append(region) }
         if let size = candidate.pixelSize {
             parts.append("\(Int(size.width))×\(Int(size.height))")
@@ -211,9 +212,12 @@ private struct CoverTile: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 8).fill(.quaternary)
                 if let image {
+                    // Fill + clip to the portrait tile, exactly as the grid crops a cover,
+                    // so a landscape IGDB artwork previews the way it will actually look
+                    // (D1 — the owner isn't surprised by the crop).
                     Image(decorative: image, scale: displayScale)
                         .resizable()
-                        .aspectRatio(contentMode: .fit)
+                        .aspectRatio(contentMode: .fill)
                 } else {
                     Image(systemName: "photo")
                         .font(.title2)

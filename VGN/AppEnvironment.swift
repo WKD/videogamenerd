@@ -129,7 +129,9 @@ final class AppEnvironment {
             let built = buildServices(mode: mode, database: database, secrets: settings.secretStore)
             let coverLoader: any CoverLoading = built.map {
                 ChooseCoverService(coverStore: $0.graph.coverStore, library: store,
-                                   allowsNetwork: mode == .live)
+                                   allowsNetwork: mode == .live,
+                                   // Live only: the IGDB artwork fetch for the sheet (D1).
+                                   igdbClient: mode == .live ? $0.graph.igdbClient : nil)
             } ?? NoopCoverLoader()
 
             let rankingStore = RankingStore(database)
