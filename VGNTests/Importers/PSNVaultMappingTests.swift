@@ -79,4 +79,53 @@ import Testing
         #expect(rows.first?.ignoreReason == .vaultedSubscription)
         #expect(entries.map(\.name) == ["Vaulted One"])
     }
+
+    private func gameListCat(_ name: String, category: String, service: String, seconds: Int,
+                             titleId: String) -> PSNGameListTitle {
+        PSNGameListTitle(titleId: titleId, name: name, localizedName: nil, category: category,
+                         service: service, playCount: 1, firstPlayedDateTime: nil,
+                         lastPlayedDateTime: nil, playDuration: "PT\(seconds)S", concept: nil)
+    }
+
+    /// `none_purchased` (the PS4-era digital-purchase spelling) has the same Vault semantics as
+    /// `none(purchased)`: it never asserts ownership over the PS Plus gate, so a claim under the
+    /// gate still vaults (mirroring the staging row), and without any entitlement it is owned
+    /// digital and never vaulted.
+    @Test func nonePurchasedShareTheVaultSemanticsOfStaging() {
+        let g = gameListCat("Underplayed", category: "ps4_game", service: "none_purchased",
+                            seconds: 120, titleId: "CUSA-NP")
+        let p = [purchase("Underplayed", platform: "PS4", titleId: "CUSA-NP")]
+        let rows = PSNMapping.stagingRows(trophyTitles: [], gameList: [g], purchases: p)
+        let (entries, _) = PSNMapping.vaultEntries(trophyTitles: [], gameList: [g], purchases: p)
+        #expect(rows.first?.ignoreReason == .vaultedSubscription)   // gate wins over the service
+        #expect(entries.map(\.name) == ["Underplayed"])
+        #expect(entries.first?.system == "ps4")
+        // A `none_purchased` entry with no entitlement is owned digital, never vaulted.
+        let (none, _) = PSNMapping.vaultEntries(trophyTitles: [], gameList: [g], purchases: [])
+        #expect(none.isEmpty)
+    }
+
+    /// An `unknown`-category claim is a delisted GAME, not an app: under the gate it still
+    /// vaults, platform from the `CUSA…` title-id prefix, with a "category unknown" note — and
+    /// the staging row agrees (`.vaultedSubscription`). An **app** category, by contrast, is a
+    /// media app in both, so it never reaches the Vault.
+    @Test func unknownCategoryVaultsAsAGameButAnAppDoesNot() {
+        let g = gameListCat("Delisted", category: "unknown", service: "ps_plus",
+                            seconds: 60, titleId: "CUSA-UNK")
+        let p = [purchase("Delisted", platform: "PS4", titleId: "CUSA-UNK")]
+        let rows = PSNMapping.stagingRows(trophyTitles: [], gameList: [g], purchases: p)
+        let (entries, _) = PSNMapping.vaultEntries(trophyTitles: [], gameList: [g], purchases: p)
+        #expect(rows.first?.ignoreReason == .vaultedSubscription)
+        #expect(entries.count == 1)
+        #expect(entries[0].system == "ps4")                        // CUSA prefix
+        #expect(entries[0].crossGenNote?.contains("category unknown") == true)
+
+        let app = gameListCat("Streamer", category: "ps4_videoservice_web_app", service: "ps_plus",
+                              seconds: 60, titleId: "CUSA-APP")
+        let ap = [purchase("Streamer", platform: "PS4", titleId: "CUSA-APP")]
+        let appRows = PSNMapping.stagingRows(trophyTitles: [], gameList: [app], purchases: ap)
+        let (appEntries, _) = PSNMapping.vaultEntries(trophyTitles: [], gameList: [app], purchases: ap)
+        #expect(appRows.first?.ignoreReason == .mediaApp)          // app, not vaulted
+        #expect(appEntries.isEmpty)
+    }
 }

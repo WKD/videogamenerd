@@ -175,20 +175,24 @@ struct PSNGameListPage: Decodable, Sendable, Equatable {
 /// `PT228H56M33S`, `PT33H34M17S`, `PT5M22S`) — parsed to seconds by ``PSNDuration``.
 /// Required: `titleId`, `name`.
 ///
-/// Two fields drive the mapping (verified live 2026-09-20):
-/// - `service` tells **how** the game was accessed: `none(purchased)` = a digital purchase,
-///   `ps_plus` = played through PS Plus, `other` = neither (in the owner's data, his DISC
-///   games) — kept raw; never asserts ownership on its own (PLAN §13.3).
-/// - `category` (`ps5_native_game`, `ps4_game`, `ps5_native_media_app`, …) gives the
-///   platform (the list has no platform field) and flags non-games (a category that does not
-///   end in `_game` is a media app → *Ignored*).
+/// Two fields drive the mapping (verified live 2026-09-20, on the 231-title real fetch):
+/// - `service` tells **how** the game was accessed. Four values seen: `none(purchased)` and
+///   `none_purchased` (two spellings of the same digital purchase — the underscore form only
+///   on PS4-generation `CUSA…` records), `ps_plus` (played through PS Plus), `other` (neither
+///   — the owner's DISC games). Normalised tolerantly by `PSNMapping.classifyService`; kept
+///   raw when unknown; never asserts ownership on its own (PLAN §13.3).
+/// - `category` (`ps5_native_game`, `ps4_game`, `ps5_native_media_app`,
+///   `ps4_videoservice_web_app`, `ps4_nongame_mini_app`, `unknown`, `not_found`, …) gives the
+///   platform (the list has no platform field) and flags non-games. App-keyword categories
+///   (`media_app`/`videoservice`/`web_app`/`nongame`/`mini_app`) → *Ignored*; `unknown` /
+///   `not_found` are delisted **games**, not apps (see `PSNMapping.classifyCategory`).
 struct PSNGameListTitle: Decodable, Sendable, Equatable {
     let titleId: String
     let name: String
     let localizedName: String?
-    /// e.g. `ps5_native_game`, `ps4_game`, `ps5_native_media_app` (Netflix/Plex). Kept raw.
+    /// e.g. `ps5_native_game`, `ps4_game`, `ps5_native_media_app`, `unknown`, `not_found`. Raw.
     let category: String?
-    /// `none(purchased)` / `ps_plus` / `other`, or an unknown value kept raw. Kept raw.
+    /// `none(purchased)` / `none_purchased` / `ps_plus` / `other`, or an unknown value. Raw.
     let service: String?
     let playCount: Int?
     let firstPlayedDateTime: Date?
