@@ -273,6 +273,20 @@ final class HLTBFetchPresenter {
 
     func dismissFind() { find = nil }
 
+    /// Whether "Find on HowLongToBeat…" is offerable from the Game menu — a single game
+    /// is selected in a library grid destination.
+    var canFindSelected: Bool {
+        guard let library, library.isLibraryGridDestination else { return false }
+        return library.selectedGameIDs.count == 1
+    }
+
+    /// Open the Find sheet for the single selected game (Game menu).
+    func findSelected() {
+        guard let library, library.selectedGameIDs.count == 1,
+              let id = library.selectedGameIDs.first else { return }
+        findOne(gameID: id)
+    }
+
     private func applyFindLink(gameID: Int64, candidate: HLTBCandidate,
                                kind: HLTBFindModel.LinkKind, search: any HLTBSearching) {
         find = nil

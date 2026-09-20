@@ -90,12 +90,15 @@ struct HLTBBulkSheet: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(game.title).font(.callout)
-                                    Text("\(game.candidates.count) candidates")
-                                        .font(.caption2).foregroundStyle(.secondary)
+                                    Text(subtitle(for: game))
+                                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 Spacer()
                                 Button("Skip") { model.skip(gameID: game.gameID) }
                                     .buttonStyle(.borderless)
+                                Button("Find…") { presenter.findOne(gameID: game.gameID) }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityIdentifier("hltb.bulk.find.\(game.gameID)")
                                 Button("Choose…") { pickFor = game }
                                     .accessibilityIdentifier("hltb.bulk.choose.\(game.gameID)")
                             }
@@ -114,5 +117,14 @@ struct HLTBBulkSheet: View {
                     .accessibilityIdentifier("hltb.bulk.done")
             }
         }
+    }
+
+    /// "3 candidates · on PS4, PS5" — my platforms inline so many rows resolve at a glance (D6).
+    private func subtitle(for game: HLTBAmbiguousGame) -> String {
+        var parts = ["\(game.candidates.count) candidates"]
+        if !game.librarySlugs.isEmpty {
+            parts.append("on " + game.librarySlugs.map { PlatformLabels.short($0) }.joined(separator: ", "))
+        }
+        return parts.joined(separator: " · ")
     }
 }
