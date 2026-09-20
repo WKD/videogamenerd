@@ -411,16 +411,6 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 - [ ] **Inspector actions read as buttons (D6).** Change IGDB Match… / Refresh metadata / Choose
   Cover… / Add copy… / Edit compilation… / trash all look like real (bordered) buttons; the inspector
   still lays out correctly at its narrowest width (they stack, each with a visible button shape).
-- [ ] **Deleting a copy updates the platform pills (wave 19, lane C).** Take a game owned on **Mac + PC**
-  (two digital copies). Delete the **Mac** copy (⇧O, pick the Mac copy — or the inspector). The **"Mac"
-  pill under the title disappears**, leaving only "PC"; the **Digital** badge stays, and its tooltip now
-  reads "Digital · PC" (was "Digital · Mac, PC"). The inspector's platform list and the sidebar Mac count
-  drop Mac too. (One-time: on the first launch after this build, any already-stale platform pills from
-  older copy deletions are cleaned up silently.)
-  - *Note:* un-owning / removing a copy is **not** an undoable action today (like Delete — see wave-19
-    handoff), so ⌘Z does **not** bring the copy back. Where a copy change **is** undoable — a **merge**,
-    **bundle expansion** or **IGDB link/relink** — ⌘Z restores every platform row exactly (the row-level
-    snapshot always covered `game_platforms`). Making plain copy removal undoable is a separate follow-up.
 
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
