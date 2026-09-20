@@ -121,9 +121,9 @@ struct BatoceraFavouriteAutoAdd: Sendable {
             // A confident bundle match auto-adds as a compilation only when it expands to ≥ 2
             // members (D2, PLAN §15); a 0/1-member bundle is ambiguous and waits for review.
             if best.isBundle {
-                let members = (try? await expander.members(ofBundleIGDBID: best.igdbID)) ?? []
-                guard members.count >= 2 else { continue }
-                let drafts = ImportBundleMapping.members(from: members)
+                let result = (try? await expander.members(ofBundleIGDBID: best.igdbID)) ?? BundleMemberResult()
+                guard result.isWorthCompilation else { continue }
+                let drafts = ImportBundleMapping.members(from: result.members)
                 plans.append(.compilation(
                     entry: entry,
                     bundle: BatoceraPromoter.BundlePromotion(title: best.name, members: drafts)))

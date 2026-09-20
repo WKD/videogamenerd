@@ -357,13 +357,15 @@ final class PhotoScanModel {
 
         for row in committable {
             if row.isCompilation, let igdbID = row.selectedMatch?.igdbID, row.platformSlug != nil {
-                let members = (try? await environment.searcher.bundleMembers(bundleIGDBID: igdbID)) ?? []
-                if members.isEmpty {
-                    singles.append(PhotoScanReviewBuilder.gameDraft(for: row))   // no member list → single
+                let expansion = (try? await environment.searcher.bundleMembers(bundleIGDBID: igdbID)) ?? BundleMemberResult()
+                // Fewer than two members left (policy dropped/folded them) → not worth a
+                // compilation; commit the placeholder as a single game (PLAN §5.1).
+                if !expansion.isWorthCompilation {
+                    singles.append(PhotoScanReviewBuilder.gameDraft(for: row))
                 } else {
                     compilations.append(ScanCompilationDraft(
                         product: PhotoScanReviewBuilder.productDraft(for: row),
-                        members: PhotoScanReviewBuilder.memberDrafts(from: members, played: row.played)
+                        members: PhotoScanReviewBuilder.memberDrafts(from: expansion.members, played: row.played)
                     ))
                 }
             } else {

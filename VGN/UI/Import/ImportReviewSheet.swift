@@ -66,6 +66,9 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     /// ⇒ this row commits as a compilation Product; empty ⇒ a plain single (also the
     /// fallback when IGDB returned no member list).
     var bundleMembers: [CompilationMemberDraft] = []
+    /// **(Bundles, PLAN §5.1)** What the member policy dropped / folded, shown as a quiet
+    /// "left out" line so nothing disappears silently.
+    var bundleLeftOut: [BundleLeftOut] = []
     /// A new row whose match is a bundle we could expand into a compilation.
     var isBundleExpansion: Bool { !bundleMembers.isEmpty }
     /// **(PSN twin folding, PLAN §13.3 / D5)** When set, this row is a cross-gen twin folded under
@@ -86,6 +89,12 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     }
     var isCommittable: Bool { include && !ignored && !shelfDuplicate && !vaulted && twinFoldedInto == nil }
     var matchedTitle: String? { proposedMatch?.name }
+    /// A short label when the matched IGDB game is not a plain main game and not a bundle —
+    /// "Expansion", "DLC", "Port"… (PLAN §5.1 D4). Bundles are shown by the compilation UI.
+    var matchTypeLabel: String? {
+        guard let type = proposedMatch?.gameType, !type.isCompilation else { return nil }
+        return GameTypePolicy.label(for: type)
+    }
     var showsSourceTitle: Bool {
         guard let matched = proposedMatch?.name else { return true }
         return matched.caseInsensitiveCompare(sourceTitle) != .orderedSame
@@ -335,8 +344,11 @@ final class ImportReviewModel {
         let confidence = outcome?.bucket ?? .none
         // Confident, still-New matches are pre-ticked; the rest wait (PLAN §14.3). PSN uses
         // its own pre-tick per group (Played/Purchased/PS Plus/already-in-library ticked;
-        // Launched 0 % unticked) below.
-        let include = bucket == .new && confidence == .confident
+        // Launched 0 % unticked) below. A best match that is DLC / an expansion / a season /
+        // a pack (non-standalone content, PLAN §5.1 D4) is **never** auto-ticked — the row
+        // stays, unticked and labelled, so the owner decides (a boxed expansion is legit).
+        let standaloneMatch = outcome?.best?.gameType.map(GameTypePolicy.isStandaloneGame) ?? true
+        let include = bucket == .new && confidence == .confident && standaloneMatch
         var row = ImportReviewRow(
             externalID: title.externalID,
             sourceTitle: title.name,
@@ -360,8 +372,13 @@ final class ImportReviewModel {
         // list, keeps the single-game path (the fallback).
         if bucket == .new, title.matchedGameID == nil,
            let expansion = bundleExpansions[title.externalID], expansion.hasMembers {
-            row.bundleTitle = expansion.title
-            row.bundleMembers = expansion.members
+            row.bundleLeftOut = expansion.leftOut
+            // Fewer than two members left ⇒ not worth a compilation (PLAN §5.1); the row
+            // keeps the single-game fallback but still shows what was left out.
+            if expansion.isWorthCompilation {
+                row.bundleTitle = expansion.title
+                row.bundleMembers = expansion.members
+            }
         }
 
         // Shelf-duplicate rule: a New row whose match already has an owned copy of this
@@ -512,7 +529,8 @@ final class ImportReviewModel {
               let outcome = matchByID[externalID],
               let expansion = bundleExpansions[externalID] else { return }
         let updated = ImportBundleExpansion(
-            bundleIGDBID: expansion.bundleIGDBID, title: expansion.title, members: row.bundleMembers)
+            bundleIGDBID: expansion.bundleIGDBID, title: expansion.title,
+            members: row.bundleMembers, leftOut: expansion.leftOut)
         let persisted = PersistedImportMatch(outcome: outcome, bundle: updated)
         let store = staging, src = source
         Task { try? await store.recordMatchOutcome(source: src, externalID: externalID, persisted) }
@@ -1474,6 +1492,12 @@ private struct ImportReviewRowView: View {
             }
             HStack(spacing: 6) {
                 platformMenu
+                if let typeLabel = row.matchTypeLabel {
+                    Text(typeLabel).font(.caption2).foregroundStyle(.orange)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                        .help("IGDB classifies this match as \(typeLabel.lowercased()) — not a standalone game; ticked only if you say so.")
+                }
                 if row.linuxOnly {
                     Text("Linux-only → PC").font(.caption2)
                         .padding(.horizontal, 5).padding(.vertical, 1)
@@ -1687,6 +1711,7 @@ private struct PSNReviewRowView: View {
                     : "Bundle · \(row.bundleMembers.count) games — imports as a compilation",
                   systemImage: "square.stack.3d.up")
                 .font(.caption2).foregroundStyle(.secondary)
+            bundleLeftOutLine
             if model.psnBundleAsksPlayed(row) {
                 HStack(spacing: 6) {
                     Text("Which did you play?").font(.caption2).foregroundStyle(.secondary)
@@ -1706,6 +1731,21 @@ private struct PSNReviewRowView: View {
                     .toggleStyle(.checkbox)
                 }
             }
+        } else {
+            // Fell back to a single (fewer than two members kept) but the policy still
+            // dropped/folded something — say so (PLAN §5.1).
+            bundleLeftOutLine
+        }
+    }
+
+    /// A quiet "Left out: …" line for whatever the member policy dropped or folded — bounded
+    /// (truncates), never `fixedSize` on wrapping text (PLAN §5.1).
+    @ViewBuilder
+    private var bundleLeftOutLine: some View {
+        if !row.bundleLeftOut.isEmpty {
+            Text("Left out: " + row.bundleLeftOut.map(\.displayText).joined(separator: ", "))
+                .font(.caption2).foregroundStyle(.tertiary)
+                .lineLimit(2).truncationMode(.tail)
         }
     }
 }

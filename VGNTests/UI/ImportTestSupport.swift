@@ -100,7 +100,7 @@ struct FakeScanSearcher: PhotoScanSearching {
     var results: [IGDBSearchResult] = []
     var members: [IGDBSearchResult] = []
     func search(_ text: String, platformSlug: String?) async throws -> [IGDBSearchResult] { results }
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] { members }
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult { BundleMemberResult(members: members) }
 }
 
 // MARK: - Builders

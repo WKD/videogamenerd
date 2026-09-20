@@ -92,6 +92,6 @@ private struct PreviewCommitter: PhotoScanCommitting {
 
 private struct PreviewSearcher: PhotoScanSearching {
     func search(_ text: String, platformSlug: String?) async throws -> [IGDBSearchResult] { [] }
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] { [] }
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult { BundleMemberResult() }
 }
 #endif

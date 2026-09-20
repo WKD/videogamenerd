@@ -115,9 +115,9 @@ final class IGDBLinkPresenter {
             }
             let searcher = self.searcher
             let model = BundleBatchExpandModel(store: store, membersOf: { candidate in
-                guard let igdbID = candidate.igdbID else { return [] }
-                let raw = (try? await searcher.bundleMembers(bundleIGDBID: igdbID)) ?? []
-                return ImportBundleMapping.members(from: raw)
+                guard let igdbID = candidate.igdbID else { return ([], []) }
+                let expansion = (try? await searcher.bundleMembers(bundleIGDBID: igdbID)) ?? BundleMemberResult()
+                return (ImportBundleMapping.members(from: expansion.members), expansion.leftOut)
             })
             model.onClose = { [weak self] in self?.batchExpand = nil }
             model.onFinished = { [weak self] finished in
@@ -150,8 +150,8 @@ final class IGDBLinkPresenter {
     }
 
     private func runBundleExpansion(gameID: Int64, bundleIGDBID: Int64, bundleTitle: String) async {
-        let raw = (try? await searcher.bundleMembers(bundleIGDBID: bundleIGDBID)) ?? []
-        let members = ImportBundleMapping.members(from: raw)
+        let expansion = (try? await searcher.bundleMembers(bundleIGDBID: bundleIGDBID)) ?? BundleMemberResult()
+        let members = ImportBundleMapping.members(from: expansion.members)
         guard !members.isEmpty else {
             link = nil
             // Remember it is not a bundle so it leaves the Bundles-to-Expand list for good (§5.1).
@@ -162,7 +162,7 @@ final class IGDBLinkPresenter {
         }
         let preview = try? await store.bundleExpansionPreview(gameID: gameID)
         let model = BundleExpansionModel(
-            gameID: gameID, bundleTitle: bundleTitle, members: members,
+            gameID: gameID, bundleTitle: bundleTitle, members: members, leftOut: expansion.leftOut,
             carriesPlayData: preview?.carriesPlayData ?? false,
             isPlayed: preview?.isPlayed ?? false, isRanked: preview?.isRanked ?? false)
         model.onCancel = { [weak self] in self?.dismiss() }

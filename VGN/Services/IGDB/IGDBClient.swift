@@ -115,10 +115,9 @@ actor IGDBClient {
     }
 
     /// Member games of a bundle/compilation (PLAN §5.1). Given a bundle game's own
-    /// metadata, resolve its members: prefer the `bundles` relation when populated,
-    /// otherwise fall back to the reverse lookup `where bundles = (id)`. Returns
-    /// search-result DTOs; never fails hard on imperfect coverage (returns `[]`).
-    func bundleMembers(of bundle: IGDBGameMetadata, force: Bool = false) async throws -> [IGDBSearchResult] {
+    /// metadata, resolve its members through the one member policy (see
+    /// ``bundleMembers(ofBundleID:force:)``).
+    func bundleMembers(of bundle: IGDBGameMetadata, force: Bool = false) async throws -> BundleMemberResult {
         // NOTE: a game's own `bundles` field lists the bundles it BELONGS TO (its
         // parents) — e.g. "God of War Collection".bundles = ["God of War Trilogy"] —
         // never its members. Members are only reachable through the reverse lookup.
@@ -127,12 +126,24 @@ actor IGDBClient {
 
     /// Members of bundle `id`: the games that list `id` in their `bundles` relation
     /// (reverse lookup). Nested bundles are expanded (a trilogy made of a two-game
-    /// collection + a third game yields the three games), add-on content is dropped,
-    /// results are de-duplicated and keep IGDB's order.
-    func bundleMembers(ofBundleID id: Int64, force: Bool = false) async throws -> [IGDBSearchResult] {
+    /// collection + a third game yields the three games); then **the one member policy**
+    /// (``applyMemberPolicy(to:)``) drops non-standalone content (DLC / expansions /
+    /// seasons / packs / mods / updates, reported as ``BundleMemberResult/leftOut``),
+    /// folds a port onto its parent game, de-duplicates by IGDB id and orders by release
+    /// date — so every producer path that goes through this client shares the rules
+    /// (PLAN §5.1). Never fails hard on imperfect coverage (empty members).
+    func bundleMembers(ofBundleID id: Int64, force: Bool = false) async throws -> BundleMemberResult {
+        let raw = try await rawBundleMembers(ofBundleID: id, force: force)
+        return try await applyMemberPolicy(to: raw)
+    }
+
+    /// The raw reverse-lookup member list (add-on content NOT yet dropped, ports NOT yet
+    /// folded — that is the policy's job in ``applyMemberPolicy(to:)``, applied to both
+    /// the fresh and the cached path so the rules are honoured everywhere).
+    private func rawBundleMembers(ofBundleID id: Int64, force: Bool) async throws -> [IGDBSearchResult] {
         // Read-through: a fresh bundle blob carries its expanded member-id list
-        // (`.bundleMembers`) and each member has a fresh `.search` payload — serve it
-        // all without a request (PLAN §5.1).
+        // (`.bundleMembers`) and each member has a fresh `.search` payload (which carries
+        // `game_type`/`parent_game`/`version_parent`) — serve it all without a request.
         if !force, let bundleEntry = await cache.freshEntry(forID: id, satisfying: .bundleMembers),
            let memberIDs = CatalogCacheShapeJSON.bundleMemberIDs(in: bundleEntry.json) {
             let cached = await cache.freshEntries(forIDs: memberIDs, satisfying: .search)
@@ -143,9 +154,9 @@ actor IGDBClient {
 
         var visited: Set<Int64> = [id]
         let members = try await expandedMembers(ofBundleID: id, depth: 0, visited: &visited)
-        // Cache the expanded member-id list in the bundle's own blob (merged, so the
+        // Cache the RAW expanded member-id list in the bundle's own blob (merged, so the
         // bundle's game fields — if ever fetched — are kept). The member payloads were
-        // written through as `.search` during expansion.
+        // written through as `.search` during expansion; the policy is re-applied on read.
         let stampedAt = Date()
         var object: [String: Any] = ["id": id, CatalogCacheShapeJSON.bundleMembersKey: members.map(\.id)]
         CatalogCacheShapeJSON.tag(&object, shapes: .bundleMembers, stampedAt: stampedAt)
@@ -169,7 +180,8 @@ actor IGDBClient {
         var members: [IGDBSearchResult] = []
         for member in direct where !visited.contains(member.id) {
             visited.insert(member.id)
-            if member.gameType.isAddOnContent { continue }   // DLC / packs / updates / mods
+            // Recurse only into a nested *bundle* (a pack/DLC is not a container of games);
+            // the member policy (not this recursion) decides what is finally kept.
             if member.gameType == .bundle, depth < 3 {
                 let nested = try await expandedMembers(ofBundleID: member.id, depth: depth + 1, visited: &visited)
                 // A nested bundle IGDB knows nothing about stays as one entry.
@@ -179,6 +191,80 @@ actor IGDBClient {
             }
         }
         return members
+    }
+
+    /// The one member policy (PLAN §5.1), applied to the raw reverse-lookup list:
+    /// 1. drop non-standalone content (``GameTypePolicy/isStandaloneGame(_:)``), each
+    ///    reported in ``BundleMemberResult/leftOut``;
+    /// 2. fold a port (``GameTypePolicy/foldsIntoParent(_:)``) onto its parent game —
+    ///    resolved through the read-through ``games(ids:force:)`` (cache hit ⇒ zero
+    ///    requests; a miss ⇒ one batched, paced lookup for all ports at once) — keeping
+    ///    the port as-is when the parent has no id, does not resolve, or is itself not a
+    ///    standalone game;
+    /// 3. de-duplicate by IGDB id (a bundle may list both a port and its original) and
+    ///    order by release date (unknown years last, ties keep encounter order).
+    private func applyMemberPolicy(to raw: [IGDBSearchResult]) async throws -> BundleMemberResult {
+        var kept: [IGDBSearchResult] = []
+        var ports: [IGDBSearchResult] = []
+        var leftOut: [BundleLeftOut] = []
+
+        for member in raw {
+            if !GameTypePolicy.isStandaloneGame(member.gameType) {
+                leftOut.append(.dropped(member.name, kind: GameTypePolicy.droppedKindLabel(member.gameType)))
+            } else if GameTypePolicy.foldsIntoParent(member.gameType) {
+                ports.append(member)   // resolved below, in one batched lookup
+            } else {
+                kept.append(member)
+            }
+        }
+
+        if !ports.isEmpty {
+            let parentIDs = Array(Set(ports.compactMap(\.foldParentID)))
+            let parents = parentIDs.isEmpty ? [] : try await games(ids: parentIDs)
+            let parentsByID = Dictionary(parents.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            for port in ports {
+                if let pid = port.foldParentID, let parent = parentsByID[pid],
+                   GameTypePolicy.isStandaloneGame(parent.gameType) {
+                    kept.append(searchResult(from: parent))
+                    leftOut.append(.folded(port.name, to: Self.foldNote(port: port, parent: parent)))
+                } else {
+                    kept.append(port)   // unresolved parent → keep the port itself
+                }
+            }
+        }
+
+        let ordered = Self.orderedByReleaseYear(Self.dedupedByID(kept))
+        return BundleMemberResult(members: ordered, leftOut: leftOut)
+    }
+
+    /// The "→ …" note for a folded port: "→ the 2007 original" when it shares the
+    /// parent's title, else "→ Parent Name (2007)".
+    private nonisolated static func foldNote(port: IGDBSearchResult, parent: IGDBGameMetadata) -> String {
+        guard let year = parent.releaseYear else { return "→ \(parent.name)" }
+        if parent.name.caseInsensitiveCompare(port.name) == .orderedSame {
+            return "→ the \(year) original"
+        }
+        return "→ \(parent.name) (\(year))"
+    }
+
+    /// De-duplicate members by IGDB id, keeping the first occurrence (a bundle may list a
+    /// port and its original, which fold to the same id).
+    private nonisolated static func dedupedByID(_ members: [IGDBSearchResult]) -> [IGDBSearchResult] {
+        var seen: Set<Int64> = []
+        return members.filter { seen.insert($0.id).inserted }
+    }
+
+    /// Stable release-year ordering (ascending; unknown years last; ties keep encounter
+    /// order) — mirrors ``LibraryStore/orderedByReleaseDate(_:)`` for search results.
+    private nonisolated static func orderedByReleaseYear(_ members: [IGDBSearchResult]) -> [IGDBSearchResult] {
+        members.enumerated().sorted { a, b in
+            switch (a.element.releaseYear, b.element.releaseYear) {
+            case let (ya?, yb?): return ya != yb ? ya < yb : a.offset < b.offset
+            case (nil, _?): return false
+            case (_?, nil): return true
+            case (nil, nil): return a.offset < b.offset
+            }
+        }.map(\.element)
     }
 
     /// Average completion times, batched by game id (PLAN §5.1 / §6.4).
@@ -264,7 +350,9 @@ actor IGDBClient {
             platformSlugs: catalog.slugs(forIGDBIDs: igdbIDs),
             genres: (dto.genres ?? []).compactMap(\.name),
             alternativeNames: (dto.alternativeNames ?? []).compactMap(\.name),
-            gameType: IGDBGameType(rawValue: dto.gameType ?? 0)
+            gameType: IGDBGameType(rawValue: dto.gameType ?? 0),
+            parentGameID: dto.parentGame,
+            versionParentID: dto.versionParent
         )
     }
 
@@ -344,7 +432,9 @@ actor IGDBClient {
             platformSlugs: meta.platformSlugs,
             genres: meta.genres,
             alternativeNames: meta.alternativeNames,
-            gameType: meta.gameType
+            gameType: meta.gameType,
+            parentGameID: meta.parentGameID,
+            versionParentID: meta.versionParentID
         )
     }
 

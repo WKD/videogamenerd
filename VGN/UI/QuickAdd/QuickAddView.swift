@@ -241,6 +241,13 @@ private struct QuickAddRowView: View {
                         Image(systemName: "square.stack.3d.up.fill")
                             .font(.caption2).foregroundStyle(.secondary)
                             .help("Compilation")
+                    } else if let typeLabel = result.typeLabel {
+                        // A non-standalone / port result (Expansion, DLC, Port…) — still
+                        // selectable (a boxed expansion is legitimate), just labelled (PLAN §5.1 D4).
+                        Text(typeLabel).font(.caption2).foregroundStyle(.orange)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                            .help("IGDB classifies this as \(typeLabel.lowercased()).")
                     }
                 }
                 HStack(spacing: 4) {

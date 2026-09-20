@@ -9,8 +9,9 @@ protocol CatalogSearching: Sendable {
     /// Autocomplete `text`. Throws `IGDBError.missingCredentials` when IGDB is not
     /// configured (the model then shows local + manual rows only).
     func search(_ text: String, platformIGDBIDs: [Int]?, limit: Int) async throws -> [IGDBSearchResult]
-    /// Member games of a bundle result (forward relation + reverse fallback).
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult]
+    /// Member games of a bundle result after the one member policy (PLAN §5.1): non-standalone
+    /// content dropped and ports folded onto their parent, with the "left out" notes.
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult
     /// Whether IGDB credentials are present (drives the offline hint up front).
     func hasCredentials() async -> Bool
 }
@@ -88,12 +89,23 @@ struct QuickAddResult: Identifiable, Sendable, Equatable {
     var alternativeNames: [String]
     var genres: [String]
     var isBundle: Bool
+    /// The IGDB `game_type` for a catalogue row (`.mainGame` for a local-only row), so the
+    /// row can mark a non-standalone / port result (PLAN §5.1 D4).
+    var gameType: IGDBGameType
     var igdbID: Int64?
     var source: Source
     /// The matching library game, or nil when this row is not in the library yet.
     var libraryMatch: QuickAddLibraryMatch?
 
     var isInLibrary: Bool { libraryMatch != nil }
+
+    /// A short label when this catalogue result is not a plain main game and not a bundle —
+    /// "Expansion", "DLC", "Port"… (PLAN §5.1 D4). A boxed expansion is a legitimate pick, so
+    /// the row stays selectable; the label just says what it is. nil for local / main / bundle.
+    var typeLabel: String? {
+        guard source == .catalog, !isBundle else { return nil }
+        return GameTypePolicy.label(for: gameType)
+    }
 
     init(catalog r: IGDBSearchResult, libraryMatch: QuickAddLibraryMatch?) {
         id = "igdb:\(r.id)"
@@ -105,6 +117,7 @@ struct QuickAddResult: Identifiable, Sendable, Equatable {
         alternativeNames = r.alternativeNames
         genres = r.genres
         isBundle = r.isBundle
+        gameType = r.gameType
         igdbID = r.id
         source = .catalog
         self.libraryMatch = libraryMatch
@@ -120,6 +133,7 @@ struct QuickAddResult: Identifiable, Sendable, Equatable {
         alternativeNames = []
         genres = []
         isBundle = false
+        gameType = .mainGame
         igdbID = nil
         source = .local
         libraryMatch = m
@@ -588,26 +602,33 @@ final class QuickAddModel {
             return
         }
         bundleInFlightID = result.id
-        let members = (try? await catalog.bundleMembers(bundleIGDBID: igdbID)) ?? []
+        let expansion = (try? await catalog.bundleMembers(bundleIGDBID: igdbID)) ?? BundleMemberResult()
         bundleInFlightID = nil
         if Task.isCancelled { return }
+        let members = expansion.members
+        let leftOutNote = Self.leftOutSummary(expansion.leftOut)
 
-        // Empty member list → fall back to a single game and say so (PLAN §6.1).
-        guard !members.isEmpty else {
+        // Fewer than two members left → no longer worth a compilation (PLAN §5.1): a lone
+        // member becomes that single game on the copy; none falls back to the bundle single.
+        if members.count < 2 {
+            let single = members.first
             let draft = GameDraft(
-                title: result.title, igdbID: igdbID, year: result.year,
-                altTitles: result.alternativeNames, platformIDs: [platform],
+                title: single?.name ?? result.title,
+                igdbID: single?.id ?? igdbID,
+                year: single?.releaseYear ?? result.year,
+                altTitles: single?.alternativeNames ?? result.alternativeNames,
+                platformIDs: [platform],
                 owned: flags.owned, played: flags.played,
                 tierID: tierID(for: tierLetter), format: flags.format, source: .manual
             )
+            let base = single != nil
+                ? "Added “\(single!.name)” as a single game — the bundle had only one game to keep."
+                : "Added “\(result.title)” as a single game — IGDB had no member list."
             do {
                 let outcome = try await library.add(draft)
                 onLibraryChanged()
-                finishAdd(
-                    outcome.gameID,
-                    message: "Added “\(result.title)” as a single game — IGDB had no member list.",
-                    openInspector: openInspector
-                )
+                finishAdd(outcome.gameID, message: Self.appending(leftOutNote, to: base),
+                          openInspector: openInspector)
             } catch {
                 confirmation = QuickAddConfirmation(message: "Couldn't add “\(result.title)”.", gameID: nil, isError: true)
             }
@@ -627,14 +648,26 @@ final class QuickAddModel {
         do {
             let (_, outcomes) = try await library.addCompilation(product: product, members: memberDrafts)
             onLibraryChanged()
-            finishAdd(
-                outcomes.first?.gameID,
-                message: "Added “\(result.title)” as a compilation (\(outcomes.count) games).",
-                openInspector: openInspector
-            )
+            let base = "Added “\(result.title)” as a compilation (\(outcomes.count) games)."
+            finishAdd(outcomes.first?.gameID, message: Self.appending(leftOutNote, to: base),
+                      openInspector: openInspector)
         } catch {
             confirmation = QuickAddConfirmation(message: "Couldn't add “\(result.title)”.", gameID: nil, isError: true)
         }
+    }
+
+    /// A one-line "Left out: …" summary of what the member policy dropped / folded, or nil
+    /// (PLAN §5.1). Bounded — at most three entries are spelled out, the rest collapse to "+n".
+    static func leftOutSummary(_ leftOut: [BundleLeftOut]) -> String? {
+        guard !leftOut.isEmpty else { return nil }
+        let shown = leftOut.prefix(3).map(\.displayText)
+        let extra = leftOut.count - shown.count
+        let tail = extra > 0 ? " +\(extra) more" : ""
+        return "Left out: " + shown.joined(separator: ", ") + tail
+    }
+
+    private static func appending(_ note: String?, to base: String) -> String {
+        note.map { "\(base) \($0)" } ?? base
     }
 
     /// Common post-add: ⌘↩ opens the inspector and closes; ↩ stays open with the

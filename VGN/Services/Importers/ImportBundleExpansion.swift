@@ -14,29 +14,53 @@ struct ImportBundleExpansion: Sendable, Equatable, Codable {
     var bundleIGDBID: Int64
     /// The bundle's title — used as the compilation Product's title.
     var title: String
-    /// The member games, in IGDB order, as compilation drafts (deduped against the
-    /// library at commit time by ``LibraryStore/upsertCompilationMember``).
+    /// The member games, in release order, as compilation drafts (deduped against the
+    /// library at commit time by ``LibraryStore/upsertCompilationMember``). Non-standalone
+    /// content is already dropped and ports folded onto their parent by the member policy.
     var members: [CompilationMemberDraft]
+    /// What the member policy dropped or folded (PLAN §5.1), so the review sheet's bundle
+    /// row can show "Left out: …". Defaults to empty and decodes tolerantly (older
+    /// persisted `match_json` had no such key).
+    var leftOut: [BundleLeftOut]
+
+    init(bundleIGDBID: Int64, title: String, members: [CompilationMemberDraft],
+         leftOut: [BundleLeftOut] = []) {
+        self.bundleIGDBID = bundleIGDBID
+        self.title = title
+        self.members = members
+        self.leftOut = leftOut
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        bundleIGDBID = try c.decode(Int64.self, forKey: .bundleIGDBID)
+        title = try c.decode(String.self, forKey: .title)
+        members = try c.decode([CompilationMemberDraft].self, forKey: .members)
+        leftOut = try c.decodeIfPresent([BundleLeftOut].self, forKey: .leftOut) ?? []
+    }
 
     /// Whether this expansion actually yielded members (else fall back to a single).
     var hasMembers: Bool { !members.isEmpty }
+    /// PLAN §5.1: two or more members is worth a compilation; fewer is not.
+    var isWorthCompilation: Bool { members.count >= 2 }
 }
 
 /// Fetches the member games of an IGDB bundle, on the shared IGDB client / rate limiter
 /// (PLAN §5.1). Abstracted behind a protocol so the sync coordinator's tests use a fake
 /// and never touch the network — exactly like ``ImportMatcher``.
 protocol ImportBundleExpanding: Sendable {
-    /// Members of bundle `igdbID`, in IGDB order (add-on content dropped, nested bundles
-    /// expanded). Returns `[]` on imperfect coverage — never fails the whole sync.
-    func members(ofBundleIGDBID igdbID: Int64) async throws -> [IGDBSearchResult]
+    /// Members of bundle `igdbID` after the one member policy (PLAN §5.1): non-standalone
+    /// content dropped and ports folded onto their parent, with the ``BundleMemberResult/leftOut``
+    /// notes. Returns an empty result on imperfect coverage — never fails the whole sync.
+    func members(ofBundleIGDBID igdbID: Int64) async throws -> BundleMemberResult
 }
 
 /// Production expander: reuses ``IGDBClient/bundleMembers(ofBundleID:)`` — the exact
-/// §5.1 reverse-lookup path Quick Add and the photo scan already use.
+/// §5.1 reverse-lookup + member-policy path Quick Add and the photo scan already use.
 struct IGDBImportBundleExpander: ImportBundleExpanding {
     let client: IGDBClient
 
-    func members(ofBundleIGDBID igdbID: Int64) async throws -> [IGDBSearchResult] {
+    func members(ofBundleIGDBID igdbID: Int64) async throws -> BundleMemberResult {
         try await client.bundleMembers(ofBundleID: igdbID)
     }
 }
@@ -44,7 +68,7 @@ struct IGDBImportBundleExpander: ImportBundleExpanding {
 /// An expander that finds nothing — the safe default when IGDB is not configured, so a
 /// bundle match simply commits as a single (today's behaviour) instead of failing.
 struct NoBundleExpander: ImportBundleExpanding {
-    func members(ofBundleIGDBID igdbID: Int64) async throws -> [IGDBSearchResult] { [] }
+    func members(ofBundleIGDBID igdbID: Int64) async throws -> BundleMemberResult { BundleMemberResult() }
 }
 
 enum ImportBundleMapping {

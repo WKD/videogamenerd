@@ -179,7 +179,7 @@ struct IGDBBundleDecodingTests {
     @Test("Reverse bundle lookup decodes the MGS Legacy members")
     func mgsMembers() async throws {
         let (client, transport) = try IGDBHarness.client(fixture: "igdb-bundle-members-mgs.json")
-        let members = try await client.bundleMembers(ofBundleID: 20196)
+        let members = try await client.bundleMembers(ofBundleID: 20196).members
         #expect(members.count == 9)
         // Uses the reverse relation query.
         #expect(try #require(transport.lastBody).contains("bundles = (20196)"))
@@ -196,7 +196,7 @@ struct IGDBBundleDecodingTests {
             platformIGDBIDs: [], platformSlugs: [], genres: [], alternativeNames: [],
             gameType: .bundle, bundleMemberIDs: [], parentGameID: nil, versionParentID: nil
         )
-        let members = try await client.bundleMembers(of: bundle)
+        let members = try await client.bundleMembers(of: bundle).members
         #expect(members.count == 2)
         #expect(try #require(transport.lastBody).contains("bundles = (21084)"))
     }

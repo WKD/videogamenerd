@@ -132,7 +132,7 @@ struct PSNBundleReviewTests {
         // Digital variant.
         let db2 = try await seededDB()
         let (m2, staging2) = try await makeModel(
-            row: row, members: [member(1, "A", position: 0)], db: db2)
+            row: row, members: [member(1, "A", position: 0), member(2, "B", position: 1)], db: db2)
         m2.setInclude(true, externalID: "b1")
         m2.applyOwnAs(.digital)
         _ = try await staging2.commit(m2.commitItems())
@@ -229,14 +229,16 @@ struct PSNBundleReviewTests {
         // Played collection → asks.
         let playedRow = ImportStagingRow(source: ImportSourceID.psn, externalID: "b1", name: "C",
                                          platform: "ps4", signals: [.owned, .played], playDurationS: 9000)
-        let (m1, _) = try await makeModel(row: playedRow, members: [member(1, "A", position: 0)], db: db)
+        let (m1, _) = try await makeModel(row: playedRow,
+                                          members: [member(1, "A", position: 0), member(2, "B", position: 1)], db: db)
         #expect(m1.psnBundleAsksPlayed(m1.rows[0]))
 
         // A collection PSN reports as never played asks nothing.
         let db2 = try await seededDB()
         let unplayedRow = ImportStagingRow(source: ImportSourceID.psn, externalID: "b1", name: "C",
                                            platform: "ps4", signals: [.owned])
-        let (m2, _) = try await makeModel(row: unplayedRow, members: [member(1, "A", position: 0)], db: db2)
+        let (m2, _) = try await makeModel(row: unplayedRow,
+                                          members: [member(1, "A", position: 0), member(2, "B", position: 1)], db: db2)
         #expect(!m2.psnBundleAsksPlayed(m2.rows[0]))
     }
 

@@ -21,7 +21,7 @@ private actor RecordingSearcher: CatalogSearching {
         if fails { throw NSError(domain: "test", code: 1) }
         return results
     }
-    func bundleMembers(bundleIGDBID: Int64) async throws -> [IGDBSearchResult] { [] }
+    func bundleMembers(bundleIGDBID: Int64) async throws -> BundleMemberResult { BundleMemberResult() }
     func hasCredentials() async -> Bool { credentials }
     func platformsSeen() -> [Int]? { lastPlatforms }
     func callCount() -> Int { calls }

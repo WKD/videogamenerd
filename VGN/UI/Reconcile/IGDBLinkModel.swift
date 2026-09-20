@@ -17,6 +17,12 @@ struct IGDBLinkResult: Identifiable, Sendable, Equatable {
     /// A bundle/pack — choosing it **expands** the placeholder into a compilation of the
     /// bundle's member games rather than standing in for a single game (PLAN §5.1).
     var isBundle: Bool { result.isBundle }
+    /// A short label when this result is not a plain main game and not a bundle —
+    /// "Expansion", "DLC", "Port"… (PLAN §5.1 D4). A boxed expansion is a legitimate pick,
+    /// so the row stays selectable; the label just says what it is.
+    var typeLabel: String? {
+        isBundle ? nil : GameTypePolicy.label(for: result.gameType)
+    }
     /// Selectable. Every result is now a valid choice — a bundle triggers the expand flow,
     /// a game links/merges, and the current game's own link cancels the sheet.
     var isChoosable: Bool { true }

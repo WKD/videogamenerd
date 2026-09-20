@@ -95,9 +95,9 @@ struct BundleBatchExpandTests {
 
         let model = BundleBatchExpandModel(store: store, membersOf: { cand in
             switch cand.igdbID {
-            case 10: return [self.member(11, "A1", 0), self.member(12, "A2", 1)]
-            case 20: return [self.member(21, "B1", 0), self.member(22, "B2", 1)]
-            default: return []   // Gamma → not a bundle
+            case 10: return ([self.member(11, "A1", 0), self.member(12, "A2", 1)], [])
+            case 20: return ([self.member(21, "B1", 0), self.member(22, "B2", 1)], [])
+            default: return ([], [])   // Gamma → not a bundle
             }
         })
         await model.run(candidates)
@@ -125,7 +125,7 @@ struct BundleBatchExpandTests {
         let store = try await TestDB.makeStore()
         let a = try await addGame(store, title: "Alpha Collection", igdbID: 10)
         try await addSingleProduct(store, gameID: a, platform: "ps4")
-        let model = BundleBatchExpandModel(store: store, membersOf: { _ in [self.member(11, "A1", 0)] })
+        let model = BundleBatchExpandModel(store: store, membersOf: { _ in ([self.member(11, "A1", 0)], []) })
         model.cancel()   // cancel before running → the loop breaks at the first item
         await model.run(try await store.unplayedBundleExpansionCandidates())
         #expect(model.phase == .done)

@@ -173,13 +173,13 @@ struct MiscSnapshotTests {
         _ = try await addBundleGame(store, title: "Delta Collection", igdbID: 40)   // → not a bundle
         let model = BundleBatchExpandModel(store: store, membersOf: { cand in
             switch cand.igdbID {
-            case 10: return [CompilationMemberDraft(title: "Alpha I", igdbID: 11, position: 0),
-                             CompilationMemberDraft(title: "Alpha II", igdbID: 12, position: 1)]
-            case 20: return [CompilationMemberDraft(title: "Beta I", igdbID: 21, position: 0),
-                             CompilationMemberDraft(title: "Beta II", igdbID: 22, position: 1),
-                             CompilationMemberDraft(title: "Beta III", igdbID: 23, position: 2)]
-            case 30: return [CompilationMemberDraft(title: "Gamma I", igdbID: 31, position: 0)]
-            default: return []   // Delta → not a bundle
+            case 10: return ([CompilationMemberDraft(title: "Alpha I", igdbID: 11, position: 0),
+                              CompilationMemberDraft(title: "Alpha II", igdbID: 12, position: 1)], [])
+            case 20: return ([CompilationMemberDraft(title: "Beta I", igdbID: 21, position: 0),
+                              CompilationMemberDraft(title: "Beta II", igdbID: 22, position: 1),
+                              CompilationMemberDraft(title: "Beta III", igdbID: 23, position: 2)], [])
+            case 30: return ([CompilationMemberDraft(title: "Gamma I", igdbID: 31, position: 0)], [])
+            default: return ([], [])   // Delta → not a bundle
             }
         })
         await model.run(try await store.unplayedBundleExpansionCandidates())

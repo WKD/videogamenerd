@@ -119,8 +119,16 @@ struct IGDBSearchResult: Sendable, Equatable, Identifiable {
     let genres: [String]
     let alternativeNames: [String]
     let gameType: IGDBGameType
+    /// The parent game (DLC/expansion/episode → its base) and version parent (a port /
+    /// remaster → the original), when IGDB gives them. Requested in ``IGDBFields/search``
+    /// so a cached `.search` blob carries them, and a port can be folded onto its parent
+    /// without a metadata fetch (PLAN §5.1).
+    var parentGameID: Int64? = nil
+    var versionParentID: Int64? = nil
     /// Convenience: the game is a bundle/pack whose members can be expanded.
     var isBundle: Bool { gameType.isCompilation }
+    /// The id of the game a port folds onto: its version parent, else its parent game.
+    var foldParentID: Int64? { versionParentID ?? parentGameID }
 }
 
 /// Full metadata for enrichment (PLAN §5.1 games(ids:)).
