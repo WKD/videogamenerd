@@ -190,7 +190,7 @@ struct SidebarView: View {
 
     // MARK: Labels & icons
 
-    static func title(for selection: SidebarSelection) -> String {
+    nonisolated static func title(for selection: SidebarSelection) -> String {
         switch selection {
         case .all: return "All"
         case .owned: return "Owned"
@@ -209,7 +209,7 @@ struct SidebarView: View {
         }
     }
 
-    static func icon(for selection: SidebarSelection) -> String {
+    nonisolated static func icon(for selection: SidebarSelection) -> String {
         switch selection {
         case .all: return "square.grid.2x2"
         case .owned: return "shippingbox"
