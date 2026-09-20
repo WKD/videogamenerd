@@ -521,6 +521,15 @@ final class LibraryViewModel {
         return nil
     }
 
+    /// Whether the current selection is a **library grid** destination — the only place the
+    /// grid's toolbar controls (search field, filter menus, sort, size slider) and the filter
+    /// chips bar make sense (D1, PLAN §8). Ranking (Tier Board / The Top / Duel), Play Next and
+    /// the Vault browser have their own controls, so those toolbar items are hidden there —
+    /// they were dead controls before. Bundles-to-Expand still shows the grid, so it keeps them.
+    var showsGridToolbar: Bool {
+        !isRankingSelection && !isPlayNextSelection && !isVaultSelection
+    }
+
     // MARK: Filter
 
     func setFilter(_ new: LibraryFilter) {
