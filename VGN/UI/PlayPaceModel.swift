@@ -40,12 +40,14 @@ final class PlayPaceModel {
         style = store.playStyle()
     }
 
-    /// Commit a new play style, persist, notify (so the grid + counts re-run once).
+    /// Commit a new play style, persist, notify (so the grid + counts re-run once, and any
+    /// other open window — the Library Stats window — re-reads it via ``Notification/Name/vgnPlayStyleDidChange``).
     func commitStyle(_ newStyle: PlayStyle) {
         guard newStyle != style else { return }
         store.setPlayStyle(newStyle)
         style = newStyle
         onStyleCommit(newStyle)
+        NotificationCenter.default.post(name: .vgnPlayStyleDidChange, object: nil)
     }
 
     /// Commit a new pace (clamped by ``PlayPace``), persist, mark chosen, notify.

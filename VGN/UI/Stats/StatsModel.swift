@@ -15,26 +15,39 @@ final class StatsModel {
     private(set) var scope: StatsScope
 
     private let store: LibraryStatsStore
+    /// The owner's play style, for planning figures (the backlog estimate). Read from the
+    /// same persisted preference the BY LENGTH shelves use, and re-read when it changes so
+    /// the Stats window reacts like the shelves do (D4, owner request 2026-09-20).
+    private let playStyleProvider: @MainActor () -> PlayStyle
     private var liveTask: Task<Void, Never>?
+    private var styleObserver: (any NSObjectProtocol)?
     /// Bumped per reload so an out-of-order finish never overwrites a newer one.
     private var loadToken = 0
 
-    init(store: LibraryStatsStore, scope: StatsScope = .all) {
+    init(store: LibraryStatsStore, scope: StatsScope = .all,
+         playStyleProvider: @escaping @MainActor () -> PlayStyle
+            = { UserDefaultsPlayPacePreferences().playStyle() }) {
         self.store = store
         self.scope = scope
+        self.playStyleProvider = playStyleProvider
         self.report = .empty(scope: scope)
     }
 
-    /// Load the first report and start observing library changes.
+    /// Load the first report and start observing library + play-style changes.
     func start() async {
         await reload()
         subscribeLive()
+        subscribeStyle()
     }
 
     /// Stop observing (window closed).
     func stop() {
         liveTask?.cancel()
         liveTask = nil
+        if let styleObserver {
+            NotificationCenter.default.removeObserver(styleObserver)
+            self.styleObserver = nil
+        }
     }
 
     /// Switch scope from the picker (a user action, not a `body` write).
@@ -53,7 +66,8 @@ final class StatsModel {
         loadToken &+= 1
         let token = loadToken
         let scope = self.scope
-        let fresh = try? await store.report(scope: scope)
+        let style = playStyleProvider()
+        let fresh = try? await store.report(scope: scope, playStyle: style)
         // Only apply if this is still the latest request and the scope is current.
         guard token == loadToken, let fresh, fresh.scope == self.scope else { return }
         report = fresh
@@ -68,6 +82,17 @@ final class StatsModel {
         self.isLoading = false
     }
     #endif
+
+    /// Re-query when the owner changes their play style (the backlog estimate depends on
+    /// it), mirroring how the BY LENGTH shelves react (D4).
+    private func subscribeStyle() {
+        guard styleObserver == nil else { return }
+        styleObserver = NotificationCenter.default.addObserver(
+            forName: .vgnPlayStyleDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in await self?.reload() }
+        }
+    }
 
     private func subscribeLive() {
         guard liveTask == nil else { return }

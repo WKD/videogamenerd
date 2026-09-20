@@ -138,15 +138,23 @@ private struct StatsPlaytimeCard: View {
 
                 Divider()
                 Text("Backlog to beat").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                StatsMetricRow(label: "Est. main story",
-                               value: StatsFormat.hours(report.myHoursVsAverage.backlogEstimateSeconds),
+                // The planning figure uses the owner's personal length (D4), so label the
+                // basis — "≈ 1,240 h at your play style · 96 games, 14 without an estimate".
+                StatsMetricRow(label: "At your play style",
+                               value: "≈ " + StatsFormat.hours(report.myHoursVsAverage.backlogEstimateSeconds),
                                emphasised: true)
-                if report.myHoursVsAverage.backlogGamesMissingEstimate > 0 {
-                    Text("\(report.myHoursVsAverage.backlogGamesMissingEstimate.formatted()) backlog games have no estimate")
-                        .font(.caption2).foregroundStyle(.tertiary)
-                }
+                Text(backlogBasis)
+                    .font(.caption2).foregroundStyle(.tertiary)
             }
         }
+    }
+
+    /// "96 games" or "96 games, 14 without an estimate" (a rushed-only game counts as
+    /// without an estimate — the personal length is undefined for it).
+    private var backlogBasis: String {
+        let games = "\(report.backlogGames.formatted()) games"
+        let missing = report.myHoursVsAverage.backlogGamesMissingEstimate
+        return missing > 0 ? "\(games), \(missing.formatted()) without an estimate" : games
     }
 }
 
