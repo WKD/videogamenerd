@@ -85,12 +85,21 @@ struct InspectorSnapshotTests {
                                         detail: detail, summary: summary)
         let vm = LibraryViewModel(dataSource: source)
         vm.start()
+        // Inject an (inert, no-network) HLTB presenter so the single "Refresh from
+        // HowLongToBeat" button renders — otherwise it is hidden off-screen (its presenter is
+        // normally wired at the app root, wave 19 / D6).
+        let presenter = (try? AppDatabase.inMemory()).map { db -> HLTBFetchPresenter in
+            let p = HLTBFetchPresenter(store: LibraryStore(db), makeSearch: { HLTBInertSearch() })
+            p.library = vm
+            return p
+        }
         await SnapshotHarness.settle(rounds: 8)
         vm.selectedGameIDs = [1]
         await SnapshotHarness.settle(rounds: 8)
         await SnapshotHarness.capture(group: group, "inspector-detail-rich",
                                       size: SnapSize(width: 320, height: 1500)) {
             InspectorView(vm: vm).frame(width: 300)
+                .environment(\.hltbFetchPresenter, presenter)
         }
     }
 
@@ -102,7 +111,7 @@ struct InspectorSnapshotTests {
                                       size: SnapSize(width: 320, height: 120), settle: 4) {
             PlaytimeEstimateWarning(
                 reason: "Completionist (1000 h) is more than 4× the main story (32 h).",
-                dismissed: true, isRefreshing: false, onRefresh: {}, onDismissToggle: { _ in })
+                dismissed: true, onDismissToggle: { _ in })
                 .padding().frame(width: 300)
         }
     }

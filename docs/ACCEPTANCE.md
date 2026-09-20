@@ -392,6 +392,26 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   when the play time was routed to a single member, nor for a non-PSN compilation. At the inspector's
   narrowest width it stays one line (scales down, never wraps).
 
+## Wave 19 — badge legibility & the one HLTB button
+
+- [ ] **Format badges are recognisable at a glance (D1).** In the real library, on real covers,
+  light and dark, at the smallest and largest grid tile sizes: the **physical** badge reads as a
+  disc, the **digital** badge as a download arrow, the **ROM** badge as a chip, PS Plus as the "+"
+  asset, played as the green controller — none reads as a blank white blob. A game owned every way
+  (physical + digital + ROM + PS Plus + played) shows all five without overflowing the tile (they
+  wrap on the narrowest tiles).
+- [ ] **No placeholder-label collision (D2).** A game with no cover no longer prints a big "PS4"/"PS5"
+  label over the badge row; the platform still shows in the pill under the title.
+- [ ] **One HowLongToBeat button in the inspector (D6).** The Playtime section has exactly **one**
+  HLTB action, always labelled **"Refresh from HowLongToBeat"**, in the same place, and it looks like
+  a button (bordered), not grey text. Clicking it on a game with a bad estimate replaces the times;
+  on a game HLTB doesn't know, it says so and changes nothing; it never touches your own "Mine" time.
+  The ⚠︎ suspicious row no longer carries its own button — it points at this one. "Open on
+  HowLongToBeat" is a blue link with the ↗ icon.
+- [ ] **Inspector actions read as buttons (D6).** Change IGDB Match… / Refresh metadata / Choose
+  Cover… / Add copy… / Edit compilation… / trash all look like real (bordered) buttons; the inspector
+  still lays out correctly at its narrowest width (they stack, each with a visible button shape).
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

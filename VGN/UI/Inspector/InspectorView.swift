@@ -201,7 +201,8 @@ private struct SingleGameInspector: View {
             }
             Spacer()
             Button("Link…") { vm.requestLinkToIGDB(gameID: detail.id) }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .accessibilityIdentifier("inspector.linkNotice")
         }
         .padding(10)
@@ -290,8 +291,8 @@ private struct SingleGameInspector: View {
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.secondary)
                 Button("Place now") { vm.select(.duel) }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                     .help("Run this game's placement duels now.")
             }
         } else {
@@ -315,7 +316,8 @@ private struct SingleGameInspector: View {
                 } label: {
                     Label("Add copy…", systemImage: "plus")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(vm.actions == nil)
             }
 
@@ -365,7 +367,8 @@ private struct SingleGameInspector: View {
                 } label: {
                     Image(systemName: "trash")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .help(copy.isCompilation ? "Remove the whole compilation" : "Remove this copy")
                 .disabled(vm.actions == nil)
             }
@@ -377,8 +380,8 @@ private struct SingleGameInspector: View {
                 } label: {
                     Label("Edit compilation…", systemImage: "square.stack.3d.up")
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
         }
         .padding(8)
@@ -441,10 +444,11 @@ private struct SingleGameInspector: View {
         }
     }
 
-    /// The suspicious-estimate warning (PLAN §5.3, D3): a ⚠︎ with the reason on hover and
-    /// two menu-free actions (Refresh from HowLongToBeat · Estimate Looks Right), or, once
-    /// dismissed, a subdued note with "Flag again" in the same place. Shown only when the
-    /// raw times trip ``EstimateSanity`` and are not already from HowLongToBeat.
+    /// The suspicious-estimate warning (PLAN §5.3, D3 / wave 19): a ⚠︎ with the reason on hover
+    /// that points at the single "Refresh from HowLongToBeat" button below, plus "Estimate Looks
+    /// Right"; once dismissed, a subdued note with "Flag again". Shown only when the raw times
+    /// trip ``EstimateSanity`` and are not already from HowLongToBeat. The refresh itself lives
+    /// in ``hltbActions`` (one per-game HLTB action for the whole section).
     @ViewBuilder
     private var estimateWarning: some View {
         if detail.ttbSource != HLTBSource.id,
@@ -453,39 +457,37 @@ private struct SingleGameInspector: View {
             PlaytimeEstimateWarning(
                 reason: reason.sentence,
                 dismissed: hltbFetch?.isEstimateDismissed(detail.id) ?? false,
-                isRefreshing: hltbFetch?.isFetchingOne ?? false,
-                onRefresh: { hltbFetch?.refreshOne(gameID: detail.id) },
                 onDismissToggle: { dismissed in
                     hltbFetch?.setEstimateLooksRight(gameID: detail.id, dismissed: dismissed)
                 })
         }
     }
 
-    /// True when at least one of the three completion times is missing — the HLTB
-    /// fallback can fill it (PLAN §5.3).
-    private var hasTimeGap: Bool {
-        detail.ttbHastilyS == nil || detail.ttbNormallyS == nil || detail.ttbCompletelyS == nil
-    }
-
-    /// "Fetch from HowLongToBeat" (shown while a gap remains) + the "Open on
-    /// HowLongToBeat" link (the exact page when the HLTB id is known).
+    /// The **one** per-game HowLongToBeat action for the section (wave 19 / D6): always
+    /// "Refresh from HowLongToBeat", always in this place, always the same behaviour — an
+    /// explicit request that **replaces** the three completion times from HLTB (filling gaps as
+    /// a special case; leaving a game HLTB doesn't know unchanged; ambiguous → the picker; one
+    /// undo step; never touches the owner's own playtime). Shown for every game, including one
+    /// whose times already come from HLTB (then it is a re-check). Rendered as a real bordered
+    /// button — the owner couldn't tell the old link-styled text was an action. Next to it, the
+    /// "Open on HowLongToBeat" link, which leaves the app, so it stays an accent-coloured link.
+    /// Wrapped so the two never squeeze letter-by-letter at the 300 pt minimum width.
     @ViewBuilder
     private var hltbActions: some View {
-        // Row when it fits, else stacked — so the long "Fetch from HowLongToBeat" label and
-        // the "Open on HowLongToBeat" link never squeeze letter-by-letter at a narrow width.
         InspectorWrappingRow(spacing: 12) {
-            if hasTimeGap, let hltbFetch {
+            if let hltbFetch {
                 Button {
-                    hltbFetch.fetchOne(gameID: detail.id)
+                    hltbFetch.refreshOne(gameID: detail.id)
                 } label: {
-                    Label("Fetch from HowLongToBeat", systemImage: "clock.arrow.circlepath")
+                    Label("Refresh from HowLongToBeat", systemImage: "clock.arrow.circlepath")
                         .lineLimit(1)
                         .fixedSize()
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(hltbFetch.isFetchingOne)
-                .accessibilityIdentifier("inspector.fetchHLTB")
+                .appKitTooltip("Fetch this game from HowLongToBeat and replace its completion times.")
+                .accessibilityIdentifier("inspector.refreshHLTB")
             }
             hltbLink
         }
@@ -519,10 +521,15 @@ private struct SingleGameInspector: View {
     private var hltbLink: some View {
         if let url = detail.hltbID.flatMap(HowLongToBeatLink.gameURL(id:))
             ?? HowLongToBeatLink.searchURL(title: detail.title) {
+            // A link, not a button: it leaves the app. Kept visibly a link — accent colour +
+            // the ↗ leaving-the-app glyph — rather than grey text (owner, wave 19).
             Link(destination: url) {
                 Label("Open on HowLongToBeat", systemImage: "arrow.up.forward.square")
+                    .lineLimit(1)
+                    .fixedSize()
             }
-            .font(.caption)
+            .font(.callout)
+            .tint(.accentColor)
         }
     }
 }
@@ -570,7 +577,12 @@ struct InspectorActionsView: View {
                 .fixedSize(horizontal: !fillWidth, vertical: true)
                 .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
         }
-        .buttonStyle(.borderless)
+        // A real bordered control, not link-styled secondary text — these change data, so they
+        // must read as buttons at a glance (owner, wave 19). Small keeps the horizontal row
+        // fitting a wide inspector; at the 300 pt minimum ViewThatFits still stacks them
+        // full-width (each with its visible button shape) rather than squeeze the labels.
+        .buttonStyle(.bordered)
+        .controlSize(.small)
         .disabled(a.isDisabled)
         .appKitTooltip(a.help)
         .accessibilityIdentifierIfPresent(a.accessibilityID)
@@ -798,40 +810,43 @@ struct PlaytimeEstimatesTable: View {
     }
 }
 
-/// The suspicious-estimate warning row (PLAN §5.3, D3): a small ⚠︎ carrying the reason as
-/// a tooltip, plus two menu-free actions — "Refresh from HowLongToBeat" (replaces the three
-/// times) and "Estimate Looks Right" (dismiss). Once dismissed, the same place shows a
-/// subdued note and "Flag again". Wrapped so the labels never squeeze at the 300 pt minimum
+/// The suspicious-estimate warning row (PLAN §5.3, D3 / wave 19): a small ⚠︎ carrying the reason
+/// as a tooltip and a line that points at the section's single "Refresh from HowLongToBeat"
+/// button, plus "Estimate Looks Right" (dismiss). Once dismissed, the same place shows a subdued
+/// note and "Flag again". No longer carries its own refresh button — there is one HLTB action per
+/// game (in ``SingleGameInspector/hltbActions``). Its buttons are real bordered controls, not
+/// link-styled text (owner, wave 19). Wrapped so the labels never squeeze at the 300 pt minimum
 /// inspector width (they stack instead). Never a `Menu` (a synthetic click must not open one).
 struct PlaytimeEstimateWarning: View {
     let reason: String
     let dismissed: Bool
-    var isRefreshing: Bool = false
-    let onRefresh: () -> Void
     let onDismissToggle: (Bool) -> Void
 
     var body: some View {
-        InspectorWrappingRow(spacing: 10) {
-            if dismissed {
-                Label("Estimate marked OK", systemImage: "checkmark.seal")
-                    .lineLimit(1).fixedSize()
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("Flag again") { onDismissToggle(false) }
-                    .buttonStyle(.borderless).font(.caption).fixedSize()
-                    .accessibilityIdentifier("inspector.estimate.flagAgain")
-            } else {
-                Label("Suspicious estimate", systemImage: "exclamationmark.triangle.fill")
-                    .lineLimit(1).fixedSize()
-                    .font(.caption).foregroundStyle(.orange)
-                    .appKitTooltip(reason)
-                    .accessibilityLabel("Suspicious estimate: \(reason)")
-                Button("Refresh from HowLongToBeat") { onRefresh() }
-                    .buttonStyle(.borderless).font(.caption).fixedSize()
-                    .disabled(isRefreshing)
-                    .accessibilityIdentifier("inspector.estimate.refresh")
-                Button("Estimate Looks Right") { onDismissToggle(true) }
-                    .buttonStyle(.borderless).font(.caption).fixedSize()
-                    .accessibilityIdentifier("inspector.estimate.looksRight")
+        VStack(alignment: .leading, spacing: 6) {
+            InspectorWrappingRow(spacing: 10) {
+                if dismissed {
+                    Label("Estimate marked OK", systemImage: "checkmark.seal")
+                        .lineLimit(1).fixedSize()
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Flag again") { onDismissToggle(false) }
+                        .buttonStyle(.bordered).controlSize(.small).fixedSize()
+                        .accessibilityIdentifier("inspector.estimate.flagAgain")
+                } else {
+                    Label("Suspicious estimate", systemImage: "exclamationmark.triangle.fill")
+                        .lineLimit(1).fixedSize()
+                        .font(.caption).foregroundStyle(.orange)
+                        .appKitTooltip(reason)
+                        .accessibilityLabel("Suspicious estimate: \(reason)")
+                    Button("Estimate Looks Right") { onDismissToggle(true) }
+                        .buttonStyle(.bordered).controlSize(.small).fixedSize()
+                        .accessibilityIdentifier("inspector.estimate.looksRight")
+                }
+            }
+            if !dismissed {
+                Text("Refresh from HowLongToBeat below, or mark it as right.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .accessibilityElement(children: .contain)

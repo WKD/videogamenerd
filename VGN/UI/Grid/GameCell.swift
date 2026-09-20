@@ -194,34 +194,38 @@ struct GameCell: View {
                 }
             }
             Spacer()
-            // How I own this game (PLAN §8, wave 17): one badge per distinct format among
-            // the really-owned copies — physical (disc) → digital (download) → ROM (chip) →
-            // PS Plus (the asset) — then the played controller. Any format badge means owned,
-            // so the old generic "Owned" box is gone.
-            HStack(spacing: 4) {
+            // How I own this game (PLAN §8, wave 17/19): one badge per distinct format among
+            // the really-owned copies — physical (disc) → digital (download arrow) → ROM (chip)
+            // → PS Plus (the asset) — then the played controller. Any format badge means owned,
+            // so the old generic "Owned" box is gone. Badges are sized for legibility and wrap
+            // to a second line rather than overflow the narrowest tile with all five present
+            // (``FormatBadgeLayout``).
+            RankingFlowLayout(spacing: badgeSpacing) {
                 ForEach(FormatBadges.badges(for: game)) { badge in
                     formatBadge(badge)
                 }
                 if game.played {
                     statusBadge(system: "gamecontroller.fill", tint: .green, help: "Played")
                 }
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(6)
     }
 
+    /// The badge circle diameter for this tile, and the row spacing — both scale gently with
+    /// the tile size and are shared with the overflow rule (``FormatBadgeLayout``).
+    private var badgeDiameter: CGFloat { FormatBadgeLayout.diameter(cellWidth: cellWidth) }
+    private var badgeSpacing: CGFloat { FormatBadgeLayout.spacing(cellWidth: cellWidth) }
+
     @ViewBuilder
     private func formatBadge(_ badge: FormatBadge) -> some View {
-        switch badge.kind {
-        case .physical:
-            statusBadge(system: "opticaldisc.fill", tint: .blue, help: Self.badgeTooltip(badge))
-        case .digital:
-            statusBadge(system: "arrow.down.circle.fill", tint: .teal, help: Self.badgeTooltip(badge))
-        case .rom:
-            statusBadge(system: "memorychip.fill", tint: .purple, help: Self.badgeTooltip(badge))
-        case .psPlus:
-            PSPlusBadgeView(size: 17).help(Self.badgeTooltip(badge))
+        if badge.kind == .psPlus {
+            PSPlusBadgeView(size: badgeDiameter)
+                .help(Self.badgeTooltip(badge))
+        } else {
+            statusBadge(system: badge.kind.symbolName, tint: badge.kind.tint,
+                        help: Self.badgeTooltip(badge))
         }
     }
 
@@ -243,10 +247,14 @@ struct GameCell: View {
 
     private func statusBadge(system: String, tint: Color, help: String) -> some View {
         Image(systemName: system)
-            .font(.system(size: 9, weight: .semibold))
+            .font(.system(size: badgeDiameter * 0.56, weight: .bold))
             .foregroundStyle(.white)
-            .padding(4)
-            .background(tint.opacity(0.9), in: Circle())
+            .frame(width: badgeDiameter, height: badgeDiameter)
+            .background(tint.gradient, in: Circle())
+            // A hairline dark rim + soft shadow so a badge (e.g. the blue disc) holds its
+            // shape on a pale cover instead of washing out.
+            .overlay(Circle().strokeBorder(.black.opacity(0.28), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.35), radius: 1, y: 0.5)
             .help(help)
     }
 }

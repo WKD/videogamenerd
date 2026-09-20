@@ -11,12 +11,21 @@ nothing else is affected.
 ## How it works
 
 1. **Trigger** (never automatic, never at launch):
-   - Inspector ▸ **Fetch from HowLongToBeat** — one game. A confident match fills
-     directly with an Undo-able banner (⌘Z); an ambiguous one opens a picker sheet.
+   - Inspector ▸ **Refresh from HowLongToBeat** — one game, the single per-game HLTB
+     action *(wave 19)*: always in the Playtime section's action row (a real bordered
+     button next to the "Open on HowLongToBeat" link), shown for every game — including one
+     whose times already come from HLTB (then a re-check). Always the **`.replace`** mode
+     (`HLTBFetchPresenter.refreshOne`): a confident match overwrites the three times with an
+     Undo-able banner (⌘Z), an ambiguous one opens a picker, a game HLTB doesn't know is left
+     unchanged and stays flagged. It fills gaps as a special case, and never touches the
+     owner's own playtime. (The old gap-only "Fetch from HowLongToBeat" is gone; the ⚠︎
+     suspicious-estimate row now just points at this button.)
    - Game ▸ **Fetch Missing Time Estimates…** — the current selection, or every game
      with no estimate at all. Progress + Cancel, then a summary
      "n filled · m not found · k ambiguous"; ambiguous games are resolved one-by-one
      with the same picker.
+   - Game ▸ **Refresh Time Estimates from HowLongToBeat…** — the bulk `.replace` for the
+     selection (or every flagged game), confirming the count first; one Undo restores the batch.
 2. **Search** (`HLTBClient`, an actor): endpoint discovery → per-session `/init` auth token
    (both once per run) → one POST search per title.
 3. **Match** (`HLTBMatcher`, pure): `TitleNormalizer` + `FuzzyMatch` over the

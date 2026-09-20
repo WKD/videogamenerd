@@ -72,17 +72,17 @@ struct InspectorLayoutTests {
         let width = Self.inner(300)
         let flagged = PlaytimeEstimateWarning(
             reason: "Completionist (1000 h) is more than 4× the main story (54 h).",
-            dismissed: false, isRefreshing: false, onRefresh: {}, onDismissToggle: { _ in })
+            dismissed: false, onDismissToggle: { _ in })
         let dismissed = PlaytimeEstimateWarning(
             reason: "Completionist (1000 h) is more than 4× the main story (54 h).",
-            dismissed: true, isRefreshing: false, onRefresh: {}, onDismissToggle: { _ in })
+            dismissed: true, onDismissToggle: { _ in })
         let hFlagged = fittingHeight(flagged, width: width)
         let hDismissed = fittingHeight(dismissed, width: width)
         #expect(hFlagged > 0 && hFlagged.isFinite)
         #expect(hDismissed > 0 && hDismissed.isFinite)
-        // Three stacked caption rows are the worst case — well under this bound; a
-        // letter-by-letter squeeze of the long "Refresh from HowLongToBeat" label would
-        // blow far past it.
+        // ⚠︎ label + a bordered "Estimate Looks Right" button + the one-line pointer caption
+        // are the worst case — well under this bound; a letter-by-letter squeeze would blow
+        // far past it.
         #expect(hFlagged < 160, "warning too tall at 300 pt: \(hFlagged)")
     }
 
