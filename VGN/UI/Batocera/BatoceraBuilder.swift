@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Builds the whole Batocera feature wiring for ``AppEnvironment`` (PLAN §15 phase 2): the
 /// Settings model, the catalogue-browser + Discover environment, and the promotion-review
@@ -91,6 +91,18 @@ enum BatoceraBuilder {
         // banner — never an auto-commit of anything but a confident favourite (PLAN §15).
         settings.onSyncFinished = { [weak presenter] summary in
             presenter?.handleSyncFinished(summary)
+        }
+        // The Settings "Review…" button opens the same review as File ▸ Import from Batocera…
+        // The review sheet is hosted on the main window, so bring it forward (Settings is key
+        // when the button is clicked) before opening it (D6, PLAN §15).
+        settings.onReviewRequested = { [weak presenter] in
+            NSApp.activate(ignoringOtherApps: true)
+            if let main = NSApp.windows.first(where: {
+                $0.isVisible && $0.canBecomeMain && $0 !== NSApp.keyWindow
+            }) {
+                main.makeKeyAndOrderFront(nil)
+            }
+            presenter?.reviewCandidates()
         }
 
         let shouldAutoSync = isLive && settings.autoSyncEnabled && settings.isConfigured
