@@ -331,7 +331,7 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   card). A manual / unmatched pick shows **no** such button.
 
 ## Grid badges, mixed-state menus, PSN review, sidebar scroll (wave 17) [owner]
-- [ ] **Format badges on the grid tile.** A game shows one badge per distinct format it is really owned in, in order: **disc** (blue) for physical, **download** (teal) for digital, **purple chip** for ROM, then the **PS Plus** image badge, then the green played controller. The old generic blue "Owned" box is gone. A cartridge + ROM game shows disc + chip; a game owned digitally *and* claimed on PS Plus shows both; a PS-Plus-only game shows just the PS Plus badge. Hover a badge → "Physical · PS3" / "Digital · PS5, PC". *(Known: the disc icon also appears on cartridge games — no media field in `platforms.json`.)*
+- [ ] **Format badges on the grid tile.** A game shows one badge per distinct format it is really owned in, in order: **disc** (blue) for physical, **download** (teal) for digital, **purple chip** for ROM, then the green played controller. The old generic blue "Owned" box is gone. A cartridge + ROM game shows disc + chip. Hover a badge → "Physical · PS3" / "Digital · PS5, PC". *(Wave 19, W19-E: the **PS Plus** badge moved to the top-left corner — see that section.)* *(Known: the disc icon also appears on cartridge games — no media field in `platforms.json`.)*
 - [ ] **PS Plus badge asset everywhere.** The blue-cross-in-yellow-circle drawing is replaced by the supplied `psplus.png` badge on the grid tile, the inspector copy row, the Vault browser row, and the import review PS Plus header. It reads clearly at small sizes over a cover.
 - [ ] **Mixed-state menus.** Select several games, right-click (and the menu-bar **Game** menu): Set Tier, Mark Owned, Mark Played As, and Change Copy Format show a **✓** on an option every selected game has, a **–** on one only some have, nothing on none. Change Copy Format ticks over single-copy games only and says "N games with several copies not changed" when some are multi-copy.
 - [ ] **BY LENGTH title.** The sidebar section header reads "BY LENGTH · 6 h / week" (pace only, no "lots of side quests"); the play style is in the header tooltip and the pace popover.
@@ -396,10 +396,10 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 
 - [ ] **Format badges are recognisable at a glance (D1).** In the real library, on real covers,
   light and dark, at the smallest and largest grid tile sizes: the **physical** badge reads as a
-  disc, the **digital** badge as a download arrow, the **ROM** badge as a chip, PS Plus as the "+"
-  asset, played as the green controller — none reads as a blank white blob. A game owned every way
-  (physical + digital + ROM + PS Plus + played) shows all five without overflowing the tile (they
-  wrap on the narrowest tiles).
+  disc, the **digital** badge as a download arrow, the **ROM** badge as a chip, played as the green
+  controller — none reads as a blank white blob. A game owned physical + digital + ROM + played shows
+  all four in the bottom row without overflowing the tile. *(Wave 19, W19-E: PS Plus is no longer a
+  bottom badge — it sits in the top-left corner, so the bottom row is at most four.)*
 - [ ] **No placeholder-label collision (D2).** A game with no cover no longer prints a big "PS4"/"PS5"
   label over the badge row; the platform still shows in the pill under the title.
 - [ ] **One HowLongToBeat button in the inspector (D6).** The Playtime section has exactly **one**
@@ -421,6 +421,28 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
     handoff), so ⌘Z does **not** bring the copy back. Where a copy change **is** undoable — a **merge**,
     **bundle expansion** or **IGDB link/relink** — ⌘Z restores every platform row exactly (the row-level
     snapshot always covered `game_platforms`). Making plain copy removal undoable is a separate follow-up.
+
+## Wave 19 — what counts as a game + PS Plus corner (W19-E) [owner]
+
+- [ ] **PS Plus badge in the top-left corner.** On the grid, a PS Plus game shows its badge in the
+  **cover's top-left corner**, right after the tier chip (or alone there when the game has no tier),
+  vertically centred with the chip and legible at the smallest tile. It is **no longer** in the bottom
+  format row. A game owned on disc *and* claimed on PS Plus shows the disc badge at the bottom and the
+  PS Plus badge in the corner; a PS-Plus-only game shows just the corner badge, no bottom format badge.
+  The inspector copy row and Vault browser still show the PS Plus marker next to the title.
+- [ ] **Arkham Knight Steelbook no longer adds Season of Infamy.** Do a fresh scan/expand of the
+  *Batman: Arkham Knight* Special Edition Steelbook (or Quick Add it as a compilation). It becomes a
+  compilation of the **base game only** — the *Season of Infamy* expansion is **left out** and the
+  confirm step says so ("Left out: Season of Infamy — expansion"). (Any *Season of Infamy* already in
+  your library is **not** removed automatically — use Edit Compilation… / the reconcile lists.)
+- [ ] **3D All-Stars members are the originals.** Expand *Super Mario 3D All-Stars* — its three members
+  are the **original** *Super Mario 64* / *Sunshine* / *Galaxy* (IGDB's port entries fold onto the
+  originals), oldest-first, and the confirm step lists what was folded ("Super Mario Galaxy → the 2007
+  original").
+- [ ] **A boxed expansion / DLC is still addable, just labelled.** In Quick Add and Link-to-IGDB, an
+  expansion or DLC result (e.g. *Diablo II: Lord of Destruction*) shows an "Expansion"/"DLC" chip but is
+  **still selectable** (a boxed expansion is a real thing you own). In an import review, a DLC-type best
+  match is **not** pre-ticked — the row stays, labelled, for you to decide.
 
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
