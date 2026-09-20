@@ -88,6 +88,19 @@ struct CoverChainAllCandidatesTests {
 
 // MARK: - CoverStore: list / preview (no disk) / choose
 
+/// A non-evicting preview cache so preview-cache assertions are deterministic:
+/// production's `NSCache` may evict an entry under the memory pressure of the full
+/// parallel suite, which is fine for a cheap-to-refetch preview but would flake a
+/// "second call hits the cache" check (wave 20).
+private final class PinnedPreviewCache: PreviewImageCache, @unchecked Sendable {
+    private let lock = NSLock()
+    private var store: [String: CGImageBox] = [:]
+    func object(forKey key: String) -> CGImageBox? { lock.withLock { store[key] } }
+    func setObject(_ box: CGImageBox, forKey key: String, cost: Int) {
+        lock.withLock { store[key] = box }
+    }
+}
+
 private struct StoreFixture {
     let store: CoverStore
     let transport: StubHTTPTransport
@@ -104,7 +117,8 @@ private struct StoreFixture {
         self.store = CoverStore(
             chain: chain, transport: transport,
             coversDirectory: root.appendingPathComponent("covers"),
-            thumbsDirectory: root.appendingPathComponent("thumbs"))
+            thumbsDirectory: root.appendingPathComponent("thumbs"),
+            previewCache: PinnedPreviewCache())
     }
 
     func filesInCovers() -> [String] {
@@ -144,8 +158,26 @@ struct CoverStoreChooseTests {
         #expect(fixture.filesInCovers().isEmpty)
         #expect(fixture.transport.requestCount == 1)
 
-        // A second identical preview is served from the in-memory cache.
+        // A second identical preview is served from the in-memory cache (deterministic
+        // here: the fixture pins a non-evicting cache — production uses NSCache, which
+        // may evict under memory pressure and simply re-fetch, wave 20).
         _ = await fixture.store.candidatePreview(from: URL(string: "https://x/preview.png")!, maxPixel: 256)
+        #expect(fixture.transport.requestCount == 1)
+    }
+
+    @Test("Concurrent identical previews coalesce onto a single download")
+    func concurrentPreviewsCoalesce() async {
+        let fixture = StoreFixture(candidates: { _ in [] })
+        defer { fixture.cleanup() }
+
+        // The Choose Cover sheet can request the same URL many times at once (tile
+        // reuse on scroll). All of them must ride one in-flight download.
+        let url = URL(string: "https://x/preview.png")!
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<8 {
+                group.addTask { _ = await fixture.store.candidatePreview(from: url, maxPixel: 256) }
+            }
+        }
         #expect(fixture.transport.requestCount == 1)
     }
 
