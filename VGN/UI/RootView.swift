@@ -93,6 +93,17 @@ struct RootView: View {
             if !vm.isRankingSelection && !vm.isPlayNextSelection && !vm.isVaultSelection {
                 FilterChipsBar(vm: vm)
             }
+            // The "Bundles to Expand" explanation is a slim bar mounted in this outer
+            // VStack — like `FilterChipsBar` — NOT wrapped in an inner `VStack { header;
+            // grid }` inside the ZStack below. Wrapping the grid that way stopped the grid's
+            // ScrollView from being the detail column's top scroll view, so the unified
+            // toolbar lost its scroll tracking and the WHOLE window (sidebar included) lost
+            // its top title-bar inset — rows drew under the traffic lights and the sidebar
+            // could not be scrolled back up (owner bug, wave 17). Keeping the grid as the
+            // ZStack's direct child in every scope fixes it.
+            if vm.isBundlesToExpandSelection {
+                BundlesToExpandHeader()
+            }
             ZStack(alignment: .bottom) {
                 if vm.isRankingSelection {
                     RankingPlaceholderView(selection: vm.selection)
@@ -107,11 +118,6 @@ struct RootView: View {
                             inspect: { id in vm.selectOnly(id); vm.showInspector() }))
                 } else if vm.isVaultSelection {
                     RomCatalogueView(source: vm.selectedVaultSource ?? .batocera)
-                } else if vm.isBundlesToExpandSelection {
-                    VStack(spacing: 0) {
-                        BundlesToExpandHeader()
-                        LibraryGridView(vm: vm)
-                    }
                 } else {
                     LibraryGridView(vm: vm)
                 }
