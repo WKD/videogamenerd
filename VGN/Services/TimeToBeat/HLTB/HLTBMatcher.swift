@@ -43,12 +43,17 @@ enum HLTBMatcher {
         var candidate: HLTBCandidate
         var base: Double
         var adjusted: Double
+        /// The candidate's platform list intersects the library game's effective platforms
+        /// (D2 tie-breaker). Always false when no library slugs were supplied.
+        var platformMatch: Bool = false
     }
 
     /// Score every candidate: the best fuzzy score across its names, tweaked by the
-    /// year tie-breaker. Best first; ties broken by year closeness then id for
-    /// determinism.
-    static func scored(title: String, year: Int?, candidates: [HLTBCandidate]) -> [Scored] {
+    /// year tie-breaker. Best first; ties broken by **platform overlap** (D2), then year
+    /// closeness, then id for determinism. `librarySlugs` are the game's *effective*
+    /// platforms (`LibraryQuery.effectivePlatformsSQL`); empty ⇒ platform plays no part.
+    static func scored(title: String, year: Int?, candidates: [HLTBCandidate],
+                       librarySlugs: Set<String> = []) -> [Scored] {
         candidates.map { candidate -> Scored in
             let base = FuzzyMatch.bestScore(query: title, names: candidate.allNames)
             var adjusted = base
@@ -57,11 +62,15 @@ enum HLTBMatcher {
                 if diff <= yearTolerance { adjusted += yearMatchBoost }
                 else if diff >= 2 { adjusted -= yearMismatchPenalty }
             }
-            return Scored(candidate: candidate, base: base, adjusted: adjusted)
+            let platformMatch = HLTBPlatformMap.intersects(
+                candidatePlatforms: candidate.platforms, librarySlugs: librarySlugs)
+            return Scored(candidate: candidate, base: base, adjusted: adjusted, platformMatch: platformMatch)
         }
         .sorted { a, b in
             if a.adjusted != b.adjusted { return a.adjusted > b.adjusted }
-            // Tie-break: closer year, then lower id.
+            // Tie-break 1 (D2): a candidate on one of my platforms wins a title tie.
+            if a.platformMatch != b.platformMatch { return a.platformMatch }
+            // Tie-break 2: closer year, then lower id.
             let ay = yearDistance(a.candidate.releaseYear, year)
             let by = yearDistance(b.candidate.releaseYear, year)
             if ay != by { return ay < by }
@@ -71,19 +80,31 @@ enum HLTBMatcher {
 
     // MARK: - Match
 
-    /// Decide the outcome for one game.
-    static func match(title: String, year: Int?, candidates: [HLTBCandidate]) -> HLTBMatchOutcome {
-        let ranked = scored(title: title, year: year, candidates: candidates)
+    /// Decide the outcome for one game. `librarySlugs` are the game's effective platforms
+    /// — a **tie-breaker only** (D2): among candidates whose titles are equally good it
+    /// prefers the one on one of my platforms (and the closest year), but it never promotes
+    /// a worse title match over a better one, and never auto-picks when two candidates stay
+    /// tied after platform + year (→ still ambiguous).
+    static func match(title: String, year: Int?, candidates: [HLTBCandidate],
+                      librarySlugs: Set<String> = []) -> HLTBMatchOutcome {
+        let ranked = scored(title: title, year: year, candidates: candidates, librarySlugs: librarySlugs)
         let viable = ranked.filter { $0.base >= plausibleThreshold }
         guard let best = viable.first else { return .notFound }
 
+        // The "equally good title" cluster: candidates within the ambiguity margin of the
+        // top adjusted (year) score. Platform + year only ever break a tie *inside* it.
+        let cluster = viable.filter { best.adjusted - $0.adjusted < ambiguityMargin }
         let isConfidentText = best.base >= confidentThreshold
-        let clearlyAhead: Bool = {
-            guard viable.count > 1 else { return true }
-            return best.adjusted - viable[1].adjusted >= ambiguityMargin
+        let uniqueInCluster: Bool = {
+            guard cluster.count > 1 else { return true }
+            // `best` is already the cluster head after the platform+year sort. It is a
+            // clear winner only if the runner-up differs on the platform or year tie-break.
+            let second = cluster[1]
+            if best.platformMatch != second.platformMatch { return true }
+            return yearDistance(best.candidate.releaseYear, year) < yearDistance(second.candidate.releaseYear, year)
         }()
 
-        if isConfidentText && clearlyAhead {
+        if isConfidentText && uniqueInCluster {
             return .confident(best.candidate)
         }
         return .ambiguous(Array(viable.prefix(maxAmbiguous).map(\.candidate)))
