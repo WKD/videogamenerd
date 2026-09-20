@@ -223,22 +223,19 @@ extension View {
     }
 }
 
-/// A small progress sheet with Cancel, shown while the file is read + matched.
+/// A small progress sheet with Cancel, shown while the file is read + matched. A thin wrapper
+/// over the shared ``ImportMatchingProgressView`` (owner 2026-09-20 — one fixed-size layout for
+/// every sync progress modal).
 struct DeliciousSyncProgressSheet: View {
     let progress: ImportProgress?
     var onCancel: () -> Void = {}
+    /// Injected for deterministic previews/tests; the app uses the wall clock.
+    var now: () -> Date = { Date() }
 
     var body: some View {
-        VStack(spacing: 14) {
-            ProgressView().controlSize(.large)
-            Text(phaseLabel).font(.headline)
-            if let detail = progress?.detail, !detail.isEmpty {
-                Text(detail).font(.caption).foregroundStyle(.secondary)
-            }
-            Button("Cancel") { onCancel() }.keyboardShortcut(.cancelAction)
-        }
-        .padding(28)
-        .frame(minWidth: 320)
+        ImportMatchingProgressView(progress: progress, phaseLabel: phaseLabel,
+                                   cancelIdentifier: "delicious.sync.cancel",
+                                   onCancel: onCancel, now: now)
     }
 
     private var phaseLabel: String {

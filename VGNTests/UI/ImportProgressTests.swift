@@ -15,6 +15,9 @@ struct ImportProgressTests {
                 == "Matching 137 of 412 · Elden Ring")
         #expect(ImportMatchProgress.label(completed: 5, total: 10) == "Matching 5 of 10")
         #expect(ImportMatchProgress.label(completed: 0, total: nil) == "Matching…")
+        // The counter is rendered on its own (never truncated with the title).
+        #expect(ImportMatchProgress.counter(completed: 137, total: 412) == "Matching 137 of 412")
+        #expect(ImportMatchProgress.counter(completed: 0, total: nil) == "Matching…")
         #expect(ImportMatchProgress.fraction(completed: 1, total: 4) == 0.25)
         #expect(ImportMatchProgress.fraction(completed: 1, total: nil) == nil)   // indeterminate
     }
@@ -73,6 +76,9 @@ struct ImportProgressTests {
         #expect(!matching.isEmpty)
         #expect(matching.allSatisfy { $0.total == 5 })                       // stable total
         #expect(matching.map(\.completed) == Array(0..<5))                    // 0,1,2,3,4 monotonic
+        // The coordinator forwards the current title per item (so Batocera et al. can show it).
+        #expect(matching.map(\.currentTitle) == (0..<5).map { "Game \($0)" })
+        #expect(matching.allSatisfy { $0.alreadyMatched == 0 })              // nothing reused here
     }
 
     // MARK: - Cancel is clickable (plain button, no menu)
@@ -84,13 +90,44 @@ struct ImportProgressTests {
         let box = Box()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let sheet = PSNSyncProgressSheet(
-            progress: ImportProgress(phase: .matching, completed: 3, total: 10, detail: "Elden Ring"),
+            progress: ImportProgress(phase: .matching, completed: 3, total: 10,
+                                     currentTitle: "Elden Ring"),
             onCancel: { box.cancelled = true }, now: { now })
-        let window = ClickProbeWindow(sheet, size: NSSize(width: 420, height: 320))
+        // The shared sheet is a fixed 460 pt wide — give the probe window room for it.
+        let window = ClickProbeWindow(sheet, size: NSSize(width: 520, height: 360))
         defer { window.close() }
         try await window.settle()
-        _ = try await window.sweep(band: 300, stepX: 16, stepY: 16,
+        _ = try await window.sweep(band: 320, stepX: 16, stepY: 16,
                                    observe: { box.cancelled ? 1 : 0 }, until: { box.cancelled })
         #expect(box.cancelled)
+    }
+
+    // MARK: - Fixed size regardless of title length (owner: the sheet must not resize)
+
+    /// The shared view must produce the same fitting size for a 3-character and a
+    /// 140-character title, in each phase — so the sheet never resizes as titles scroll by.
+    @MainActor
+    @Test func fixedSizeAcrossTitleLengths() {
+        let short = "abc"
+        let long = String(repeating: "Long Game Title ", count: 9)   // ~144 chars
+        #expect(long.count > 140)
+        for phase in [ImportProgress.Phase.matching, .fetching] {
+            let s = Self.fittingSize(phase: phase, title: short)
+            let l = Self.fittingSize(phase: phase, title: long)
+            #expect(s == l, "phase \(phase): \(s) vs \(l)")
+            #expect(s.width == ImportMatchingProgressView.width)
+        }
+    }
+
+    @MainActor
+    private static func fittingSize(phase: ImportProgress.Phase, title: String) -> NSSize {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let progress = ImportProgress(phase: phase, completed: 50, total: 400,
+                                      detail: title, currentTitle: title, alreadyMatched: 12)
+        let view = ImportMatchingProgressView(progress: progress,
+                                              phaseLabel: "Matching to IGDB…", now: { now })
+        let host = NSHostingView(rootView: view)
+        host.layoutSubtreeIfNeeded()
+        return host.fittingSize
     }
 }

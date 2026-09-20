@@ -11,14 +11,20 @@ enum ImportMatchProgress {
     /// noisy — the coordinator's "hide it when unstable").
     static let minItemsForETA = 10
 
+    /// Just the counter — "Matching N of M", or "Matching…" when the total is unknown.
+    /// Never carries the title, so the shared progress view can render it in its own
+    /// non-truncating, monospaced-digit text (owner 2026-09-20 — the counter must not
+    /// jitter or be middle-truncated with the title).
+    static func counter(completed: Int, total: Int?) -> String {
+        if let total, total > 0 {
+            return "Matching \(min(completed, total)) of \(total)"
+        }
+        return "Matching…"
+    }
+
     /// "Matching N of M" plus " · <title>" when a current title is known.
     static func label(completed: Int, total: Int?, title: String = "") -> String {
-        var line: String
-        if let total, total > 0 {
-            line = "Matching \(min(completed, total)) of \(total)"
-        } else {
-            line = "Matching…"
-        }
+        var line = counter(completed: completed, total: total)
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { line += " · \(trimmed)" }
         return line
