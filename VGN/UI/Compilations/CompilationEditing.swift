@@ -10,6 +10,12 @@ protocol CompilationWriting: Sendable {
     func addExistingGameToCompilation(productID: Int64, gameID: Int64, position: Int) async throws
     @discardableResult
     func removeCompilationMember(productID: Int64, gameID: Int64, confirmOrphanDelete: Bool) async throws -> WriteOutcome
+    /// Remove a member and capture the undo snapshot (so the editor can register a
+    /// "Remove from Compilation" undo step). `LibraryStore` provides it.
+    func removeCompilationMemberCapturingUndo(
+        productID: Int64, gameID: Int64, confirmOrphanDelete: Bool) async throws -> (outcome: WriteOutcome, undo: ReconcileUndo?)
+    /// Restore a captured reconcile snapshot (undo).
+    func restoreReconcile(_ undo: ReconcileUndo) async throws
     func reorderCompilationMembers(productID: Int64, orderedGameIDs: [Int64]) async throws
     func renameProduct(productID: Int64, title: String?) async throws
     func updateProductDetails(

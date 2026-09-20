@@ -213,4 +213,55 @@ struct CompilationEditorModelTests {
         #expect(product.format == .digital)
         #expect(product.edition == "GOTY")
     }
+
+    // MARK: - Remove from compilation + undo (wire-up; store side is CopyRemovalUndoTests)
+
+    /// A compilation of PLAYED members, so removing one is a clean `.ok` (the member
+    /// survives — it is still played) rather than an orphan prompt.
+    private func makePlayedCompilation(_ store: LibraryStore) async throws -> Int64 {
+        let members = (0..<3).map { i in
+            CompilationMemberDraft(title: "Played \(i)", igdbID: Int64(3100 + i), played: true, position: i)
+        }
+        let (productID, _) = try await store.addCompilation(
+            product: ProductDraft(title: "Played Collection", platformID: "ps3", igdbID: 910),
+            members: members)
+        return productID
+    }
+
+    @Test func removeMemberRegistersOneUndoStep() async throws {
+        let store = try await TestDB.makeStore()
+        let productID = try await makePlayedCompilation(store)
+        let model = makeModel(store, productID: productID)
+        let um = UndoManager()
+        model.undoManager = um
+        await model.load()
+        let target = model.members[1].gameID
+
+        await model.removeMember(target)
+
+        #expect(model.members.count == 2)
+        #expect(!model.members.contains { $0.gameID == target })
+        #expect(um.canUndo)
+        #expect(um.undoActionName == "Remove from Compilation")
+    }
+
+    @Test func undoRemoveMemberRestoresTheMember() async throws {
+        let store = try await TestDB.makeStore()
+        let productID = try await makePlayedCompilation(store)
+        let model = makeModel(store, productID: productID)
+        await model.load()
+        let target = model.members[1].gameID
+
+        // Drive the store's capturing removal to get the undo snapshot, then the model's
+        // undo path (restoreReconcile + reload) directly — UndoManager.undo() hangs headless.
+        let (outcome, undo) = try await store.removeCompilationMemberCapturingUndo(
+            productID: productID, gameID: target)
+        guard case .ok = outcome else { Issue.record("expected .ok, got \(outcome)"); return }
+        await model.load()
+        #expect(!model.members.contains { $0.gameID == target })
+
+        await model.undoRemoveMember(try #require(undo))
+        #expect(model.members.contains { $0.gameID == target })
+        #expect(model.members.count == 3)
+    }
 }

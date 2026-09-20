@@ -7,6 +7,7 @@ import SwiftUI
 struct CompilationEditorView: View {
     @Bindable var model: CompilationEditorModel
     var loader: (any CoverLoading)?
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -31,7 +32,10 @@ struct CompilationEditorView: View {
             footer
         }
         .frame(width: 480, height: 620)
-        .task { await model.load() }
+        .task {
+            model.undoManager = undoManager
+            await model.load()
+        }
         .alert("Remove game?", isPresented: orphanPresented, presenting: model.orphanConfirm) { _ in
             Button("Remove from library", role: .destructive) { Task { await model.confirmOrphanRemoval() } }
             Button("Cancel", role: .cancel) { model.cancelOrphanRemoval() }
