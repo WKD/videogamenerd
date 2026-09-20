@@ -265,6 +265,17 @@ enum LibraryQuery {
         if filter.multipleCopies {
             wheres.append("(SELECT COUNT(*) FROM product_games pg5 WHERE pg5.game_id = g.id) >= 2")
         }
+        // "Duplicate Copies" — ≥ 2 really-owned copies (subscription IS NULL) sharing the SAME
+        // platform AND format, e.g. two physical PS3 discs (owner request 2026-09-20). Each
+        // product counts once; a compilation copy counts as a copy of each member (its
+        // product_games row). Narrower than Multiple Copies; ANDs across kinds.
+        if filter.duplicateCopies {
+            wheres.append("""
+                EXISTS(SELECT 1 FROM product_games pg8 JOIN products p8 ON p8.id = pg8.product_id
+                       WHERE pg8.game_id = g.id AND p8.subscription IS NULL
+                       GROUP BY p8.platform_id, p8.format HAVING COUNT(*) >= 2)
+                """)
+        }
         // Format ▸ "PS Plus" — games whose **only** owned copies are subscription copies
         // (PLAN §13.3). Its own facet, ANDed across kinds (like Multiple Copies): the game
         // must be owned AND have no owned copy that is really owned (subscription IS NULL).

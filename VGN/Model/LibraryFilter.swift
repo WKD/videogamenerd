@@ -78,6 +78,13 @@ struct LibraryFilter: Hashable, Sendable {
     /// two physical copies). ANDs across kinds like any other facet.
     var multipleCopies: Bool
 
+    /// Its own facet (owner request 2026-09-20): match only games I own in ≥ 2 really-owned
+    /// copies (`subscription IS NULL`) that share the **same platform AND format** — e.g. two
+    /// physical PS3 discs of the same game. Narrower than ``multipleCopies`` (which counts any
+    /// two products, even different platforms/formats). Each product is counted once; a
+    /// compilation copy counts as a copy of each of its members. ANDs across kinds.
+    var duplicateCopies: Bool
+
     /// Format ▸ "PS Plus" facet (PLAN §13.3): match only games whose **only** owned copies
     /// are subscription copies (`products.subscription IS NOT NULL`) — the games I own only
     /// through PS Plus, at risk when the subscription lapses. A game also owned on disc is
@@ -152,6 +159,7 @@ struct LibraryFilter: Hashable, Sendable {
         formats: Set<ProductFormat> = [],
         includeNotOwned: Bool = false,
         multipleCopies: Bool = false,
+        duplicateCopies: Bool = false,
         includeSubscriptionOnly: Bool = false,
         playtimes: Set<PlaytimeBucket> = [],
         includeNoTimeEstimate: Bool = false,
@@ -175,6 +183,7 @@ struct LibraryFilter: Hashable, Sendable {
         self.formats = formats
         self.includeNotOwned = includeNotOwned
         self.multipleCopies = multipleCopies
+        self.duplicateCopies = duplicateCopies
         self.includeSubscriptionOnly = includeSubscriptionOnly
         self.playtimes = playtimes
         self.includeNoTimeEstimate = includeNoTimeEstimate
@@ -194,7 +203,7 @@ struct LibraryFilter: Hashable, Sendable {
         !searchText.isEmpty || !genres.isEmpty || !decades.isEmpty
             || !tierIDs.isEmpty || includeUnrated
             || !statuses.isEmpty || includeNotPlayed || includeNoStatus
-            || !formats.isEmpty || includeNotOwned || multipleCopies || includeSubscriptionOnly
+            || !formats.isEmpty || includeNotOwned || multipleCopies || duplicateCopies || includeSubscriptionOnly
             || !playtimes.isEmpty || includeNoTimeEstimate || includeSuspiciousEstimate
             || platform != nil || !platforms.isEmpty
     }

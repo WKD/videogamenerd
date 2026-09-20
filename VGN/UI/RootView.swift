@@ -320,6 +320,8 @@ struct RootView: View {
             Toggle("Not Owned", isOn: flag(\.includeNotOwned))
             Toggle("Multiple Copies", isOn: flag(\.multipleCopies))
                 .help("Games you own more than once — several copies or formats (e.g. physical + digital). ANDs with a chosen format.")
+            Toggle("Duplicate Copies", isOn: flag(\.duplicateCopies))
+                .help("Games you own twice on the SAME platform and format — e.g. two physical PS3 discs of one game. ANDs with a chosen format.")
             Toggle("PS Plus", isOn: flag(\.includeSubscriptionOnly))
                 .help("Games you own only through PS Plus — at risk when the subscription lapses. With Status ▸ Not Played, your \u{201C}finish before unsubscribing\u{201D} list.")
             if formatFacetActive {
@@ -334,7 +336,7 @@ struct RootView: View {
 
     private var formatFacetActive: Bool {
         !vm.filter.formats.isEmpty || vm.filter.includeNotOwned
-            || vm.filter.multipleCopies || vm.filter.includeSubscriptionOnly
+            || vm.filter.multipleCopies || vm.filter.duplicateCopies || vm.filter.includeSubscriptionOnly
     }
 
     // Playtime bands (< 4 h … > 200 h) over effective playtime, falling back to the
@@ -453,6 +455,7 @@ struct RootView: View {
         f.formats.removeAll()
         f.includeNotOwned = false
         f.multipleCopies = false
+        f.duplicateCopies = false
         f.includeSubscriptionOnly = false
         vm.setFilter(f)
     }
