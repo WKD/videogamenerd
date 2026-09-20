@@ -145,10 +145,18 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   IGDB `game_type`; the sync coordinator fetches a bundle match's members during matching (behind
   the `ImportBundleExpanding` seam, shared IGDB client) and the review row commits as a compilation
   (§5.1). Caveats:
-  - **Batocera promotion does not expand bundles** — it commits through the review model's
-    `customCommit` (ROM promotion via `BatoceraPromoter`), which bypasses `commitItems()` where the
-    compilation branch lives. ROMs are rarely IGDB bundles, so this is acceptable; expanding a
-    promoted ROM bundle is a follow-up if ever needed. **[follow-up]**
+  - ~~**Batocera promotion does not expand bundles**~~ **Fixed (wave 17, lane D — D2).** A Batocera
+    ROM whose confident IGDB match is a bundle now promotes as a `rom`/`batocera` **compilation**
+    with its members, on the review path AND the favourites auto-add path. The coordinator runs
+    the shared `ImportBundleExpanding` seam for Batocera; the review row carries the expansion to
+    the committer through two additive fields on `ImportReviewCommitRow` (`bundleTitle` /
+    `bundleMembers`); `BatoceraPromoter.Plan.bundle` + `BatoceraPromotionBuilder.compilationCommitItem`
+    commit the `.compilation` item. `promoted_game_id` points at the **first member** (so In-Library
+    detection — `promoted_game_id IS NOT NULL` — works for a compilation), and the ROM's play
+    time / last played land on that member **only when the bundle resolved to exactly one member**
+    (else dropped from games, kept on the catalogue row — PLAN §13.3). Auto-add expands only a
+    confident bundle with **≥ 2 members** (a 0/1-member one waits for review). Undo removes the
+    whole compilation (its members are orphan-deleted). **[done]**
   - **A committed compilation row is not marked `matched_game_id`** (a compilation has many members,
     the column holds one). Re-import is still safe/idempotent — the `(source, external_id)` guard
     skips it — but the review sheet re-lists it as *New* until the product exists; ticking it again
@@ -350,9 +358,15 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   gated on `status == .backlog` — the backtest's `predict` never sees it. Reason
   `.batoceraFavourite` ("★ a favourite on your Batocera"); Discover's pin uses a separate reason
   `.batoceraFavouritePinned` ("★ your favourite").
-- **First-run batch cap is a constant [owner].** One pass caps at
-  `BatoceraFavouriteAutoAdd.batchCap = 60`; the owner's ~247 favourites take ~4 syncs to fully
-  match. Tunable in one place if that feels slow.
+- ~~**First-run batch cap is a constant** — ~247 favourites take ~4 syncs.~~ **Fixed (wave 17,
+  lane D — D4).** `batchCap = 60` is now the **batch size**, not the run limit: after a sync the
+  presenter runs batches back-to-back (`runFavouriteMatching`, one IGDB request stream,
+  cancellable) until no un-attempted favourite remains, so one sync matches them all. It **pauses
+  cleanly on any IGDB error** (the auto-add pass uses the *throwing* matcher, not the resilient
+  wrapper; the first failure stops the run — no retry storm — and the not-yet-attempted favourites
+  wait for the next sync). Resume across quits/cancels is unchanged (staging rows guarantee no
+  double query). One final banner: "N favourites added from Batocera · M need your review" with
+  **Undo** (the whole run = one undo step) and **Review…**.
 - **Finding the review after a Settings sync [done, wave 16].** Settings ▸ Batocera now shows a
   **Review…** button on the status line (next to "N waiting to review", when N > 0) and next to
   the post-sync "· N to review" summary; it brings the main window forward and opens the same
@@ -361,12 +375,15 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   sample/test). The favourites-added banner keeps **Undo** and now also offers **Review…** as a
   **secondary** banner action when there are candidates (additive `LibraryBanner.secondaryActionTitle`
   + `LibraryViewModel.performBannerSecondaryAction()`), so the owner is never stranded behind an
-  Undo-only banner. **Not done (D6 point 3): a "Matching favourites… 12 of 60" progress line in
-  the Settings status area during the background auto-add pass** — that pass runs in
-  `BatoceraImportPresenter` (a different object) and exposes no cheap progress to
-  `BatoceraSettingsModel`, so wiring it would be non-trivial; skipped this wave as the brief
-  allowed. **[eyeball: the Settings Review… button fronts the window and opens the review; the
-  banner shows both Undo and Review…]**
+  Undo-only banner.
+- **Favourites-matching progress line [done, wave 17 — lane D, D4].** Settings ▸ Batocera now
+  shows **"Matching favourites… 120 of 247 · Stop"** while the background pass runs. The presenter
+  and the settings model share one small `@MainActor @Observable BatoceraFavouriteProgress` (no
+  timer, no polling — values change only when a batch finishes, so the app idles at ~0 % CPU); the
+  Stop button cancels the run cleanly. **The quiet in-window progress banner was deliberately
+  skipped** (the banner API is one-shot messages; a live-updating banner would fight the other
+  banners and is not cheap) — the Settings status line + the single final banner cover it, per the
+  brief. **[eyeball: the Settings "Matching favourites… N of M · Stop" line during a live sync]**
 
 ## 5b. The Vault (PLAN §16, wave 14)
 

@@ -90,7 +90,7 @@ struct RootView: View {
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 0) {
-            if !vm.isRankingSelection && !vm.isPlayNextSelection && !vm.isVaultSelection {
+            if vm.showsGridToolbar {
                 FilterChipsBar(vm: vm)
             }
             // The "Bundles to Expand" explanation is a slim bar mounted in this outer
@@ -168,34 +168,43 @@ struct RootView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .principal) {
-            LibrarySearchField(
-                text: $vm.searchText,
-                focus: $searchFocused,
-                onClear: { _ = vm.clearSearch(); searchFocused = true },
-                onDownArrow: { vm.focusGridFromSearch() },
-                onEscape: { if !vm.clearSearch() { searchFocused = false } },
-                onSubmit: { vm.openFirstResult() }
-            )
-            .frame(minWidth: 160, idealWidth: 220)
-            .help("Search titles (⌘F). ↓ into results · ↩ open first · esc clear")
+        // The grid controls (search, filters, sort, size) belong only to a library grid
+        // destination; a ranking view, Play Next and the Vault browser have their own controls,
+        // so showing these there was just dead UI (D1, PLAN §8). Hiding them is toolbar-only —
+        // it never changes the sidebar / safe-area geometry.
+        if vm.showsGridToolbar {
+            ToolbarItemGroup(placement: .principal) {
+                LibrarySearchField(
+                    text: $vm.searchText,
+                    focus: $searchFocused,
+                    onClear: { _ = vm.clearSearch(); searchFocused = true },
+                    onDownArrow: { vm.focusGridFromSearch() },
+                    onEscape: { if !vm.clearSearch() { searchFocused = false } },
+                    onSubmit: { vm.openFirstResult() }
+                )
+                .frame(minWidth: 160, idealWidth: 220)
+                .help("Search titles (⌘F). ↓ into results · ↩ open first · esc clear")
+            }
+
+            ToolbarItemGroup(placement: .automatic) {
+                genreMenu
+                decadeMenu
+                tierMenu
+                statusMenu
+                formatMenu
+                playtimeMenu
+                platformMenu
+                sortMenu
+
+                Slider(value: $vm.gridCellWidth,
+                       in: LibraryViewModel.minCellWidth...LibraryViewModel.maxCellWidth)
+                    .frame(width: 90)
+                    .help("Grid size")
+            }
         }
 
+        // The inspector toggle and Quick Add are app-level actions, shown everywhere.
         ToolbarItemGroup(placement: .automatic) {
-            genreMenu
-            decadeMenu
-            tierMenu
-            statusMenu
-            formatMenu
-            playtimeMenu
-            platformMenu
-            sortMenu
-
-            Slider(value: $vm.gridCellWidth,
-                   in: LibraryViewModel.minCellWidth...LibraryViewModel.maxCellWidth)
-                .frame(width: 90)
-                .help("Grid size")
-
             Button {
                 vm.toggleInspector()
             } label: {

@@ -42,7 +42,7 @@ struct BatoceraImporter: LibraryImporter, Sendable {
 /// Pure builders that turn a catalogue entry into the shared importer types (PLAN §15).
 enum BatoceraPromotionBuilder {
 
-    /// The staging row for one candidate: owned + played (when > 5 min), platform from the
+    /// The staging row for one candidate: owned + played (when > 10 min), platform from the
     /// catalogue, `external_id` = `<system>/<relativePath>`, match title = the clean name,
     /// release year as the IGDB tie-breaker, and Batocera's play time / last-played date.
     static func stagingRow(for e: RomCatalogEntry) -> ImportStagingRow {
@@ -62,7 +62,7 @@ enum BatoceraPromotionBuilder {
 
     /// The commit item for one promotion (PLAN §15). Owned ROM copy on the catalogue's
     /// platform; `markPlayed` + play time (stored **only if the game has none**, so a real
-    /// PSN value is never clobbered) when > 5 min; last-played date; a favourite with no play
+    /// PSN value is never clobbered) when > 10 min; last-played date; a favourite with no play
     /// time lands owned-not-played. When the matched game **already has a ROM copy on the same
     /// platform** (`alreadyHasROMCopy`), no second copy is created — the play data still lands
     /// on the existing game and the catalogue row is linked.
@@ -88,5 +88,20 @@ enum BatoceraPromotionBuilder {
     /// it after matching).
     static func newGameTarget(for e: RomCatalogEntry) -> ImportCommitItem.Target {
         .newGame(ImportNewGameSpec(title: e.name, igdbID: nil, releaseYear: e.releaseYear))
+    }
+
+    /// The commit item for a **bundle** promotion (D2, PLAN §5.1): a `rom` compilation Product
+    /// whose members are the individual games. No play data is attached here — the ROM's play
+    /// time / last played is applied to the sole member only when the bundle resolved to exactly
+    /// one member (``BatoceraPromoter/promote(_:)``); with two or more it is dropped from games
+    /// and kept on the catalogue row (PLAN §13.3). Format is always `.rom` (PLAN §16, D3).
+    static func compilationCommitItem(for e: RomCatalogEntry,
+                                      bundle: BatoceraPromoter.BundlePromotion) -> ImportCommitItem {
+        ImportCommitItem(
+            source: ImportSourceID.batocera,
+            externalID: e.externalID,
+            platformID: e.platformID ?? "",
+            format: .rom,
+            target: .compilation(title: bundle.title, members: bundle.members))
     }
 }

@@ -254,24 +254,35 @@ pass (`BatoceraFavouriteAutoAdd`, off the main actor, cancellable):
   match lists the ROM's platform when both are known), and is **release-year-consistent** (a gap
   of **more than one year downgrades it to "needs review"**);
 - confident favourites are promoted through `BatoceraPromoter` in **one batch** (`source =
-  batocera`; owned-not-played unless `gametime > 300`; a game that already owns a ROM copy on
-  that platform gets the link + play data only, never a second copy);
-- everything else (ambiguous, unmatched, year-mismatched, bundles, played-but-not-favourite)
-  **stays for the review sheet exactly as before** — auto-add never commits anything but a
-  confident favourite.
+  batocera`, `format = rom` — everything from Batocera is a ROM, PLAN §16; owned-not-played unless
+  `gametime > 600`; a game that already owns a ROM copy on that platform gets the link + play data
+  only, never a second copy);
+- a confident match that is a **bundle** (wave 17, D2) expands into its members and is auto-added
+  as a `rom` **compilation** — but only when it has **≥ 2 members** (a 0/1-member bundle is
+  ambiguous and waits for review); `promoted_game_id` points at the first member (In-Library
+  detection works for a compilation);
+- everything else (ambiguous, unmatched, year-mismatched, played-but-not-favourite) **stays for
+  the review sheet** — auto-add never commits anything but a confident favourite.
 
-**The banner:** a quiet **"N favourites added from Batocera"** with an **Undo** (one step that
-removes exactly the games/ROM copies the batch created and clears `promoted_game_id`; it is
-idempotent, so the banner button and ⌘Z can't double-undo). When some remain it appends
-**"· M to review"** (the *Review…* action is still reachable from the launch banner, the File ▸
-Import from Batocera… menu and Settings). When auto-add is **off**, the old **"N ready to
-review · Review…"** banner shows instead.
+**The run finishes by itself (wave 17, D4).** `batchCap = 60` is now the **batch size**, not the
+run limit: after a sync the presenter (`BatoceraImportPresenter.runFavouriteMatching`) runs
+batches back-to-back — one IGDB request stream, the same rate limiter — until no un-attempted
+favourite remains, so one sync matches all ~247. It is **cancellable** and **pauses cleanly on any
+IGDB error** (the pass uses the *throwing* matcher, not the resilient wrapper the review uses; the
+first failure stops the whole run — no retry storm — and the not-yet-attempted favourites wait for
+the next sync). Because each processed favourite is staged, a quit/cancel/error resumes on the
+next sync without re-querying (nothing is queried twice).
 
-**First run over ~247 favourites:** one background pass is **capped at 60 matches**
-(`BatoceraFavouriteAutoAdd.batchCap`) so a first sync does not hammer IGDB for minutes
-unattended. The banner then reads **"60 added · 187 still to match"**; the rest continue on the
-next sync (or when you open Review…). Because each processed favourite is staged, successive
-runs pick up where the last left off.
+**Progress + banner.** While it runs, Settings ▸ Batocera shows **"Matching favourites… N of M ·
+Stop"** — the presenter and the settings model share one `@MainActor @Observable`
+`BatoceraFavouriteProgress` (no timer, no polling: values change only when a batch finishes, so
+the app idles at ~0 % CPU); **Stop** cancels the run. When it ends, **one** final banner:
+**"N favourites added from Batocera · M need your review"** with **Undo** (the whole run is a
+single undo step — it removes exactly the games/ROM copies every batch created and clears
+`promoted_game_id`; idempotent, so the button and ⌘Z can't double-undo) and **Review…**. When
+auto-add is **off**, the old **"N ready to review · Review…"** banner shows instead. *(The in-window
+progress banner was skipped — the banner API is one-shot messages, so a live-updating one would
+fight the other banners; the Settings line + the final banner cover it.)*
 
 ### 2. A boost in Play Next's regular picks
 
@@ -285,8 +296,8 @@ the next sync.
 
 ### 3. Pinned in Discover
 
-A never-played favourite still in the catalogue (no confident match, auto-add off, or over the
-batch cap) is **pinned at the head** of the Discover row, ordered among the favourites by taste
+A never-played favourite still in the catalogue (no confident match, or auto-add off) is
+**pinned at the head** of the "From the vault" row, ordered among the favourites by taste
 score, **exempt from the weekly rotation jitter**, and led by the reason **"★ your favourite"**.
 At most **half the visible cards** may be pinned favourites (`DiscoverModel` passes
 `cardCount / 2`), so the row still discovers. **Not Interested** retires them like any other row.

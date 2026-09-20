@@ -70,6 +70,11 @@ struct ImportReviewCommitRow: Sendable, Equatable {
     var igdbID: Int64?
     var title: String
     var releaseYear: Int?
+    /// **(Bundles, PLAN §5.1 / Batocera D2)** The bundle's title when the match is a bundle/pack.
+    var bundleTitle: String? = nil
+    /// **(Bundles)** The bundle's member drafts. Non-empty ⇒ the source committer should promote
+    /// this row as a compilation (Batocera's `BatoceraPromoter`), like the generic commit path.
+    var bundleMembers: [CompilationMemberDraft] = []
 }
 
 /// The PSN-specific review groups (PLAN §13.3). Used only when the sheet's source is PSN;
@@ -859,7 +864,12 @@ final class ImportReviewModel {
                 matchedGameID: row.matchedGameID,
                 igdbID: row.proposedMatch?.igdbID,
                 title: row.proposedMatch?.name ?? row.sourceTitle,
-                releaseYear: row.releaseYear)
+                releaseYear: row.releaseYear,
+                // Carry a bundle expansion through so a source committer (Batocera) can promote it
+                // as a compilation, like the generic commit path (PLAN §5.1, D2). A row matched to
+                // an existing game keeps the single path (its members are already in the library).
+                bundleTitle: row.matchedGameID == nil ? row.bundleTitle : nil,
+                bundleMembers: row.matchedGameID == nil ? row.bundleMembers : [])
         }
     }
 

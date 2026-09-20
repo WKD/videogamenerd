@@ -39,6 +39,10 @@ struct BatoceraAutoAddResult: Sendable, Equatable {
     var stillToMatchCount = 0
     /// The pass was cancelled before finishing.
     var cancelled = false
+    /// The pass stopped because an IGDB lookup failed (D4): the run pauses cleanly — no retry
+    /// storm — and the not-yet-attempted favourites are left for the next sync/launch. The
+    /// favourite that hit the error is already staged, so it surfaces in the review, not again.
+    var pausedByError = false
 
     var didAdd: Bool { addedCount > 0 }
 }
@@ -52,24 +56,31 @@ struct BatoceraAutoAddResult: Sendable, Equatable {
 struct BatoceraFavouriteAutoAdd: Sendable {
     let catalog: RomCatalogStore
     let staging: ImportStagingStore
+    /// The IGDB matcher. Must be the **throwing** matcher (not the resilient wrapper), so an
+    /// IGDB failure surfaces and the run can pause cleanly (D4) instead of turning every
+    /// favourite into a "no match" and storming IGDB.
     let matcher: any ImportMatcher
+    /// Expands a confident bundle match into its member games (D2, PLAN §5.1). ``NoBundleExpander``
+    /// when IGDB is not configured — a bundle then simply waits for review.
+    let expander: any ImportBundleExpanding
     let promoter: BatoceraPromoter
 
-    /// One background pass caps at this many favourites, so a first sync (the owner's box has
-    /// ~247 favourites) does not hammer IGDB for minutes unattended — the rest continue on the
-    /// next sync or when the owner opens Review… (PLAN §15).
+    /// One background pass caps at this many favourites (the **batch size**, D4): the presenter
+    /// runs batches back-to-back until none is left, so the cap no longer limits a whole run.
     static let batchCap = 60
 
     init(catalog: RomCatalogStore, staging: ImportStagingStore,
-         matcher: any ImportMatcher, promoter: BatoceraPromoter) {
+         matcher: any ImportMatcher, promoter: BatoceraPromoter,
+         expander: any ImportBundleExpanding = NoBundleExpander()) {
         self.catalog = catalog
         self.staging = staging
         self.matcher = matcher
         self.promoter = promoter
+        self.expander = expander
     }
 
-    /// Run one pass, promoting up to `limit` confident favourites. Never throws — a failed
-    /// match / promotion is simply skipped and left for review.
+    /// Run one batch, promoting up to `limit` confident favourites. Never throws — an ambiguous
+    /// match is left for review; an IGDB **failure** stops the batch with ``pausedByError`` set.
     func run(limit: Int = BatoceraFavouriteAutoAdd.batchCap) async -> BatoceraAutoAddResult {
         var result = BatoceraAutoAddResult()
         let total = (try? await catalog.favouritesNeedingMatchCount()) ?? 0
@@ -86,16 +97,39 @@ struct BatoceraFavouriteAutoAdd: Sendable {
         for entry in favourites {
             if Task.isCancelled { result.cancelled = true; break }
             // Stage first, so a favourite is never matched twice — even if the app quits before
-            // the promotion commits, next run skips it.
+            // the promotion commits, next run skips it. On an IGDB failure the staged favourite
+            // therefore surfaces in the review (re-matched there), never re-queried by auto-add.
             try? await staging.upsert([BatoceraPromotionBuilder.stagingRow(for: entry)])
             processed += 1
 
             let request = ImportMatchRequest(title: entry.name, platformSlug: entry.platformID,
                                              releaseYear: entry.releaseYear)
-            guard let outcome = try? await matcher.match(request), let best = outcome.best,
+            let outcome: ScanMatchOutcome
+            do {
+                outcome = try await matcher.match(request)
+            } catch {
+                // A cancellation is a clean stop; any other error is an IGDB failure → pause the
+                // whole run so the remaining, un-staged favourites wait for the next sync.
+                if Task.isCancelled { result.cancelled = true } else { result.pausedByError = true }
+                break
+            }
+            guard let best = outcome.best,
                   BatoceraFavouriteMatch.isConfident(outcome: outcome, entryPlatform: entry.platformID,
                                                      entryYear: entry.releaseYear)
             else { continue }   // ambiguous / unmatched / year-mismatched → stays for review
+
+            // A confident bundle match auto-adds as a compilation only when it expands to ≥ 2
+            // members (D2, PLAN §15); a 0/1-member bundle is ambiguous and waits for review.
+            if best.isBundle {
+                let members = (try? await expander.members(ofBundleIGDBID: best.igdbID)) ?? []
+                guard members.count >= 2 else { continue }
+                let drafts = ImportBundleMapping.members(from: members)
+                plans.append(.compilation(
+                    entry: entry,
+                    bundle: BatoceraPromoter.BundlePromotion(title: best.name, members: drafts)))
+                candidates.append(entry)
+                continue
+            }
 
             let target: ImportCommitItem.Target
             var alreadyHasCopy = false

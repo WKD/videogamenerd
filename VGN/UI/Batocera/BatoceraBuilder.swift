@@ -86,6 +86,9 @@ enum BatoceraBuilder {
             findMatch: findMatch)
 
         let settings = BatoceraSettingsModel(backend: backend)
+        // The Settings pane reads the presenter's favourites-matching progress (D4) — same
+        // instance both objects share, no polling.
+        settings.favouriteProgress = presenter.favouriteProgress
         // After a sync the presenter auto-adds favourites with a confident match (with an Undo
         // banner) when the setting is on, and otherwise shows the quiet "N ready to review"
         // banner — never an auto-commit of anything but a confident favourite (PLAN §15).

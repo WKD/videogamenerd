@@ -18,8 +18,16 @@ final class BatoceraImportPresenter {
     private let promoter: BatoceraPromoter
     private let staging: ImportStagingStore
     private let matcher: any ImportMatcher
+    /// The **throwing** matcher for the background favourites pass (D4): an IGDB failure must
+    /// surface so the run pauses cleanly, so it is not the resilient wrapper the review uses.
+    private let autoAddMatcher: any ImportMatcher
+    /// Expands a bundle match into member games during the review sync + the favourites pass
+    /// (D2, PLAN §5.1). ``NoBundleExpander`` outside live / without IGDB.
+    private let bundleExpander: any ImportBundleExpanding
     private let platformChoices: [String]
     private let onLibraryChanged: () -> Void
+    /// Shared, observable favourites-matching progress the Settings pane reads (D4).
+    let favouriteProgress = BatoceraFavouriteProgress()
     /// Surfaces an error to the window (wired to the library banner).
     @ObservationIgnored var onError: @MainActor (String) -> Void = { _ in }
     /// The window model that shows banners + owns the undo manager (nil in unit tests).
@@ -41,14 +49,19 @@ final class BatoceraImportPresenter {
          promoter: BatoceraPromoter,
          staging: ImportStagingStore,
          matcher: any ImportMatcher,
+         autoAddMatcher: (any ImportMatcher)? = nil,
+         bundleExpander: any ImportBundleExpanding = NoBundleExpander(),
          platformChoices: [String],
          onLibraryChanged: @escaping () -> Void = {}) {
         self.catalog = catalog
         self.promoter = promoter
         self.staging = staging
         self.matcher = matcher
+        self.autoAddMatcher = autoAddMatcher ?? matcher
+        self.bundleExpander = bundleExpander
         self.platformChoices = platformChoices
         self.onLibraryChanged = onLibraryChanged
+        self.favouriteProgress.onStop = { [weak self] in self?.autoAddTask?.cancel() }
     }
 
     /// Open the review over the pending promotion candidates (played > 5 min or favourite),
@@ -58,42 +71,77 @@ final class BatoceraImportPresenter {
     // MARK: - Auto-add favourites (PLAN §15)
 
     /// Called after every sync (from the settings model's `onSyncFinished`). When auto-add is
-    /// on, it runs the background matcher/promoter pass and shows the "N favourites added ·
-    /// Undo" banner; otherwise it falls back to the quiet "N ready to review" banner.
+    /// on, it runs the background matcher/promoter pass — now **to completion**, batch after
+    /// batch, until no un-attempted favourite remains (D4) — and shows ONE final "N favourites
+    /// added · N need your review" banner (Review… + Undo). Otherwise it falls back to the quiet
+    /// "N ready to review" banner. Progress is published through ``favouriteProgress`` so the
+    /// Settings status line can show "Matching favourites… 120 of 247 · Stop".
     func handleSyncFinished(_ summary: BatoceraSyncSummary) {
         guard autoAddEnabled() else { showReviewBanner(candidateCount: summary.candidateCount); return }
         autoAddTask?.cancel()
         let engine = BatoceraFavouriteAutoAdd(catalog: catalog, staging: staging,
-                                              matcher: matcher, promoter: promoter)
+                                              matcher: autoAddMatcher, promoter: promoter,
+                                              expander: bundleExpander)
         let candidateCount = summary.candidateCount
         autoAddTask = Task { [weak self] in
-            let result = await engine.run()
-            guard let self, !Task.isCancelled else { return }
-            if result.addedCount > 0 {
-                self.onLibraryChanged()
-                self.pendingUndoEntries = result.promotedEntries
-                let reviewCount = (try? await self.catalog.promotionCandidateCount()) ?? 0
-                guard !Task.isCancelled else { return }
-                self.showAddedBanner(result: result, reviewCount: reviewCount)
-                self.registerAutoAddUndo(entries: result.promotedEntries)
-            } else {
-                self.showReviewBanner(candidateCount: candidateCount)
-            }
+            await self?.runFavouriteMatching(engine, fallbackCandidateCount: candidateCount)
         }
     }
 
-    private func showAddedBanner(result: BatoceraAutoAddResult, reviewCount: Int) {
-        guard let library else { return }
-        let n = result.addedCount
-        var message = "\(n) favourite\(n == 1 ? "" : "s") added from Batocera"
-        if result.stillToMatchCount > 0 {
-            message += " · \(result.stillToMatchCount) still to match"
-        } else if reviewCount > 0 {
-            message += " · \(reviewCount) to review"
+    /// The back-to-back batch loop (D4): keep matching favourites (one IGDB request stream, the
+    /// batch cap as the batch *size*, cancellable) until none is left, an IGDB error pauses it,
+    /// or the owner stops it. Everything the whole run added is one Undo step.
+    func runFavouriteMatching(_ engine: BatoceraFavouriteAutoAdd,
+                              fallbackCandidateCount: Int,
+                              batchLimit: Int = BatoceraFavouriteAutoAdd.batchCap) async {
+        let total = (try? await catalog.favouritesNeedingMatchCount()) ?? 0
+        guard total > 0 else {
+            // Nothing to match — behave exactly as before (the quiet review banner, if any).
+            showReviewBanner(candidateCount: fallbackCandidateCount)
+            return
         }
-        // Undo stays the primary action; when there are candidates to review, offer "Review…" as a
-        // secondary action so the owner is never stranded (D6, PLAN §15). Both live on the banner
-        // API (additive secondary action) rather than being lost behind the Undo-only banner.
+        favouriteProgress.begin(total: total)
+        defer { favouriteProgress.finish() }
+
+        var promotedAll: [RomCatalogEntry] = []
+        var matched = 0
+        var paused = false
+
+        while true {
+            if Task.isCancelled { break }
+            let result = await engine.run(limit: batchLimit)
+            matched += result.processedCount
+            promotedAll.append(contentsOf: result.promotedEntries)
+            favouriteProgress.update(matched: matched, added: promotedAll.count)
+            if result.addedCount > 0 { onLibraryChanged() }
+            if result.cancelled { break }
+            if result.pausedByError { paused = true; break }
+            if result.processedCount == 0 { break }   // no un-attempted favourite left
+        }
+
+        pendingUndoEntries = promotedAll
+        if !promotedAll.isEmpty { registerAutoAddUndo(entries: promotedAll) }
+        let reviewCount = (try? await catalog.promotionCandidateCount()) ?? 0
+        showFinalFavouritesBanner(added: promotedAll.count, reviewCount: reviewCount,
+                                  paused: paused, fallbackCandidateCount: fallbackCandidateCount)
+    }
+
+    /// The single banner shown when the whole favourites run ends (D4): plain words, an obvious
+    /// next step, never a bare "still to match".
+    private func showFinalFavouritesBanner(added: Int, reviewCount: Int, paused: Bool,
+                                           fallbackCandidateCount: Int) {
+        guard let library else { return }
+        // Nothing added: keep the quiet review banner (or nothing) — no misleading "0 added".
+        guard added > 0 else { showReviewBanner(candidateCount: max(reviewCount, fallbackCandidateCount)); return }
+
+        var message = "\(added) favourite\(added == 1 ? "" : "s") added from Batocera"
+        if reviewCount > 0 {
+            message += " · \(reviewCount) need\(reviewCount == 1 ? "s" : "") your review"
+        }
+        if paused { message += " · paused (couldn’t reach IGDB — the rest retry next sync)" }
+
+        // Undo stays the primary action; Review… is the secondary next step (both on the banner
+        // API), so the owner is never stranded behind an Undo-only banner (D4, PLAN §15).
         if reviewCount > 0 {
             library.showBanner(
                 message, actionTitle: "Undo",
@@ -154,6 +202,7 @@ final class BatoceraImportPresenter {
         let importer = BatoceraImporter(store: catalog, catalogIDs: catalogIDs)
         let coordinator = ImportSyncCoordinator(staging: staging)
         let matcher = self.matcher
+        let bundleExpander = self.bundleExpander
         let staging = self.staging
         let catalog = self.catalog
         let promoter = self.promoter
@@ -172,7 +221,9 @@ final class BatoceraImportPresenter {
                 let details = Dictionary(entries.map { ($0.externalID, Self.playLine(for: $0)) },
                                          uniquingKeysWith: { a, _ in a })
 
-                let result = try await coordinator.run(importer, matcher: matcher) { p in
+                let result = try await coordinator.run(
+                    importer, matcher: matcher, bundleExpander: bundleExpander
+                ) { p in
                     Task { @MainActor in self.progress = p }
                 }
                 if Task.isCancelled { self.reset(); return }
@@ -212,6 +263,15 @@ final class BatoceraImportPresenter {
                 guard var entry = entryMap[row.externalID] else { continue }
                 if let chosen = row.platformID { entry.platformID = chosen }
                 let platform = entry.platformID ?? ""
+
+                // A bundle match promotes as a `rom` compilation with its members (D2, PLAN §5.1).
+                if !row.bundleMembers.isEmpty {
+                    plans.append(.compilation(
+                        entry: entry,
+                        bundle: BatoceraPromoter.BundlePromotion(
+                            title: row.bundleTitle, members: row.bundleMembers)))
+                    continue
+                }
 
                 // Resolve to an existing game (a staged match, or an IGDB id already present).
                 var gameID = row.matchedGameID
@@ -270,16 +330,23 @@ enum BatoceraImportBuilder {
         let promoter = BatoceraPromoter(database)
         let staging = ImportStagingStore(database)
 
-        let matcher: any ImportMatcher
+        let matcher: any ImportMatcher              // resilient — for the review sync
+        let autoAddMatcher: any ImportMatcher       // throwing base — for the favourites pass (D4)
+        let bundleExpander: any ImportBundleExpanding
         let canMatch: Bool
         if mode == .live, let graph, let platformCatalog,
            secrets.hasValue(for: .igdbClientID), secrets.hasValue(for: .igdbClientSecret) {
-            matcher = ResilientImportMatcher(base: IGDBImportMatcher(
+            let base = IGDBImportMatcher(
                 client: graph.igdbClient,
-                platformIGDBIDs: { slug in platformCatalog.entry(forSlug: slug)?.igdbIDs ?? [] }))
+                platformIGDBIDs: { slug in platformCatalog.entry(forSlug: slug)?.igdbIDs ?? [] })
+            matcher = ResilientImportMatcher(base: base)
+            autoAddMatcher = base
+            bundleExpander = IGDBImportBundleExpander(client: graph.igdbClient)
             canMatch = true
         } else {
             matcher = NoMatchImportMatcher()
+            autoAddMatcher = NoMatchImportMatcher()
+            bundleExpander = NoBundleExpander()
             canMatch = false
         }
 
@@ -287,7 +354,8 @@ enum BatoceraImportBuilder {
 
         let presenter = BatoceraImportPresenter(
             catalog: catalog, promoter: promoter, staging: staging,
-            matcher: matcher, platformChoices: platformChoices,
+            matcher: matcher, autoAddMatcher: autoAddMatcher, bundleExpander: bundleExpander,
+            platformChoices: platformChoices,
             onLibraryChanged: onLibraryChanged)
         presenter.onError = onError
         // Auto-add runs only when a real IGDB match is possible and the owner left the setting

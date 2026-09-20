@@ -27,6 +27,11 @@ final class BatoceraSettingsModel {
     private(set) var progress: BatoceraSyncProgress?
     var pendingError: String?
 
+    /// The shared favourites-matching progress owned by the import presenter (D4). The container
+    /// wires it; nil in tests that build the settings model alone. Reading it in the pane's body
+    /// shows "Matching favourites… 120 of 247 · Stop".
+    @ObservationIgnored var favouriteProgress: BatoceraFavouriteProgress?
+
     /// New skip-list entry being typed.
     var newSkipEntry = ""
 
@@ -54,7 +59,7 @@ final class BatoceraSettingsModel {
 
     var shareFolderURL: URL? { shareFolderPath.map { URL(fileURLWithPath: $0) } }
     var isConfigured: Bool { shareFolderPath != nil }
-    var threshold: String { "played more than 5 minutes, or favourite" }
+    var threshold: String { "played more than 10 minutes, or favourite" }
 
     /// Games waiting in the promotion review (played/favourited, not yet reviewed).
     var candidatesWaiting: Int { status.candidatesWaiting }
@@ -221,6 +226,7 @@ struct BatoceraSettingsPane: View {
             syncRow
             autoSyncRow
             addFavouritesRow
+            favouriteMatchingRow
             Divider()
             skipListSection
             thresholdRow
@@ -316,6 +322,27 @@ struct BatoceraSettingsPane: View {
             Text("After a sync, favourites with a confident match are added to your library "
                  + "(with an Undo). Ambiguous or unmatched ones wait for your review.")
                 .font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+
+    /// While the background favourites pass runs, show its live progress + a Stop button (D4,
+    /// PLAN §15). Driven by the shared ``BatoceraFavouriteProgress`` — no timer, no polling.
+    @ViewBuilder
+    private var favouriteMatchingRow: some View {
+        if let progress = model.favouriteProgress, progress.isRunning {
+            HStack(spacing: 8) {
+                if let fraction = progress.fraction {
+                    ProgressView(value: fraction).controlSize(.small).frame(width: 90)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+                Text(progress.statusLine ?? "Matching favourites…")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("batocera.favouriteMatching")
+                Button("Stop") { progress.stop() }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("batocera.favouriteMatching.stop")
+            }
         }
     }
 

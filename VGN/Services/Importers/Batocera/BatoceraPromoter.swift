@@ -16,17 +16,39 @@ struct BatoceraPromoter: Sendable {
         self.staging = ImportStagingStore(database)
     }
 
+    /// A bundle expansion for a Batocera promotion (D2, PLAN §5.1): a ROM whose confident IGDB
+    /// match is a bundle/pack promotes as a **compilation** `rom` copy with these member games,
+    /// like GOG/Delicious. Empty members ⇒ not a usable bundle (falls back to a single).
+    struct BundlePromotion: Sendable, Equatable {
+        var title: String?
+        var members: [CompilationMemberDraft]
+    }
+
     /// One promotion: a catalogue entry, its resolved commit target, and whether the target
     /// already owns a ROM copy on the same platform (⇒ no second copy, "Already in library").
+    /// When ``bundle`` is set the entry promotes as a compilation and ``target`` is ignored.
     struct Plan: Sendable {
         var entry: RomCatalogEntry
         var target: ImportCommitItem.Target
         var alreadyHasROMCopy: Bool
+        /// A bundle expansion (D2) — the entry becomes a compilation `rom` copy with its members.
+        var bundle: BundlePromotion?
 
-        init(entry: RomCatalogEntry, target: ImportCommitItem.Target, alreadyHasROMCopy: Bool = false) {
+        init(entry: RomCatalogEntry, target: ImportCommitItem.Target,
+             alreadyHasROMCopy: Bool = false, bundle: BundlePromotion? = nil) {
             self.entry = entry
             self.target = target
             self.alreadyHasROMCopy = alreadyHasROMCopy
+            self.bundle = bundle
+        }
+
+        /// A compilation promotion (D2): the entry, its bundle title + members. `target` is a
+        /// placeholder — the compilation path ignores it.
+        static func compilation(entry: RomCatalogEntry, bundle: BundlePromotion) -> Plan {
+            Plan(entry: entry,
+                 target: .newGame(ImportNewGameSpec(title: entry.name, igdbID: entry.igdbID,
+                                                    releaseYear: entry.releaseYear)),
+                 bundle: bundle)
         }
     }
 
@@ -37,25 +59,41 @@ struct BatoceraPromoter: Sendable {
     }
 
     /// Commit the plans in one importer transaction, then link each catalogue row to its game.
+    /// A bundle plan (D2) commits as a `rom` **compilation** whose members are the individual
+    /// games; its `promoted_game_id` points at the first member and the ROM's play time / last
+    /// played land on that member **only when the bundle resolved to exactly one member** (PLAN
+    /// §13.3 — otherwise dropped from games, kept on the catalogue row).
     @discardableResult
     func promote(_ plans: [Plan]) async throws -> Result {
         guard !plans.isEmpty else { return Result(commit: ImportCommitResult(), promotedCatalogIDs: []) }
-        let items = plans.map {
-            BatoceraPromotionBuilder.commitItem(for: $0.entry, target: $0.target,
-                                                alreadyHasROMCopy: $0.alreadyHasROMCopy)
+        let items = plans.map { plan -> ImportCommitItem in
+            if let bundle = plan.bundle {
+                return BatoceraPromotionBuilder.compilationCommitItem(for: plan.entry, bundle: bundle)
+            }
+            return BatoceraPromotionBuilder.commitItem(for: plan.entry, target: plan.target,
+                                                       alreadyHasROMCopy: plan.alreadyHasROMCopy)
         }
         let commit = try await staging.commit(items)
 
         var promoted: [Int64] = []
         for plan in plans {
             let gameID: Int64?
-            switch plan.target {
-            case .existingGame(let id):
-                gameID = id
-            case .newGame:
-                gameID = try await self.gameID(forExternalID: plan.entry.externalID)
-            case .compilation:
-                gameID = nil          // Batocera never promotes a compilation.
+            if let bundle = plan.bundle {
+                // The compilation's first member is the bridge id (In-Library detection reads
+                // `promoted_game_id IS NOT NULL`); a one-member bundle also carries the play data.
+                gameID = try await firstCompilationMemberGameID(externalID: plan.entry.externalID)
+                if bundle.members.count == 1, let memberID = gameID {
+                    try await applyBundlePlayData(entry: plan.entry, gameID: memberID)
+                }
+            } else {
+                switch plan.target {
+                case .existingGame(let id):
+                    gameID = id
+                case .newGame:
+                    gameID = try await self.gameID(forExternalID: plan.entry.externalID)
+                case .compilation:
+                    gameID = try await firstCompilationMemberGameID(externalID: plan.entry.externalID)
+                }
             }
             if let gameID {
                 try await catalog.setPromoted(catalogID: plan.entry.id, gameID: gameID)
@@ -63,6 +101,35 @@ struct BatoceraPromoter: Sendable {
             }
         }
         return Result(commit: commit, promotedCatalogIDs: promoted)
+    }
+
+    /// The first member game of a `rom` compilation keyed by `(source, external_id)` — the id
+    /// the catalogue row is promoted to (D2). Ordered by member position.
+    private func firstCompilationMemberGameID(externalID: String) async throws -> Int64? {
+        try await database.dbWriter.read { db in
+            try Int64.fetchOne(db, sql: """
+                SELECT pg.game_id FROM products p
+                JOIN product_games pg ON pg.product_id = p.id
+                WHERE p.source = ? AND p.external_id = ?
+                ORDER BY pg.position ASC, pg.game_id ASC LIMIT 1
+                """, arguments: [ImportSourceID.batocera, externalID])
+        }
+    }
+
+    /// Apply the ROM's play data to the sole member of a one-member bundle (D2 / PLAN §13.3):
+    /// mark it played + set the imported play time (only if the game has none) + last-played
+    /// date. A no-op when the ROM has no play data (a favourite never launched).
+    private func applyBundlePlayData(entry: RomCatalogEntry, gameID: Int64) async throws {
+        let played = BatoceraPromotion.isPlayed(gameTimeSeconds: entry.gameTimeSeconds)
+        guard played || entry.lastPlayedAt != nil else { return }
+        try await database.dbWriter.write { db in
+            if played {
+                try LibraryStore.markPlayedWithoutCopy(gameID: gameID, platformID: entry.platformID, db: db)
+                try LibraryStore.setImportedPlaytimeIfEmpty(
+                    gameID: gameID, seconds: entry.gameTimeSeconds, db: db)
+            }
+            try LibraryStore.setPSNPlayedDates(gameID: gameID, first: nil, last: entry.lastPlayedAt, db: db)
+        }
     }
 
     /// Reverse an auto-add batch in **one transaction** (PLAN §15 — the banner's Undo): for
