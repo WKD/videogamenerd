@@ -1,7 +1,7 @@
 import Foundation
 
 /// One IGDB match candidate for a scanned spine.
-struct ScanMatch: Sendable, Equatable {
+struct ScanMatch: Sendable, Equatable, Codable {
     var igdbID: Int64
     var name: String
     var releaseYear: Int?
@@ -20,12 +20,12 @@ struct ScanMatch: Sendable, Equatable {
 }
 
 /// Confidence bucket for the review sheet (PLAN §6.2 step 5).
-enum ScanConfidenceBucket: String, Sendable, Equatable {
+enum ScanConfidenceBucket: String, Sendable, Equatable, Codable {
     case confident, plausible, none
 }
 
 /// The outcome of matching one spine: best match + alternatives + bucket.
-struct ScanMatchOutcome: Sendable, Equatable {
+struct ScanMatchOutcome: Sendable, Equatable, Codable {
     var best: ScanMatch?
     var alternatives: [ScanMatch]
     var bucket: ScanConfidenceBucket

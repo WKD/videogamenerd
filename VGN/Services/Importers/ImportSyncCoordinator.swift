@@ -53,6 +53,18 @@ struct ImportSyncCoordinator: Sendable {
 
     init(staging: ImportStagingStore) { self.staging = staging }
 
+    /// How long an *attempted, no match* outcome is trusted before a later sync re-queries it
+    /// (PLAN §5.1). A matched outcome is trusted indefinitely (only "Re-match" re-queries it).
+    static let noMatchTTL: TimeInterval = 30 * 24 * 60 * 60
+
+    /// Whether a persisted attempt can be reused (skip the IGDB query, restore the proposals):
+    /// a matched attempt always, a no-match one only while it is younger than the TTL (PLAN §5.1).
+    static func canReuse(_ attempt: ImportStagingStore.PersistedAttempt, now: Date,
+                         reQueryNoMatchAfter: TimeInterval) -> Bool {
+        if attempt.match != nil { return true }
+        return now.timeIntervalSince(attempt.attemptedAt) < reQueryNoMatchAfter
+    }
+
     /// Run a sync, reporting progress through `onProgress`. When a `bundleExpander` is
     /// supplied, every *New* row whose best match is an IGDB bundle/pack has its member
     /// games fetched here (still in the matching phase, on the shared IGDB pipeline —
@@ -61,6 +73,8 @@ struct ImportSyncCoordinator: Sendable {
     func run(_ importer: any LibraryImporter,
              matcher: any ImportMatcher,
              bundleExpander: (any ImportBundleExpanding)? = nil,
+             now: Date = Date(),
+             reQueryNoMatchAfter: TimeInterval = Self.noMatchTTL,
              onProgress: @Sendable @escaping (ImportProgress) -> Void = { _ in }) async throws -> ImportSyncResult {
         // 1. Fetch (cache-first, budgeted, validated). Throws on any reject.
         let fetched = try await importer.fetch(progress: onProgress)
@@ -69,17 +83,42 @@ struct ImportSyncCoordinator: Sendable {
         onProgress(ImportProgress(phase: .staging, detail: "Saving \(fetched.rows.count) titles"))
         try await staging.upsert(fetched.rows)
 
-        // 3. Match every *New* row through the ladder (fake in tests).
+        // 3. Match every *New* row through the ladder (fake in tests) — resuming from the
+        // persisted per-title outcomes (PLAN §5.1): a title already attracted (matched, or
+        // no-match within the TTL) is restored from `match_json` instead of re-queried, so a
+        // cancelled-then-restarted or a second sync only hits IGDB for never-attempted titles
+        // and stale no-match ones (or on an explicit per-row "Re-match" that cleared the mark).
         let rowsByExternalID = Dictionary(uniqueKeysWithValues: fetched.rows.map { ($0.externalID, $0) })
         let titles = try await staging.titles(source: importer.source)
+        let attempts = try await staging.persistedAttempts(source: importer.source)
         let toMatch = titles.filter { $0.bucket == .new }
+
+        // Split into titles to (re)query and titles to restore from the persisted attempt.
+        var queryTitles: [ImportStagedTitle] = []
         var matches: [ImportMatchResult] = []
-        for (index, title) in toMatch.enumerated() {
+        var bundleExpansions: [String: ImportBundleExpansion] = [:]
+        for title in toMatch {
+            if let attempt = attempts[title.externalID],
+               Self.canReuse(attempt, now: now, reQueryNoMatchAfter: reQueryNoMatchAfter) {
+                let outcome = attempt.match?.outcome
+                    ?? ScanMatchOutcome(best: nil, alternatives: [], bucket: .none)
+                matches.append(ImportMatchResult(externalID: title.externalID, name: title.name, outcome: outcome))
+                if let bundle = attempt.match?.bundle { bundleExpansions[title.externalID] = bundle }
+            } else {
+                queryTitles.append(title)
+            }
+        }
+        let reusedCount = toMatch.count - queryTitles.count
+
+        for (index, title) in queryTitles.enumerated() {
             // Cancel stops promptly after the current item, not only at the next await; the
-            // matches gathered so far are returned so the caller can open the review with them.
+            // matches gathered so far (incl. the reused ones) are returned and persisted, so a
+            // restart resumes rather than re-querying.
             if Task.isCancelled { break }
-            onProgress(ImportProgress(phase: .matching, completed: index, total: toMatch.count,
-                                      detail: title.name))
+            let detail = reusedCount > 0
+                ? "\(title.name) · \(reusedCount) already matched" : title.name
+            onProgress(ImportProgress(phase: .matching, completed: index, total: queryTitles.count,
+                                      detail: detail))
             let row = rowsByExternalID[title.externalID]
             // A file importer matches a cleaned title (`matchTitle`) while `name` keeps
             // the noisy original for display (PLAN §5.5); GOG leaves `matchTitle` nil.
@@ -87,21 +126,21 @@ struct ImportSyncCoordinator: Sendable {
                 title: row?.matchTitle ?? title.name,
                 platformSlug: title.platform, releaseYear: row?.releaseYear)
             let outcome = try await matcher.match(request)
-            matches.append(ImportMatchResult(externalID: title.externalID, name: title.name, outcome: outcome))
-        }
 
-        // 3b. Expand bundle matches (PLAN §5.1): a New row whose best match is an IGDB
-        // bundle/pack has its members fetched now, on the shared IGDB pipeline. On
-        // imperfect coverage (or an error) the row simply commits as a single.
-        var bundleExpansions: [String: ImportBundleExpansion] = [:]
-        if let bundleExpander {
-            for match in matches {
-                guard let best = match.outcome.best, best.isBundle else { continue }
+            // 3b. Expand a bundle match (PLAN §5.1) right here, so the outcome and its member
+            // list are persisted together — a resumed sync restores both without re-querying.
+            var bundle: ImportBundleExpansion?
+            if let bundleExpander, let best = outcome.best, best.isBundle {
                 let results = (try? await bundleExpander.members(ofBundleIGDBID: best.igdbID)) ?? []
-                bundleExpansions[match.externalID] = ImportBundleExpansion(
-                    bundleIGDBID: best.igdbID, title: best.name,
-                    members: ImportBundleMapping.members(from: results))
+                bundle = ImportBundleExpansion(bundleIGDBID: best.igdbID, title: best.name,
+                                               members: ImportBundleMapping.members(from: results))
             }
+            let persisted = outcome.best != nil ? PersistedImportMatch(outcome: outcome, bundle: bundle) : nil
+            try? await staging.recordMatchOutcome(
+                source: importer.source, externalID: title.externalID, persisted, now: now)
+
+            matches.append(ImportMatchResult(externalID: title.externalID, name: title.name, outcome: outcome))
+            if let bundle { bundleExpansions[title.externalID] = bundle }
         }
 
         // 4. Summary.

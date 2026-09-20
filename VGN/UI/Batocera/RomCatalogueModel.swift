@@ -13,10 +13,11 @@ struct RomCatalogueSystemCount: Identifiable, Sendable, Equatable {
         self.system = system
         self.count = count
         switch source {
-        case .psn:
-            self.label = PlatformLabels.short(system)
         case .batocera:
             self.label = BatoceraSystems.platformSlug(for: system).map(PlatformLabels.short) ?? system
+        case .psn, .gog, .delicious:
+            // Every non-Batocera Vault source stores a VGN platform slug as its `system`.
+            self.label = PlatformLabels.short(system)
         }
     }
 }

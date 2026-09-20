@@ -215,7 +215,7 @@ struct ImportStagingStore: Sendable {
         ImportStagedTitle(
             id: r.id ?? 0, source: r.source, externalID: r.externalID, name: r.name,
             platform: r.platform, signals: ImportSignals(storageString: r.signals),
-            matchedGameID: r.matchedGameID, ignored: r.ignored)
+            matchedGameID: r.matchedGameID, ignored: r.ignored, vaulted: r.vaulted)
     }
 
     // MARK: - Decisions
@@ -241,8 +241,80 @@ struct ImportStagingStore: Sendable {
             case .restore:
                 try db.execute(sql: "UPDATE import_titles SET ignored = 0 WHERE source = ? AND external_id = ?",
                                arguments: [source, externalID])
+            case .vault:
+                // Send to the Vault (the fourth fate, PLAN §16): leaves the importable buckets,
+                // clears any ignore so it never double-counts, and is never re-proposed.
+                try db.execute(sql: """
+                    UPDATE import_titles SET vaulted = 1, ignored = 0 WHERE source = ? AND external_id = ?
+                    """, arguments: [source, externalID])
+            case .unvault:
+                try db.execute(sql: "UPDATE import_titles SET vaulted = 0 WHERE source = ? AND external_id = ?",
+                               arguments: [source, externalID])
             }
         }
+    }
+
+    // MARK: - Match-outcome persistence (resume after cancel, PLAN §5.1)
+
+    /// Record the IGDB match attempt for one title (v13): `match_attempted_at = now`, and the
+    /// outcome (best + alternatives + any bundle expansion) as JSON so a resumed sync restores
+    /// it without re-querying. A `nil` `match` records "attempted, no match" (JSON cleared).
+    func recordMatchOutcome(source: String, externalID: String,
+                            _ match: PersistedImportMatch?, now: Date = Date()) async throws {
+        let json = match.flatMap(Self.encodeMatch)
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE import_titles SET match_attempted_at = ?, match_json = ?
+                WHERE source = ? AND external_id = ?
+                """, arguments: [now, json, source, externalID])
+        }
+    }
+
+    /// Clear a title's match attempt so the next sync re-queries it — the per-row "Re-match"
+    /// action (PLAN §5.1).
+    func clearMatchAttempt(source: String, externalID: String) async throws {
+        try await dbWriter.write { db in
+            try db.execute(sql: """
+                UPDATE import_titles SET match_attempted_at = NULL, match_json = NULL
+                WHERE source = ? AND external_id = ?
+                """, arguments: [source, externalID])
+        }
+    }
+
+    /// One title's persisted match attempt, or nil if never attempted / the row is gone.
+    /// `outcome` is nil when the attempt found no match (the JSON is cleared then).
+    struct PersistedAttempt: Sendable, Equatable {
+        var externalID: String
+        var attemptedAt: Date
+        var match: PersistedImportMatch?
+    }
+
+    /// Every persisted match attempt for a source, keyed by external id (v13). The coordinator
+    /// uses this to skip already-attempted titles and restore their proposals on a resumed sync.
+    func persistedAttempts(source: String) async throws -> [String: PersistedAttempt] {
+        try await dbWriter.read { db in
+            var out: [String: PersistedAttempt] = [:]
+            for row in try Row.fetchAll(db, sql: """
+                SELECT external_id, match_attempted_at, match_json FROM import_titles
+                WHERE source = ? AND match_attempted_at IS NOT NULL
+                """, arguments: [source]) {
+                let ext: String = row["external_id"]
+                guard let at: Date = row["match_attempted_at"] else { continue }
+                let match = (row["match_json"] as String?).flatMap(Self.decodeMatch)
+                out[ext] = PersistedAttempt(externalID: ext, attemptedAt: at, match: match)
+            }
+            return out
+        }
+    }
+
+    static func encodeMatch(_ match: PersistedImportMatch) -> String? {
+        guard let data = try? JSONEncoder().encode(match) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func decodeMatch(_ json: String) -> PersistedImportMatch? {
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(PersistedImportMatch.self, from: data)
     }
 
     // MARK: - Commit (one transaction)
@@ -311,12 +383,22 @@ struct ImportStagingStore: Sendable {
                         edition: item.edition, acquiredAt: item.acquiredAt, db: db)
                     result.productsAdded += 1
                     let memberSource = ProductSource(rawValue: item.source) ?? .manual
+                    var firstMemberGameID: Int64?
                     for member in members {
                         let outcome = try LibraryStore.upsertCompilationMember(
                             member, productID: productID, platformID: item.platformID,
                             source: memberSource, db: db)
                         if case .created = outcome { result.gamesCreated += 1 }
                         result.affectedGameIDs.append(outcome.gameID)
+                        if firstMemberGameID == nil { firstMemberGameID = outcome.gameID }
+                    }
+                    // A committed compilation must not re-list as *New* on the next review
+                    // (D4, PLAN §5.1): mark the staging row matched. The column holds one game
+                    // and a compilation has many members, so it records the first member — the
+                    // `(source, external_id)` guard keeps re-import idempotent regardless.
+                    if let gameID = firstMemberGameID {
+                        try Self.markMatched(source: item.source, externalID: item.externalID,
+                                             gameID: gameID, db: db)
                     }
                 }
             }

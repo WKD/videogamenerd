@@ -118,7 +118,12 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   claim is a row with `source='psn'`, `system=<slug>`, `relative_path=<external id>`; pure
   `ADD COLUMN`, FTS untouched (`RomCatalogStore` Vault methods, `VaultSource`);
   v12 adds `rom_catalog.owned` for a hand-vaulted purchase (PLAN §16 "Send to the Vault" —
-  never gets the PS Plus boost), pure additive `ADD COLUMN`). `LibraryStore`
+  never gets the PS Plus boost), pure additive `ADD COLUMN`;
+  v13 adds three additive `import_titles` columns (PLAN §16 / §5.1): `vaulted` (the explicit
+  fourth fate — a review row the owner sent to the Vault, kept out of the library, never
+  re-proposed), `match_attempted_at` + `match_json` (the persisted per-title IGDB match outcome
+  so a cancelled-then-restarted or a second sync resumes without re-querying — matched reused
+  indefinitely, no-match re-queried after 30 days or on "Re-match")). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`

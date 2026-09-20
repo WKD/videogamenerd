@@ -397,22 +397,47 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
 - **No PlayStation Store link [by design].** A correct product URL is not derivable from the
   stored fields — the PSN external id is an entitlement id, not a store/concept id
   (`conceptId` is null on every purchase row, `docs/psn-import.md`). The action is omitted.
-- **"Send to the Vault" is foundations-only [pending].** The explicit fourth fate (PLAN §16
-  "Three fates for a review row") has its data layer in — migration **v12** adds
-  `rom_catalog.owned`, `RomCatalogStore.sendToVault` / `deleteEntries` exist, `DiscoverScorer`
-  skips the PS Plus term for `owned` entries (`RomCatalogEntry.isPSPlusSubscription`), and the
-  browser shows an "Owned" marker instead of "+". **Not built:** the per-row / group "Send to
-  the Vault" action in the review sheet, `ImportDecision.vault` (persisting the decision so
-  later syncs don't re-propose and it shows in the "In the Vault (N)" group), the group-action
-  undo, and — because the Vault sidebar/browser models only two sources (`batocera` / `psn`) —
-  vaulting **GOG / Delicious** rows (they would land under a source with no Vault home;
-  extending needs a general Vault source beyond the two-case `VaultSource`).
-- **Resume-after-cancel re-queries [pending].** The matching progress sheet's Cancel stops the
-  pass promptly and the coordinator returns the matches gathered so far, but match outcomes are
-  **not persisted per item** (they flow transiently into the review sheet), so a re-run
-  re-queries IGDB for every unmatched row rather than resuming. True resume needs a persisted
-  per-title match outcome (a staging column) so already-attempted rows are skipped and their
-  alternatives restored.
+## 5b. The Vault — wave 16 ("Send to the Vault" wired · resume after cancel)
+- **"Send to the Vault" (the fourth fate) is wired [done].** Migration **v13** adds
+  `import_titles.vaulted` (the persisted decision — `ImportDecision.vault` / `.unvault`). The
+  review sheet has a per-row **Send to the Vault** action (row menu), a group action
+  ("Send N to the Vault" in the bucket header, and per PSN group), a collapsed read-only
+  **In the Vault (N)** group with **Show in the Vault** + a per-row **Bring back**, and a
+  per-model **Undo** (`undoLastVaultSend`; `UndoManager.undo()` hangs headless, so the model
+  keeps its own undo stack — tests drive it directly). The decision survives the next sync (the
+  row never re-lists). Vault rows are written through `RomCatalogStore.sendToVault` with
+  `owned = 1` for GOG / Delicious / a purchased PSN copy, `owned = 0` + `membership` for a
+  hand-vaulted PS Plus claim (so it keeps the deadline boost). `VaultSource` gained **`.gog`** /
+  **`.delicious`** cases (stable ids `vault:gog` / `vault:delicious`), so those rows are
+  browsable in their own sidebar rows (shown only when count > 0) and suggested by "From the
+  vault"; `DiscoverScorer.vaultPool` now includes them, and gives an `owned` entry no PS Plus
+  term. **What a human must eyeball:** the review sheet's Vault section rendering, the sidebar
+  GOG/Delicious Vault rows, and that the GOG/Delicious browser row shows "Owned" — all
+  window-only (the model/store are unit-tested).
+- **Resume matching after cancel [done].** The coordinator persists each *New* row's outcome
+  (`match_attempted_at` + a `match_json` blob = outcome + bundle expansion), so a
+  cancelled-then-restarted or a second sync **skips already-attempted titles** (never
+  re-querying IGDB), restores their alternatives and bundle members, and re-queries only
+  never-attempted titles and no-match ones older than 30 days (or on a per-row Re-match via
+  `ImportStagingStore.clearMatchAttempt`). Bundle expansions are **persisted** in the same blob
+  (not recomputed). The progress detail shows "… · N already matched". **Not wired to the UI:**
+  a per-row "Re-match" button in the review sheet (the store method exists; the review row action
+  is a follow-up). **[follow-up]**
+- **Committed compilation rows no longer re-list as New [done].** The compilation commit path now
+  marks the staging row matched (to the first member), so a re-sync lands it under *Already
+  matched* (D4, §5.1); re-import stays idempotent on `(source, external_id)`.
+- **Bundles-to-Expand list [partial].** `LibraryStore.bundleExpansionCandidates()` now excludes
+  games the owner dismissed as "not a bundle" (persisted in `app_state`, key
+  `reconcile.notBundle`; `dismissBundleCandidate` / `dismissedBundleCandidateIDs`), and the
+  reconcile presenter auto-dismisses a game that turns out not to be a bundle on IGDB (and
+  notifies `onBundleCandidatesChanged`). A self-contained `BundlesToExpandModel` +
+  `BundlesToExpandView` (`VGN/UI/Reconcile/`) render the list with per-row "Expand…" (via the
+  shared `IGDBLinkPresenter.presentBundleExpansion`) and a dismiss affordance. **Not wired:**
+  the view is **not yet mounted** as a segmented switch next to the Unlinked list — the
+  "Unlinked" list is a *sidebar smart-list rendered in the grid*, not a reconcile panel, so
+  where the two lists sit together is a shell decision left to a UI lane. The model + store +
+  dismissal are unit-tested and the view is ready to mount. **[follow-up: mount + wire
+  `onExpand`/`onBundleCandidatesChanged` in AppEnvironment]**
 
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.

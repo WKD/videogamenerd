@@ -10,6 +10,9 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     var platform: String?
     var include: Bool
     var ignored: Bool
+    /// Sent to the Vault by hand — the fourth fate (PLAN §16). Leaves the importable buckets;
+    /// shown in the read-only "In the Vault (N)" group with a "Bring back" action.
+    var vaulted: Bool = false
     var matchedGameID: Int64?
     var proposedMatch: ScanMatch?
     var alternatives: [ScanMatch]
@@ -49,7 +52,7 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
         if shelfDuplicate { return .alreadyMatched }
         return matchedGameID == nil ? .new : .alreadyMatched
     }
-    var isCommittable: Bool { include && !ignored && !shelfDuplicate }
+    var isCommittable: Bool { include && !ignored && !shelfDuplicate && !vaulted }
     var matchedTitle: String? { proposedMatch?.name }
     var showsSourceTitle: Bool {
         guard let matched = proposedMatch?.name else { return true }
@@ -275,6 +278,7 @@ final class ImportReviewModel {
             platform: title.platform,
             include: include,
             ignored: title.ignored,
+            vaulted: title.vaulted,
             matchedGameID: title.matchedGameID,
             proposedMatch: outcome?.best,
             alternatives: outcome?.alternatives ?? [],
@@ -356,10 +360,18 @@ final class ImportReviewModel {
 
     // MARK: Buckets
 
-    func rows(in bucket: ImportReviewBucket) -> [ImportReviewRow] { rows.filter { $0.bucket == bucket } }
-    var presentBuckets: [ImportReviewBucket] {
-        [.new, .alreadyMatched, .ignored].filter { b in rows.contains { $0.bucket == b } }
+    func rows(in bucket: ImportReviewBucket) -> [ImportReviewRow] {
+        rows.filter { !$0.vaulted && $0.bucket == bucket }
     }
+    var presentBuckets: [ImportReviewBucket] {
+        [.new, .alreadyMatched, .ignored].filter { b in rows.contains { !$0.vaulted && $0.bucket == b } }
+    }
+
+    // MARK: The Vault — "Send to the Vault" (the fourth fate, PLAN §16)
+
+    /// Hand-vaulted rows, shown in the read-only "In the Vault (N)" group with "Bring back".
+    var vaultedRows: [ImportReviewRow] { rows.filter(\.vaulted) }
+    var hasVaultedRows: Bool { rows.contains(where: \.vaulted) }
 
     // MARK: PSN groups (PLAN §13.3)
 
@@ -367,8 +379,9 @@ final class ImportReviewModel {
     /// PS Plus (a subscription claim) → owned+played → purchased → launched-0 % →
     /// played-only → (fallback) purchased.
     func psnGroup(for row: ImportReviewRow) -> PSNReviewGroup {
-        // A claim the 10-minute rule sent to the Vault shows in its own collapsed group, not as
-        // an ordinary Ignored row (PLAN §16).
+        // A row sent to the Vault by hand, or a claim the 10-minute rule sent there, shows in the
+        // collapsed "In the Vault" group, not as an ordinary Ignored row (PLAN §16).
+        if row.vaulted { return .inTheVault }
         if transientByID[row.externalID]?.ignoreReason == .vaultedSubscription { return .inTheVault }
         if row.ignored { return .ignored }
         if row.matchedGameID != nil { return .alreadyInLibrary }
@@ -495,6 +508,97 @@ final class ImportReviewModel {
             row.confidence = bucket
             if !row.ignored { row.include = true }
         }
+    }
+
+    // MARK: Send to the Vault (the fourth fate, PLAN §16)
+
+    /// One manual send, so a per-model Undo removes exactly the rows it created and un-vaults
+    /// exactly the titles it moved.
+    private struct VaultSend: Equatable { var externalIDs: [String]; var insertedIDs: [Int64] }
+    @ObservationIgnored private var vaultUndoStack: [VaultSend] = []
+    /// Whether the sheet's "Undo" affordance is available (a manual send happened this session).
+    var canUndoVaultSend: Bool { !vaultUndoStack.isEmpty }
+
+    /// Send one row to the Vault (PLAN §16): own it, keep it out of the library, remember it, let
+    /// Play Next ▸ "From the vault" suggest it. Optimistic UI; the row leaves its bucket.
+    func sendToVault(_ externalID: String) { sendToVault(externalIDs: [externalID]) }
+
+    /// Send every committable (ticked, importable) row in a bucket to the Vault — the group action.
+    func sendBucketToVault(_ bucket: ImportReviewBucket) {
+        sendToVault(externalIDs: rows.filter { $0.bucket == bucket && $0.isCommittable }.map(\.externalID))
+    }
+
+    /// Send every committable row in a PSN group to the Vault — the PSN group action.
+    func sendPSNGroupToVault(_ group: PSNReviewGroup) {
+        sendToVault(externalIDs: rows.filter { psnGroup(for: $0) == group && $0.isCommittable }.map(\.externalID))
+    }
+
+    /// How many rows a bucket / group send would move (for the "Send N to the Vault" label).
+    func vaultableCount(in bucket: ImportReviewBucket) -> Int {
+        rows.filter { $0.bucket == bucket && $0.isCommittable }.count
+    }
+
+    private func sendToVault(externalIDs ids: [String]) {
+        let toSend = ids.compactMap { id in rows.first { $0.externalID == id && !$0.vaulted && !$0.ignored } }
+        guard !toSend.isEmpty else { return }
+        let entries = toSend.map(vaultEntry(for:))
+        let sentIDs = toSend.map(\.externalID)
+        for id in sentIDs { mutate(id) { $0.vaulted = true; $0.include = false } }
+        let store = RomCatalogStore(staging.database)
+        let staging = self.staging, src = source
+        let changed = onLibraryChanged
+        Task {
+            let result = (try? await store.sendToVault(entries)) ?? RomCatalogStore.VaultSendResult()
+            for id in sentIDs { try? await staging.setDecision(source: src, externalID: id, .vault) }
+            vaultUndoStack.append(VaultSend(externalIDs: sentIDs, insertedIDs: result.insertedIDs))
+            changed()
+        }
+    }
+
+    /// Bring one row back from the Vault (PLAN §16) — reverses a send: the row returns to its
+    /// bucket and its Vault entry is removed.
+    func bringBack(_ externalID: String) {
+        guard let row = rows.first(where: { $0.externalID == externalID }), row.vaulted else { return }
+        mutate(externalID) { $0.vaulted = false }
+        vaultUndoStack.removeAll { $0.externalIDs == [externalID] }
+        let store = RomCatalogStore(staging.database)
+        let staging = self.staging, src = source
+        let changed = onLibraryChanged
+        Task {
+            try? await store.deleteVaultEntry(source: src, externalID: externalID)
+            try? await staging.setDecision(source: src, externalID: externalID, .unvault)
+            changed()
+        }
+    }
+
+    /// Undo the last manual "Send to the Vault" (PLAN §16): un-vault the moved titles and hard-delete
+    /// the Vault rows the send created. `internal` so a test drives it directly (`UndoManager.undo()`
+    /// hangs headless).
+    func undoLastVaultSend() {
+        guard let send = vaultUndoStack.popLast() else { return }
+        for id in send.externalIDs { mutate(id) { $0.vaulted = false } }
+        let store = RomCatalogStore(staging.database)
+        let staging = self.staging, src = source
+        let changed = onLibraryChanged
+        Task {
+            try? await store.deleteEntries(ids: send.insertedIDs)
+            for id in send.externalIDs { try? await staging.setDecision(source: src, externalID: id, .unvault) }
+            changed()
+        }
+    }
+
+    /// Build the Vault row for a review row: real purchases (GOG, Delicious, a purchased PSN copy)
+    /// are `owned = true`; a hand-vaulted PS Plus claim keeps `owned = false` + its membership so it
+    /// still gets the deadline boost (PLAN §16).
+    private func vaultEntry(for row: ImportReviewRow) -> RomCatalogEntry {
+        let platform = row.platform ?? "pc"
+        let name = row.proposedMatch?.name ?? row.sourceTitle
+        let isPSPlus = source == ImportSourceID.psn && transientByID[row.externalID]?.subscription != nil
+        return RomCatalogEntry.makeSentToVault(
+            source: source, externalID: row.externalID, platform: platform, name: name,
+            igdbID: row.proposedMatch?.igdbID,
+            membership: isPSPlus ? transientByID[row.externalID]?.subscription?.rawValue : nil,
+            owned: !isPSPlus)
     }
 
     /// Re-map the PC/Mac rows' platform under the current policy (PLAN §14.3). Only rows
@@ -736,8 +840,31 @@ struct ImportReviewSheet: View {
                         bucketHeader(bucket)
                     }
                 }
+                if model.hasVaultedRows {
+                    Section { genericVaultGroup }
+                }
             }
             .listStyle(.inset)
+        }
+    }
+
+    /// The read-only "In the Vault (N)" group for a generic (GOG/Delicious) sheet (PLAN §16):
+    /// hand-vaulted rows, collapsed, each with a "Bring back" action (in the row menu).
+    private var genericVaultGroup: some View {
+        DisclosureGroup(isExpanded: $vaultExpanded) {
+            ForEach(model.vaultedRows) { row in
+                ImportReviewRowView(model: model, row: row)
+            }
+        } label: {
+            HStack {
+                Image(systemName: "archivebox").foregroundStyle(.secondary)
+                Text("In the Vault").font(.headline)
+                Text("\(model.vaultedRows.count)").foregroundStyle(.secondary)
+                Spacer()
+                Button("Show in the Vault") { model.onShowInVault(); onClose() }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("review.showInVault")
+            }
         }
     }
 
@@ -870,6 +997,11 @@ struct ImportReviewSheet: View {
             Text("\(model.rows(in: bucket).count)").foregroundStyle(.secondary)
             Spacer()
             if bucket != .ignored {
+                let vaultable = model.vaultableCount(in: bucket)
+                if vaultable > 0 {
+                    Button("Send \(vaultable) to the Vault") { model.sendBucketToVault(bucket) }
+                        .controlSize(.small)
+                }
                 Button("All") { model.selectAll(in: bucket) }.controlSize(.small)
                 Button("None") { model.selectNone(in: bucket) }.controlSize(.small)
             }
@@ -1047,10 +1179,15 @@ private struct ImportReviewRowView: View {
                     model.chooseAlternative(alt, externalID: row.externalID)
                 }
                 Divider()
-                if row.bucket == .ignored {
-                    Button("Restore") { model.restore(row.externalID) }
+                if row.vaulted {
+                    Button("Bring back") { model.bringBack(row.externalID) }
                 } else {
-                    Button("Ignore", role: .destructive) { model.ignore(row.externalID) }
+                    if row.bucket == .ignored {
+                        Button("Restore") { model.restore(row.externalID) }
+                    } else {
+                        Button("Send to the Vault") { model.sendToVault(row.externalID) }
+                        Button("Ignore", role: .destructive) { model.ignore(row.externalID) }
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -1105,7 +1242,10 @@ private struct PSNReviewRowView: View {
                 }
             }
             Spacer(minLength: 8)
-            if !isReadOnly {
+            if row.vaulted {
+                Button("Bring back") { model.bringBack(row.externalID) }
+                    .controlSize(.small)
+            } else if !isReadOnly {
                 Menu {
                     MatchAlternativesSection(alternatives: row.alternatives) { alt in
                         model.chooseAlternative(alt, externalID: row.externalID)
@@ -1114,6 +1254,7 @@ private struct PSNReviewRowView: View {
                     if group == .ignored {
                         Button("Restore") { model.restore(row.externalID) }
                     } else {
+                        Button("Send to the Vault") { model.sendToVault(row.externalID) }
                         Button("Ignore", role: .destructive) { model.ignore(row.externalID) }
                     }
                 } label: { Image(systemName: "ellipsis.circle") }

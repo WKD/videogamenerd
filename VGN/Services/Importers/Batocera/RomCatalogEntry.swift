@@ -223,6 +223,28 @@ struct RomCatalogEntry: Sendable, Hashable, Identifiable {
             thumbnailPath: game.thumbnailRelativePath)
     }
 
+    /// Build a Vault entry for a review row the owner **sent to the Vault by hand** (PLAN §16 —
+    /// the fourth fate). Works for any importer source (GOG, Delicious, PSN): `owned = true` for a
+    /// real purchase, `owned = false` + `membership` for a PS Plus claim (so it keeps the deadline
+    /// boost). `system = <platform slug>`, `relative_path = <external id>`.
+    static func makeSentToVault(source: String, externalID: String, platform: String, name: String,
+                                igdbID: Int64?, membership: String?, owned: Bool,
+                                coverURL: String? = nil) -> RomCatalogEntry {
+        RomCatalogEntry(
+            source: source,
+            system: platform,
+            platformID: platform,
+            relativePath: externalID,
+            name: name,
+            sortTitle: SortTitle.make(from: name),
+            normalisedTitle: TitleNormalizer.normalize(name, level: .articleless),
+            externalIDColumn: externalID,
+            coverURL: coverURL,
+            membership: membership,
+            igdbID: igdbID,
+            owned: owned)
+    }
+
     /// Build a PS Plus Vault entry from a staged PSN row (PLAN §16). Its identity keeps the
     /// `UNIQUE(source, system, relative_path)` contract by using `system = <platform slug>`
     /// and `relative_path = <PSN external id>`; the external id is also kept in its own column.

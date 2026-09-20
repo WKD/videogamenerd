@@ -570,6 +570,29 @@ enum Migrations {
         }
     }
 
+    /// v13 (PLAN §16 "Send to the Vault" / §5.1 resume-after-cancel): three additive columns on
+    /// `import_titles`, no table rebuild, no FTS, one closure.
+    ///  - `vaulted` — the explicit **fourth fate** of a review row (tick = import, untick = skip,
+    ///    Ignore = never offer, **Vault = own it, keep it out of the library**). Persisted so a
+    ///    later sync neither re-proposes it nor re-lists it; "Bring back" clears it.
+    ///  - `match_attempted_at` — when the IGDB match was last attempted for this title (NULL =
+    ///    never attempted), so a cancelled-then-restarted (or a second) sync skips already-attempted
+    ///    titles and only re-queries never-attempted ones, or attempted-no-match ones older than 30
+    ///    days (or on an explicit per-row "Re-match").
+    ///  - `match_json` — the persisted per-title match outcome (best + alternatives + bundle
+    ///    expansion) so a resumed sync restores the proposals/alternatives without re-querying IGDB.
+    ///    NULL when the last attempt found no match.
+    static func registerV13(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v13") { db in
+            try db.execute(sql: """
+                ALTER TABLE import_titles ADD COLUMN vaulted INTEGER NOT NULL DEFAULT 0
+                    CHECK (vaulted IN (0, 1));
+                """)
+            try db.execute(sql: "ALTER TABLE import_titles ADD COLUMN match_attempted_at DATETIME;")
+            try db.execute(sql: "ALTER TABLE import_titles ADD COLUMN match_json TEXT;")
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

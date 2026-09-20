@@ -4,7 +4,7 @@ import Foundation
 /// Values are the historical `category` ids, verified against the live `/v4/game_types`
 /// endpoint during fixture recording. Anything we do not recognise is preserved as
 /// `.unknown(Int)` so a future IGDB addition never drops a game on the floor.
-enum IGDBGameType: Sendable, Equatable, Hashable {
+enum IGDBGameType: Sendable, Equatable, Hashable, Codable {
     case mainGame           // 0
     case dlcAddon           // 1
     case expansion          // 2
@@ -62,6 +62,15 @@ enum IGDBGameType: Sendable, Equatable, Hashable {
         case .update: return 14
         case .unknown(let value): return value
         }
+    }
+
+    // Codable as the underlying integer (stable across releases; `.unknown` round-trips).
+    init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(Int.self))
+    }
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 
     /// True for the compilation-like types whose member games VGN can expand

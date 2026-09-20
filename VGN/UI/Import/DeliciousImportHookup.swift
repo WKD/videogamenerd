@@ -25,6 +25,9 @@ final class DeliciousImportPresenter {
     private let onLibraryChanged: () -> Void
     /// Surfaces a picker / read error to the window (wired to the library banner).
     @ObservationIgnored var onError: @MainActor (String) -> Void = { _ in }
+    /// Selects the Delicious Vault sidebar row and closes the review sheet ("Show in the
+    /// Vault", PLAN §16). Wired in ``AppEnvironment``; a no-op offline.
+    @ObservationIgnored var onShowInVault: () -> Void = {}
 
     var reviewModel: ImportReviewModel?
     private(set) var progress: ImportProgress?
@@ -92,13 +95,15 @@ final class DeliciousImportPresenter {
                     Task { @MainActor in self.progress = p }
                 }
                 if Task.isCancelled { self.reset(); return }
-                self.reviewModel = ImportReviewModel(
+                let review = ImportReviewModel(
                     source: ImportSourceID.delicious, sourceLabel: "Delicious Library",
                     staging: staging, result: result,
                     productFormat: .physical, platformChoices: platformChoices,
                     detectShelfDuplicates: true, showsSourceCoverToggle: afterCommit != nil,
                     showsPlatformPolicy: true,
                     afterCommit: afterCommit, onLibraryChanged: onLibraryChanged)
+                review.onShowInVault = self.onShowInVault
+                self.reviewModel = review
                 self.progress = nil
                 self.isSyncing = false
             } catch {
