@@ -546,6 +546,14 @@ final class AppEnvironment {
                 do { _ = try database.makeLaunchSnapshot() }
                 catch { NSLog("VGN: launch snapshot failed: \(error)") }
             }
+            // One-shot cleanup of stale copy-only platform rows from pre-fix deletions
+            // (bug 2026-09-20). Guarded by an app_state flag, so it runs once.
+            Task {
+                do {
+                    let removed = try await store.repairCopyOnlyPlatforms()
+                    if removed > 0 { NSLog("VGN: pruned \(removed) stale copy-only platform rows") }
+                } catch { NSLog("VGN: copy-only platform repair failed: \(error)") }
+            }
         }
     }
 }
