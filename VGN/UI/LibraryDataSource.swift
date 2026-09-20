@@ -101,6 +101,12 @@ enum LibraryFilterEvaluator {
             // tell linked from unlinked — treat as "no constraint" (the live SQL scopes
             // it for real). See PreviewLibraryDataSource / SidebarCounts.derive.
             break
+        case .bundlesToExpand:
+            // The candidate rule is a store-side title heuristic over the whole library; a
+            // GameSummary can't reproduce it, so the preview/in-memory evaluator treats this as
+            // "no constraint" (like .unlinked). The live path scopes it via the id set, and in
+            // sample mode the count stays 0 so the row is hidden — documented, not a bug.
+            break
         case .length, .unmeasured:
             // GameSummary carries no time-to-beat estimate, so the preview/in-memory
             // evaluator cannot band by length — treat these scopes as "no constraint"

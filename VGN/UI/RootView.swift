@@ -107,12 +107,18 @@ struct RootView: View {
                             inspect: { id in vm.selectOnly(id); vm.showInspector() }))
                 } else if vm.isVaultSelection {
                     RomCatalogueView(source: vm.selectedVaultSource ?? .batocera)
+                } else if vm.isBundlesToExpandSelection {
+                    VStack(spacing: 0) {
+                        BundlesToExpandHeader()
+                        LibraryGridView(vm: vm)
+                    }
                 } else {
                     LibraryGridView(vm: vm)
                 }
                 if let banner = vm.banner {
                     BannerView(banner: banner,
                                onAction: banner.actionTitle != nil ? { vm.performBannerAction() } : nil,
+                               onSecondaryAction: banner.secondaryActionTitle != nil ? { vm.performBannerSecondaryAction() } : nil,
                                onDismiss: { vm.dismissBanner() })
                         .padding(12)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -446,6 +452,7 @@ struct RootView: View {
 private struct BannerView: View {
     let banner: LibraryBanner
     var onAction: (() -> Void)? = nil
+    var onSecondaryAction: (() -> Void)? = nil
     let onDismiss: () -> Void
 
     var body: some View {
@@ -453,6 +460,12 @@ private struct BannerView: View {
             Image(systemName: icon)
             Text(banner.message).font(.callout)
             Spacer(minLength: 8)
+            if let title = banner.secondaryActionTitle, let onSecondaryAction {
+                Button(title) { onSecondaryAction() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("banner.secondaryAction")
+            }
             if let title = banner.actionTitle, let onAction {
                 Button(title) { onAction() }
                     .buttonStyle(.borderedProminent)

@@ -23,6 +23,10 @@ struct SidebarCounts: Hashable, Sendable {
     /// Games not linked to an IGDB entry (`igdb_id IS NULL`) — the "Unlinked" row,
     /// shown only when > 0 (PLAN §5.1). Part of the same single counts query.
     var unlinked: Int
+    /// Library games whose title looks like an unexpanded bundle — the "Bundles to Expand" row,
+    /// shown only when > 0 (PLAN §5.1). Computed in the same single counts observation, via the
+    /// shared candidate rule (``LibraryStore/fetchBundleExpansionCandidates(_:)``).
+    var bundlesToExpand: Int
 
     init(
         all: Int = 0,
@@ -34,7 +38,8 @@ struct SidebarCounts: Hashable, Sendable {
         perPlatform: [String: Int] = [:],
         lengthShelves: [LengthShelf: Int] = [:],
         unmeasured: Int = 0,
-        unlinked: Int = 0
+        unlinked: Int = 0,
+        bundlesToExpand: Int = 0
     ) {
         self.all = all
         self.owned = owned
@@ -46,6 +51,7 @@ struct SidebarCounts: Hashable, Sendable {
         self.lengthShelves = lengthShelves
         self.unmeasured = unmeasured
         self.unlinked = unlinked
+        self.bundlesToExpand = bundlesToExpand
     }
 
     static let empty = SidebarCounts()
@@ -62,6 +68,7 @@ struct SidebarCounts: Hashable, Sendable {
         case .duel: return duelQueue
         case .tierBoard, .theTop, .playNext: return nil
         case .unlinked: return unlinked
+        case .bundlesToExpand: return bundlesToExpand
         case .length(let shelf): return lengthShelves[shelf] ?? 0
         case .unmeasured: return unmeasured
         // The ROM catalogue is a separate shelf — its count never rides the library counts

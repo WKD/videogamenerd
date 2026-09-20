@@ -136,6 +136,8 @@ final class LibraryViewModel {
     /// The handler for a banner that carries an `actionTitle` (e.g. Batocera "Review…",
     /// PLAN §15). Kept off the `Equatable`/`Sendable` banner value.
     @ObservationIgnored private var bannerAction: (@MainActor () -> Void)?
+    /// The handler for a banner's optional **second** action (kept off the value type).
+    @ObservationIgnored private var bannerSecondaryAction: (@MainActor () -> Void)?
     /// A pending yes/no confirmation (orphan delete / last-copy removal).
     var pendingConfirmation: LibraryConfirmation?
     /// A pending "add a copy" flow needing a platform + format choice.
@@ -508,6 +510,10 @@ final class LibraryViewModel {
     /// True when the sidebar has a Vault source selected (the grid is replaced by the separate
     /// Vault browser, PLAN §16).
     var isVaultSelection: Bool { if case .vault = selection { return true }; return false }
+
+    /// True when the sidebar has "Bundles to Expand" selected — the grid shows a slim
+    /// explanatory header above it (PLAN §5.1).
+    var isBundlesToExpandSelection: Bool { selection == .bundlesToExpand }
 
     /// The selected Vault source, or nil when the selection is not a Vault row.
     var selectedVaultSource: VaultSource? {
@@ -965,6 +971,7 @@ final class LibraryViewModel {
     func showBanner(_ message: String, kind: LibraryBanner.Kind = .info) {
         banner = LibraryBanner(message: message, kind: kind)
         bannerAction = nil
+        bannerSecondaryAction = nil
         bannerDismissTask?.cancel()
         bannerDismissTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(kind == .error ? 6 : 4))
@@ -976,10 +983,14 @@ final class LibraryViewModel {
     /// Show a **persistent** banner with an action button (e.g. Batocera "Review…",
     /// PLAN §15). It does not auto-dismiss; the action or the ✕ clears it.
     func showBanner(_ message: String, kind: LibraryBanner.Kind = .info,
-                    actionTitle: String, action: @escaping @MainActor () -> Void) {
+                    actionTitle: String, action: @escaping @MainActor () -> Void,
+                    secondaryActionTitle: String? = nil,
+                    secondaryAction: (@MainActor () -> Void)? = nil) {
         bannerDismissTask?.cancel()
         bannerAction = action
-        banner = LibraryBanner(message: message, kind: kind, actionTitle: actionTitle)
+        bannerSecondaryAction = secondaryAction
+        banner = LibraryBanner(message: message, kind: kind, actionTitle: actionTitle,
+                               secondaryActionTitle: secondaryActionTitle)
     }
 
     /// Run the current banner's action (if any) and dismiss it.
@@ -989,9 +1000,17 @@ final class LibraryViewModel {
         action?()
     }
 
+    /// Run the current banner's **second** action (if any) and dismiss it.
+    func performBannerSecondaryAction() {
+        let action = bannerSecondaryAction
+        dismissBanner()
+        action?()
+    }
+
     func dismissBanner() {
         bannerDismissTask?.cancel()
         bannerAction = nil
+        bannerSecondaryAction = nil
         banner = nil
     }
 }

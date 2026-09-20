@@ -164,29 +164,44 @@ extension LibraryStore {
     /// A loose heuristic; the real bundle check happens on click, per game. Games the owner
     /// dismissed as "not a bundle" are excluded.
     func bundleExpansionCandidates() async throws -> [BundleExpansionCandidate] {
-        try await dbReader.read { db in
-            let dismissed = try Self.readDismissedBundleIDs(db)
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT g.id AS id, g.title AS title, g.igdb_id AS igdb_id,
-                       (SELECT COUNT(*) FROM product_games pg WHERE pg.game_id = g.id) AS product_count,
-                       (SELECT MAX(mc) FROM (
-                            SELECT (SELECT COUNT(*) FROM product_games pg2 WHERE pg2.product_id = pg.product_id) AS mc
-                            FROM product_games pg WHERE pg.game_id = g.id)) AS max_members
-                FROM games g
-                ORDER BY g.sort_title
-                """)
-            return rows.compactMap { row in
-                let gameID: Int64 = row["id"]
-                guard !dismissed.contains(gameID) else { return nil }
-                let title: String = row["title"]
-                guard Self.looksLikeBundleTitle(title) else { return nil }
-                let productCount: Int = row["product_count"] ?? 0
-                let maxMembers: Int = row["max_members"] ?? 0
-                // Skip games that are already a compilation member (max_members > 1).
-                guard productCount == 0 || maxMembers <= 1 else { return nil }
-                return BundleExpansionCandidate(gameID: row["id"], title: title, igdbID: row["igdb_id"])
-            }
+        try await dbReader.read(Self.fetchBundleExpansionCandidates)
+    }
+
+    /// The one place the "Bundles to Expand" rule lives (PLAN §5.1 / §8): shared by the async
+    /// API above, by the sidebar count (``GRDBLibraryDataSource/sidebarCounts(pace:style:)``)
+    /// and by the smart-list grid scope (``LibraryStore/fetchGames(_:_:)`` for
+    /// ``SidebarSelection/bundlesToExpand``). The title heuristic (``looksLikeBundleTitle``) is
+    /// a Swift regex + keyword list that SQL can't express cheaply, so this fetches the
+    /// candidate-shaped rows and applies the rule in Swift. It reads `games`, `product_games`
+    /// and `app_state`, so a `ValueObservation` wrapping it re-runs on an expansion or a "not a
+    /// bundle" dismissal — the count and the grid update themselves with no timer or callback.
+    static func fetchBundleExpansionCandidates(_ db: Database) throws -> [BundleExpansionCandidate] {
+        let dismissed = try readDismissedBundleIDs(db)
+        let rows = try Row.fetchAll(db, sql: """
+            SELECT g.id AS id, g.title AS title, g.igdb_id AS igdb_id,
+                   (SELECT COUNT(*) FROM product_games pg WHERE pg.game_id = g.id) AS product_count,
+                   (SELECT MAX(mc) FROM (
+                        SELECT (SELECT COUNT(*) FROM product_games pg2 WHERE pg2.product_id = pg.product_id) AS mc
+                        FROM product_games pg WHERE pg.game_id = g.id)) AS max_members
+            FROM games g
+            ORDER BY g.sort_title
+            """)
+        return rows.compactMap { row in
+            let gameID: Int64 = row["id"]
+            guard !dismissed.contains(gameID) else { return nil }
+            let title: String = row["title"]
+            guard looksLikeBundleTitle(title) else { return nil }
+            let productCount: Int = row["product_count"] ?? 0
+            let maxMembers: Int = row["max_members"] ?? 0
+            // Skip games that are already a compilation member (max_members > 1).
+            guard productCount == 0 || maxMembers <= 1 else { return nil }
+            return BundleExpansionCandidate(gameID: row["id"], title: title, igdbID: row["igdb_id"])
         }
+    }
+
+    /// The candidate game ids only (PLAN §5.1) — the id set the grid scope filters by.
+    static func fetchBundleExpansionCandidateIDs(_ db: Database) throws -> [Int64] {
+        try fetchBundleExpansionCandidates(db).map(\.gameID)
     }
 
     /// Expand a placeholder game into a compilation of `members` in one transaction

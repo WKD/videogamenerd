@@ -68,7 +68,14 @@ extension LibraryStore {
     }
 
     static func fetchGames(_ filter: LibraryFilter, _ db: Database) throws -> [GameSummary] {
-        let (sql, arguments) = LibraryQuery.gamesSQL(filter)
+        // "Bundles to Expand" (PLAN §5.1): its candidate rule is a Swift title heuristic, so the
+        // ids are computed here inside the same read (the observation re-runs on any relevant
+        // write, keeping the grid live) and handed to the query as an id restriction.
+        var restrictToIDs: [Int64]?
+        if case .bundlesToExpand = filter.scope {
+            restrictToIDs = try fetchBundleExpansionCandidateIDs(db)
+        }
+        let (sql, arguments) = LibraryQuery.gamesSQL(filter, restrictToIDs: restrictToIDs)
         return try Row.fetchAll(db, sql: sql, arguments: arguments).map(LibraryQuery.gameSummary(from:))
     }
 

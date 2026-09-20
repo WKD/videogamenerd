@@ -11,6 +11,10 @@ struct LibraryBanner: Identifiable, Equatable, Sendable {
     /// set, the banner does **not** auto-dismiss — it waits for the action or the ✕. The
     /// handler itself lives on ``LibraryViewModel`` (a closure is not `Equatable`/`Sendable`).
     var actionTitle: String? = nil
+    /// An optional **second** action (e.g. Undo + "Review…" on the Batocera auto-add banner,
+    /// PLAN §15). Its handler also lives on ``LibraryViewModel``. Only meaningful alongside
+    /// ``actionTitle``.
+    var secondaryActionTitle: String? = nil
 }
 
 /// A yes/no confirmation the user must answer before a destructive retry (an

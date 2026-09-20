@@ -63,12 +63,28 @@ enum LibraryQuery {
         """
 
     /// Full grid query for `filter`.
-    static func gamesSQL(_ filter: LibraryFilter) -> (sql: String, arguments: StatementArguments) {
+    ///
+    /// `restrictToIDs` scopes the result to a pre-computed id set — used by the
+    /// ``SidebarSelection/bundlesToExpand`` smart list, whose candidate rule is a Swift title
+    /// heuristic SQL can't express cheaply (PLAN §5.1): the caller computes the ids in Swift
+    /// (``LibraryStore/fetchBundleExpansionCandidateIDs(_:)``) inside the same DB read, so the
+    /// grid still updates live and the facets/sort keep working. An empty set matches nothing.
+    static func gamesSQL(
+        _ filter: LibraryFilter, restrictToIDs: [Int64]? = nil
+    ) -> (sql: String, arguments: StatementArguments) {
         var wheres: [String] = []
         var args: [DatabaseValueConvertible] = []
         appendScope(filter.scope, bounds: LengthShelf.bounds(for: filter.playPace),
                     style: filter.playStyle, into: &wheres, args: &args)
         appendFacets(filter, into: &wheres, args: &args)
+        if let ids = restrictToIDs {
+            if ids.isEmpty {
+                wheres.append("0")
+            } else {
+                wheres.append("g.id IN (\(placeholders(ids.count)))")
+                args.append(contentsOf: ids.map { $0 as DatabaseValueConvertible })
+            }
+        }
 
         var sql = selectClause
         if !wheres.isEmpty { sql += "\nWHERE " + wheres.joined(separator: "\n  AND ") }
@@ -111,6 +127,12 @@ enum LibraryQuery {
             // Games with no IGDB link (PLAN §5.1): no metadata / cover / time / traits,
             // and invisible to the `igdb_id` dedupe.
             wheres.append("g.igdb_id IS NULL")
+        case .bundlesToExpand:
+            // The candidate rule is a Swift title heuristic (``looksLikeBundleTitle``), so no
+            // SQL constraint is added here: the caller passes the pre-computed id set via
+            // `restrictToIDs` (see ``LibraryStore/fetchGames(_:_:)``). Reached with no restrict
+            // set only in the preview/in-memory path, where the evaluator scopes it.
+            break
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
