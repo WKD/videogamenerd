@@ -137,11 +137,31 @@ has ever been made (PLAN §14.5 step G0). What G0 cannot know until the live ste
   live backend (the cache store exposes no per-key delete and is lane A's file); the paged
   "Library" set is matched by key prefix. If lane A later adds a typed `invalidate(source:key:)`,
   switch to it.
-- **GOG bundles are imported as single games, not expanded.** PLAN §14.3 wants an IGDB bundle to
-  become a compilation Product with its members; the review sheet's chosen `ScanMatch` does not
-  carry an `isBundle`/member list, so the commit path creates a single game (the owner can
-  "Group as compilation…" afterwards). Bundle expansion in the import review sheet is deferred.
-  **[follow-up]**
+- **Import bundle expansion (GOG + Delicious) — done** *(2026-09-20)*. `ScanMatch` now carries the
+  IGDB `game_type`; the sync coordinator fetches a bundle match's members during matching (behind
+  the `ImportBundleExpanding` seam, shared IGDB client) and the review row commits as a compilation
+  (§5.1). Caveats:
+  - **Batocera promotion does not expand bundles** — it commits through the review model's
+    `customCommit` (ROM promotion via `BatoceraPromoter`), which bypasses `commitItems()` where the
+    compilation branch lives. ROMs are rarely IGDB bundles, so this is acceptable; expanding a
+    promoted ROM bundle is a follow-up if ever needed. **[follow-up]**
+  - **A committed compilation row is not marked `matched_game_id`** (a compilation has many members,
+    the column holds one). Re-import is still safe/idempotent — the `(source, external_id)` guard
+    skips it — but the review sheet re-lists it as *New* until the product exists; ticking it again
+    just yields "already in your library". **[watch]**
+- **Reconcile: a bundle now expands, not disabled** *(2026-09-20)*. Choosing a bundle in the
+  "Link to IGDB…" sheet, or the **"Expand Bundle into Games…"** repair action, turns the placeholder
+  into a compilation (`LibraryStore.expandBundle`, fully undoable). Scope caveats:
+  - **Bundle detection on the repair path is by empty-member-list**, not a `game_type` check:
+    `CatalogSearching` has no "metadata by id", so the presenter fetches members and treats *no
+    members* as "not a bundle" (a single game, or a bundle with no IGDB coverage, both no-op with a
+    note). Good enough for the conservative requirement; a `game_type` lookup would distinguish the
+    two. **[watch]**
+  - **The discoverable "Bundles to Expand (N)" list is a store query + per-game action, not a
+    dedicated sidebar list.** `LibraryStore.bundleExpansionCandidates()` (title heuristic:
+    Trilogy/Collection/Anthology/Compilation/Pack/"N in 1"…) is ready, and the per-game "Expand
+    Bundle into Games…" action is wired (inspector + File menu). Surfacing the candidate count as its
+    own Unlinked-style section is a follow-up. **[follow-up]**
 - **IGDB matching is skipped when IGDB is not configured** (`NoMatchImportMatcher`): every title
   then waits under *New* for manual review. A configured but flaky IGDB lookup can't sink a sync
   (`ResilientImportMatcher` turns a lookup error into "no match").
