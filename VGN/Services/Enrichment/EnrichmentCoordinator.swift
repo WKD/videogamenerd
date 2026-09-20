@@ -237,24 +237,20 @@ actor EnrichmentCoordinator {
         guard !jobs.isEmpty else { return false }
 
         let rows = (try? await fetchRows(jobs.map(\.gameID))) ?? [:]
-        let neededIGDBIDs = Set(jobs.compactMap { rows[$0.gameID]?.igdbID })
+        // The client's `games(ids:)` is the single read-through point: fresh catalogue-
+        // cache hits avoid the network (PLAN §4/§9); only the missing ids are fetched,
+        // batched, through the one rate limiter. A `refresh(gameID:)` forces a re-fetch,
+        // so partition the batch's igdb ids into forced vs normal.
+        let forcedIGDBIDs = Set(jobs.filter { forced.contains($0.gameID) }.compactMap { rows[$0.gameID]?.igdbID })
+        let normalIGDBIDs = Set(jobs.compactMap { rows[$0.gameID]?.igdbID }).subtracting(forcedIGDBIDs)
 
-        // Fresh catalogue-cache hits avoid the network (PLAN §4).
-        let cached = await catalogCache.entries(forIDs: Array(neededIGDBIDs))
         var metaByIGDB: [Int64: IGDBGameMetadata] = [:]
-        for (id, entry) in cached {
-            if let meta = igdbClient.metadata(fromCachedGameJSON: entry.json) { metaByIGDB[id] = meta }
-        }
-        let toFetch = neededIGDBIDs.subtracting(metaByIGDB.keys)
-
         var fetchError: Error?
-        if !toFetch.isEmpty {
-            do {
-                let fetched = try await igdbClient.games(ids: Array(toFetch))   // write-through cache inside the client
-                for meta in fetched { metaByIGDB[meta.id] = meta }
-            } catch {
-                fetchError = error
-            }
+        do {
+            for meta in try await igdbClient.games(ids: Array(normalIGDBIDs)) { metaByIGDB[meta.id] = meta }
+            for meta in try await igdbClient.games(ids: Array(forcedIGDBIDs), force: true) { metaByIGDB[meta.id] = meta }
+        } catch {
+            fetchError = error
         }
 
         for job in jobs {
@@ -267,7 +263,7 @@ actor EnrichmentCoordinator {
                 let patch = guardMetadata(full, row: row, force: forced.contains(job.gameID))
                 try? await libraryStore.updateMetadata(gameID: job.gameID, patch)
                 try? await jobStore.complete(jobID: jobID)
-            } else if let error = fetchError, toFetch.contains(igdbID) {
+            } else if let error = fetchError {
                 try? await jobStore.fail(jobID: jobID, error: "\(error)", transient: isRetryable(error))
             } else {
                 // IGDB returned nothing for this id — a normal outcome, not a failure.

@@ -103,7 +103,14 @@ import_titles  source(psn|gog|…) · external_id · name · platform · signals
                                                    -- generic staging table for every importer: re-sync is idempotent,
                                                    -- mappings persist. No trophy details are kept.
 games_fts      FTS5(title, alt_titles)             -- instant search
-catalog_cache  igdb_id · json · fetched_at         -- makes repeat autocomplete instant/offline
+catalog_cache  igdb_id · json · fetched_at         -- makes repeat autocomplete instant/offline; also a
+                                                   -- read-through cache (W19): id-keyed IGDB reads (enrichment
+                                                   -- metadata, Vault trait match, importers, bundle members,
+                                                   -- Choose Cover artworks) serve a fresh hit (≤30 d) without a
+                                                   -- request. Each blob carries a `_vgn_fields` shape marker so a
+                                                   -- slim search payload is never served to a caller needing full
+                                                   -- metadata. Purpose: speed / not re-asking IGDB — never a way
+                                                   -- around the rate limit (a miss still goes through the one limiter).
 game_traits    game_id · kind(franchise|series|developer|theme|mode|perspective|keyword|similar) · value
                                                    -- generic taste features for §7b, filled by enrichment
 games          + igdb_rating? · igdb_rating_count?  -- prior for unranked candidates (§7b)
@@ -122,6 +129,7 @@ Invariants (enforced in `VGNCore`, unit-tested):
 ### 5.1 IGDB (metadata, autocomplete, compilations, time-to-beat)
 - Auth: Twitch app client id/secret → app token (actor with auto-refresh). Entered once in Settings, stored in Keychain.
 - Rate limit 4 req/s → token-bucket limiter actor; all calls cancellable.
+- **Read cache (W19):** id-keyed reads (`games(ids:)` for enrichment / Vault / importers, bundle members, Choose Cover `artworks`) read through `catalog_cache` — a fresh hit (≤30 d, shape-checked via `_vgn_fields`) makes no request; only missing ids are fetched, batched, through the one limiter. Search / autocomplete gets a short-lived in-session cache (≈200-query LRU, ≈15-min TTL) with in-flight coalescing (N identical concurrent queries → one request). Explicit "Refresh metadata" fetches with `force`, skipping and overwriting the cache. **The cache is for speed and to avoid re-asking IGDB for what we already hold — never a way around the rate limit:** every request that does go out still passes through the single limiter and pacing, unchanged; there is no prefetch, warming or burst.
 - Search: `search "…"; fields name, first_release_date, platforms.abbreviation, cover.image_id, genres.name, game_type, alternative_names.name; limit 12;`
 - Compilations: IGDB `game_type = bundle` + `bundles` relation pre-fills member games; coverage is imperfect, so the compilation editor lets me add/remove members with the same quick-search. *(wave 17)* A newly-created compilation orders its members by **first release date ascending** (unknown dates last, ties by IGDB order) — one shared function across Quick Add / photo scan / import review / bundle expansion / reconcile expand; a hand-ordered existing compilation is never reshuffled.
 - **Average completion times:** IGDB `game_time_to_beats` (`hastily` / `normally` / `completely`, in seconds, + submission count). Official, stable, same credentials, batchable by game id.
@@ -359,6 +367,7 @@ Sidebar entry **Play Next** (LIBRARY section). Bracket picker on top; one **hero
 - **Per-cell invalidation:** each cell observes its own small `@Observable` box (romlord's fix: "a tick re-renders one cell, not the grid"), so a cover arriving or a tier change never re-diffs 1 000 cells.
 - **Escape hatch:** romlord ran `LazyVGrid` fine to 5–10 k cells; if it ever stutters, swap in an `NSCollectionView` wrapper behind the same view-model (contained change).
 - **Never block on network:** inserts are local and instant; enrichment (metadata, cover, time-to-beat) is a background job queue persisted in the DB, resumes after relaunch, retries with backoff.
+- **IGDB read cache (W19):** the app avoids re-asking IGDB for what it already holds — id-keyed reads serve fresh `catalog_cache` hits (shape-checked) without a request, and repeat/concurrent searches coalesce onto one in-session cache — so re-running enrichment, re-opening Choose Cover, or retyping a Quick Add query costs zero requests. This makes the app faster; it is **never** a way around the 4 req/s limit: a miss still goes through the one `RateLimiter`, with no prefetch, warming or bursting.
 - **Safety:** automatic DB snapshot on launch (keep last 10), JSON/CSV export — this library will represent years of curation.
 - **Empty / progress / narrow-inspector polish (wave 17):** every "no games / no results" area uses the shared `EmptyStateView` (`VGN/UI/Support/`) with actions wired to existing commands; all four importers share one fixed-width matching-progress modal (`ImportMatchingProgressView`) that never resizes as titles scroll; the inspector reflows its action buttons and playtime table at the minimum column width (300 pt). Play Next cards carry an "Open on IGDB" button (`IGDBWebLink`).
 
