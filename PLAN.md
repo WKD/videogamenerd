@@ -125,7 +125,7 @@ Invariants (enforced in `VGNCore`, unit-tested):
 1. A game must be **played or owned** (≥ 1 product). Removing the last of the two asks to delete the game.
 2. Only **played** games can have a tier / rank. Owned-unplayed = **Backlog**.
 3. Rank order is always consistent with tiers (§7).
-4. A `game_platforms` row a copy alone put there (`played = 0`, no remaining copy on that platform) is dropped when the copy is removed/re-pointed, so a deleted copy's platform stops showing in the grid pills / inspector / sidebar — **but** a `played = 1` row (the owner's "played on" statement) and a game's *last* platform are never removed. One rule (`LibraryStore.pruneCopyOnlyPlatforms`), run in the copy-removal transactions; a launch-once repair (`repair.copyOnlyPlatforms.v1`) applies it to pre-fix leftovers.
+4. A `game_platforms` row a copy alone put there (`played = 0`, no remaining copy on that platform) is dropped when the copy is removed/re-pointed, so a deleted copy's platform stops showing in the grid pills / inspector / sidebar — **but** a `played = 1` row (the owner's "played on" statement) and a game's *last* platform are never removed. One rule (`LibraryStore.pruneCopyOnlyPlatforms`), run in **every** write that removes or re-points a copy: `removeProduct`, `removeCompilationMember`, and `updateProductDetails` (a platform *correction*, wii → wiiu, prunes the old row for every member); a launch-once repair (`repair.copyOnlyPlatforms.v1`) applies it to pre-fix leftovers. (Merges / bundle expansion delete the whole source game, and `groupAsCompilation`'s merged single is on the compilation's own platform, so neither strands a surviving game's row.)
 
 ---
 

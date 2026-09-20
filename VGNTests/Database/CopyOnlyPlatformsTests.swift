@@ -120,6 +120,45 @@ import GRDB
         #expect(after.owned == false)
     }
 
+    // MARK: - A (part 2) — a platform *correction* prunes the old row
+
+    @Test func changingACopysPlatformPrunesTheOldPill() async throws {
+        let store = try await TestDB.makeStore()
+        let id = try await store.addGame(GameDraft(
+            title: "Rayman", platformIDs: ["ps4"], owned: true, format: .physical)).gameID
+        let pid = try await copyID(store, game: id, platform: "ps4")
+        // Correct the copy's platform ps4 → ps5.
+        try await store.updateProductDetails(productID: pid, platformID: "ps5")
+
+        let after = try #require(try await store.gamesOnce(filter: LibraryFilter(scope: .all)).first { $0.id == id })
+        #expect(after.platformIDs == ["ps5"])                // old ps4 pill gone
+    }
+
+    /// A compilation's platform change prunes for every member; a played-on member row stays.
+    @Test func compilationPlatformChangePrunesEveryMember() async throws {
+        let store = try await TestDB.makeStore()
+        let (pid, _) = try await store.addCompilation(
+            product: ProductDraft(title: "Sly Trilogy", platformID: "ps3", format: .physical),
+            members: [
+                CompilationMemberDraft(title: "Sly 1", igdbID: 2001, position: 0),
+                CompilationMemberDraft(title: "Sly 2", igdbID: 2002, position: 1),
+            ])
+        let members = try await store.compilationMembers(productID: pid).map(\.gameID)
+        #expect(members.count == 2)
+        // One member is also marked played-on ps3 (owner statement) — must survive the move.
+        try await store.dbWriter.write { db in
+            try LibraryStore.ensureGamePlatform(gameID: members[0], platformID: "ps3", played: true, db: db)
+        }
+        try await store.updateProductDetails(productID: pid, platformID: "ps2")
+
+        func plats(_ gameID: Int64) async throws -> Set<String> {
+            try #require(try await store.gamesOnce(filter: LibraryFilter(scope: .all)).first { $0.id == gameID })
+                .platformIDs.reduce(into: Set<String>()) { $0.insert($1) }
+        }
+        #expect(try await plats(members[0]) == ["ps2", "ps3"])   // played-on ps3 kept
+        #expect(try await plats(members[1]) == ["ps2"])           // stale ps3 pruned
+    }
+
     // MARK: - D3 — undoable paths restore the rows exactly
 
     /// The reconcile/merge undo snapshot captures `game_platforms` verbatim, so undoing a
