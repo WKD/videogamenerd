@@ -1,11 +1,21 @@
 import Foundation
 
 /// Optional completion status for a *played* game (PLAN §12, "Completion status").
+///
+/// `toRevisit` (PLAN §4/§7b, owner request 2026-09-20) reads like a fifth status in the
+/// UI — a game I dropped but **want to come back to**, as opposed to ``abandoned`` (done
+/// with it) — but is stored as an **additive flag**, not a new `games.status` value: the
+/// column keeps its four v1 CHECK strings and ``toRevisit`` shares `'abandoned'`, told
+/// apart by `games.revisit` (v15). The store maps the pair with ``from(dbStatus:revisit:)``
+/// / ``dbStatus`` / ``dbRevisit`` — the one place the flag is read or written — so raw DB
+/// status, the CHECK constraint and exports of the legacy values are untouched. The
+/// `"toRevisit"` raw value therefore only ever appears in *new* model-level serialisation.
 enum PlayStatus: String, Hashable, Sendable, Codable, CaseIterable, Identifiable {
     case playing
     case finished
     case completed   // 100%
     case abandoned
+    case toRevisit   // dropped, but I want to come back to it (stored as abandoned + revisit=1)
 
     var id: String { rawValue }
 
@@ -15,6 +25,36 @@ enum PlayStatus: String, Hashable, Sendable, Codable, CaseIterable, Identifiable
         case .finished: return "Finished"
         case .completed: return "100%"
         case .abandoned: return "Abandoned"
+        case .toRevisit: return "To Revisit"
+        }
+    }
+
+    // MARK: - DB storage mapping (v15)
+
+    /// The legacy `games.status` string this maps to (one of the four v1 CHECK values).
+    /// ``toRevisit`` shares `'abandoned'`; the `revisit` flag tells them apart.
+    var dbStatus: String {
+        switch self {
+        case .playing: return "playing"
+        case .finished: return "finished"
+        case .completed: return "completed"
+        case .abandoned, .toRevisit: return "abandoned"
+        }
+    }
+
+    /// `1` when this status sets `games.revisit`, else `0` (every other status clears it).
+    var dbRevisit: Int { self == .toRevisit ? 1 : 0 }
+
+    /// Reconstruct the model status from the stored `(status, revisit)` pair — the single
+    /// place a raw `games.status` string becomes a ``PlayStatus`` (never
+    /// `PlayStatus(rawValue:)`, which cannot see the flag).
+    static func from(dbStatus: String?, revisit: Bool) -> PlayStatus? {
+        switch dbStatus {
+        case "playing": return .playing
+        case "finished": return .finished
+        case "completed": return .completed
+        case "abandoned": return revisit ? .toRevisit : .abandoned
+        default: return nil
         }
     }
 }

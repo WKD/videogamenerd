@@ -680,14 +680,14 @@ private struct TierPickerRow: View {
     }
 }
 
-/// A status menu (Playing / Finished / 100% / Abandoned, or None) with inspector
-/// keyboard shortcuts (⌃⌘1…4 set a status, ⌃⌘0 clears — PLAN §12 / milestone 5).
+/// A status menu (Playing / Finished / 100% / Abandoned / To Revisit, or None) with
+/// inspector keyboard shortcuts (⌃⌘1…5 set a status, ⌃⌘0 clears — PLAN §12 / milestone 5).
 private struct StatusPickerRow: View {
     let current: PlayStatus?
     let onPick: (PlayStatus?) -> Void
 
     private static let shortcuts: [PlayStatus: KeyEquivalent] = [
-        .playing: "1", .finished: "2", .completed: "3", .abandoned: "4",
+        .playing: "1", .finished: "2", .completed: "3", .abandoned: "4", .toRevisit: "5",
     ]
 
     var body: some View {

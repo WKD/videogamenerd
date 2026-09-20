@@ -122,6 +122,9 @@ enum PlayNextReason: Hashable, Sendable {
     case fitsBracket(estimateSeconds: Int, bracket: TimeBracket)
     /// A game you're already playing: this much time is left.
     case remainingTime(remainingSeconds: Int)
+    /// A game you dropped but flagged **To Revisit** — the whole point of the status
+    /// (PLAN §7b): it is a candidate by default, and this is why.
+    case wantedToRevisit
     /// Well regarded by the crowd (IGDB aggregated rating, 0…100).
     case crowdRated(rating: Double, count: Int?)
     /// No IGDB match — suggested on time fit alone.

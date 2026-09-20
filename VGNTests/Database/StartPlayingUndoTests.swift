@@ -90,7 +90,7 @@ import GRDB
             try db.execute(sql: "DELETE FROM products WHERE id NOT IN (SELECT product_id FROM product_games)")
         }
         let token = StartPlayingUndo(gameID: id, previousStatus: nil, previousPlayed: false,
-                                     previousUpdatedAt: nil, pickedFeedbackID: 0)
+                                     previousRevisit: false, previousUpdatedAt: nil, pickedFeedbackID: 0)
         let outcome = try await rec.undoStartPlaying(token)
         #expect(outcome == .refusedWouldOrphan)
         let after = try await gameState(db, id)

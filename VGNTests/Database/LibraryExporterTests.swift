@@ -80,15 +80,18 @@ import GRDB
         // The ranked game has an S-tier score in the 9.0–10.0 band and rank #1.
         let ranked = try #require(lines.first { $0.contains("Comma") })
         let cols = LibraryExporterTests.parseCSVLine(ranked)
-        #expect(cols[6] == "S")                              // tier
-        #expect(cols[7] == "1")                              // overall_rank
-        #expect((Double(cols[8]) ?? 0) >= 9.0)               // score in the S band
+        #expect(cols[5] == "")                               // status (played, no completion status)
+        #expect(cols[6] == "no")                             // revisit (v15 column)
+        #expect(cols[7] == "S")                              // tier
+        #expect(cols[8] == "1")                              // overall_rank
+        #expect((Double(cols[9]) ?? 0) >= 9.0)               // score in the S band
         // The backlog game is owned but not played, no tier.
         let backlog = try #require(lines.first { $0.contains("Backlog") })
         let bcols = LibraryExporterTests.parseCSVLine(backlog)
         #expect(bcols[3] == "yes")                           // owned
         #expect(bcols[4] == "no")                            // played
-        #expect(bcols[6] == "")                              // no tier
+        #expect(bcols[6] == "no")                            // revisit
+        #expect(bcols[7] == "")                              // no tier
     }
 
     /// Minimal RFC-4180 line splitter for the assertions above.

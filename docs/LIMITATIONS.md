@@ -615,12 +615,22 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   after "Clear all", not pinned to the trailing edge, and it drops its whole self (lower layout
   priority) rather than only the "of N" part before the chips wrap.
 
-## To-revisit play status (owner, 2026-09-20) — NOT built, needs its own lane
-- Owner asked mid-wave-20 for a **"To revisit"** play status: an abandoned game flagged as wanting to
-  play again. This spans a **migration** (a new `PlayStatus` value — a single-owner hot file), the
-  `PlayStatus` model enum + its filter/sidebar facet, the inspector status control and the grid badge.
-  It is outside the HLTB lane's owned paths and was **not** implemented here — it needs a data+UI lane
-  (there is already a `PlayStatus` type and a `games` status column to extend).
+## To-revisit play status (owner, 2026-09-20) — built (wave 20, lane B)
+- Delivered as ``PlayStatus.toRevisit`` ("To Revisit"), a dropped game I want to come back to, distinct
+  from Abandoned (done with it). **Stored as a flag, not a fifth status value** (migration **v15**:
+  `games.revisit`, purely additive — the v1 `status` CHECK and its four legacy strings are untouched, so
+  no `games` rebuild over the real library). "To Revisit" = `status = 'abandoned' AND revisit = 1`; the
+  store maps the pair in one place (``PlayStatus/from(dbStatus:revisit:)`` · ``dbStatus`` · ``dbRevisit``).
+  Every other status and un-playing clear the flag. It appears right after Abandoned in the inspector
+  status control (⌃⌘5), Mark Played As (context menu / Game menu / ⇧M / mixed-state ✓/–), the completion
+  filter (its own disjoint value + chip), and the Stats status breakdown; exports gain a `revisit`
+  field/column. In Play Next it is a candidate **by default** (no "include abandoned" opt-in), competes on
+  the normal score with no boost (backtest-neutral), shows remaining time like Playing when playtime is
+  known, and carries the reason "You wanted to come back to it"; "Start playing" clears the flag and its
+  Undo restores To Revisit exactly. Nothing becomes To Revisit on its own (PLAN §4 inv. 5).
+- **Minor / by design:** there is no per-status icon or grid badge anywhere in the app today, so none was
+  added for To Revisit (the brief: "no new grid badge unless statuses already have one"). Quick Add has no
+  status control, so nothing was added there. PSN's `statusPrefill` only ever emits 100 %, never To Revisit.
 
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.

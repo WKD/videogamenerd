@@ -103,7 +103,7 @@ extension LibraryStatsReport {
             averageScoreByGenre: [.init(genre: "Role-playing (RPG)", average: 8.2, n: 95),
                                   .init(genre: "Adventure", average: 7.6, n: 40),
                                   .init(genre: "Platform", average: 7.9, n: 22)],
-            statusCounts: .init(playing: 12, finished: 300, completed: 90, abandoned: 45, noStatus: 208),
+            statusCounts: .init(playing: 12, finished: 300, completed: 90, abandoned: 45, toRevisit: 8, noStatus: 208),
             completionRate: Double(300 + 90) / 655,
             addedByMonth: (1...12).map { .init(year: 2024, month: $0, count: 4 + ($0 % 5) * 6) })
     }

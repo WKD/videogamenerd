@@ -439,6 +439,7 @@ private struct StatsStatusCard: View {
                 StatsMetricRow(label: "Finished", value: StatsFormat.count(s.finished))
                 StatsMetricRow(label: "100 %", value: StatsFormat.count(s.completed))
                 StatsMetricRow(label: "Abandoned", value: StatsFormat.count(s.abandoned))
+                StatsMetricRow(label: "To Revisit", value: StatsFormat.count(s.toRevisit))
                 StatsMetricRow(label: "No status", value: StatsFormat.count(s.noStatus))
                 Divider().padding(.vertical, 2)
                 StatsMetricRow(label: "Completion rate",

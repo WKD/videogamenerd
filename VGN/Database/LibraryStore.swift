@@ -56,8 +56,8 @@ struct LibraryStore: Sendable {
                 try setTierRow(gameID: id, tierID: tier, db: db)
             }
             if let status = draft.status {
-                try db.execute(sql: "UPDATE games SET status = ?, updated_at = ? WHERE id = ?",
-                               arguments: [status.rawValue, Date(), id])
+                try db.execute(sql: "UPDATE games SET status = ?, revisit = ?, updated_at = ? WHERE id = ?",
+                               arguments: [status.dbStatus, status.dbRevisit, Date(), id])
             }
         } else {
             var record = GameRecord(
@@ -68,7 +68,8 @@ struct LibraryStore: Sendable {
                 releaseDate: draft.releaseDate,
                 year: year,
                 played: impliesPlayed,
-                status: draft.status?.rawValue,
+                status: draft.status?.dbStatus,
+                revisit: draft.status == .toRevisit,
                 tierID: draft.tierID,
                 origin: draft.source.rawValue   // set once, at creation (owner request)
             )
@@ -273,7 +274,7 @@ struct LibraryStore: Sendable {
             for id in gameIDs {
                 try db.execute(sql: """
                     UPDATE games SET played = 0, tier_id = NULL, rank_key = NULL,
-                                     status = NULL, updated_at = ? WHERE id = ?
+                                     status = NULL, revisit = 0, updated_at = ? WHERE id = ?
                     """, arguments: [Date(), id])
             }
             for id in orphans where confirmOrphanDelete {
@@ -302,7 +303,7 @@ struct LibraryStore: Sendable {
             guard try Self.isOwned(gameID, db) else { return .notOwned }
             try db.execute(sql: """
                 UPDATE games SET played = 0, tier_id = NULL, rank_key = NULL,
-                                 status = NULL, updated_at = ? WHERE id = ?
+                                 status = NULL, revisit = 0, updated_at = ? WHERE id = ?
                 """, arguments: [Date(), gameID])
             return .becameBacklog
         }
@@ -330,8 +331,10 @@ struct LibraryStore: Sendable {
             let now = Date()
             for id in gameIDs {
                 if let status {
-                    try db.execute(sql: "UPDATE games SET played = 1, status = ?, updated_at = ? WHERE id = ?",
-                                   arguments: [status.rawValue, now, id])
+                    // Setting a status also sets/clears the revisit flag in the same write:
+                    // "To Revisit" → abandoned + revisit=1; every other status → revisit=0.
+                    try db.execute(sql: "UPDATE games SET played = 1, status = ?, revisit = ?, updated_at = ? WHERE id = ?",
+                                   arguments: [status.dbStatus, status.dbRevisit, now, id])
                 } else {
                     try db.execute(sql: "UPDATE games SET played = 1, updated_at = ? WHERE id = ?",
                                    arguments: [now, id])
@@ -345,8 +348,10 @@ struct LibraryStore: Sendable {
     func setStatus(_ gameIDs: [Int64], _ status: PlayStatus?) async throws {
         try await dbWriter.write { db in
             for id in gameIDs {
-                try db.execute(sql: "UPDATE games SET status = ?, updated_at = ? WHERE id = ?",
-                               arguments: [status?.rawValue, Date(), id])
+                // The revisit flag is part of the status: "To Revisit" → abandoned + revisit=1,
+                // every other status (and `nil`) → revisit=0. One place, one write.
+                try db.execute(sql: "UPDATE games SET status = ?, revisit = ?, updated_at = ? WHERE id = ?",
+                               arguments: [status?.dbStatus, status?.dbRevisit ?? 0, Date(), id])
             }
         }
     }

@@ -70,6 +70,8 @@ enum PlayNextReasonFormatter {
             return "\(PlaytimeParser.formatApprox(seconds: estimateSeconds)) for you — fits '\(bracket.label)'"
         case let .remainingTime(remainingSeconds):
             return "about \(approxLeft(remainingSeconds)) left"
+        case .wantedToRevisit:
+            return "You wanted to come back to it"
         case let .crowdRated(rating, _):
             return "Well regarded (IGDB \(Int(rating.rounded())))"
         case .noMetadata:

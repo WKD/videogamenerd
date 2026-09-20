@@ -218,17 +218,18 @@ struct LibraryStatsStore: Sendable {
 
         // 7 — Status counts over played games.
         let st = try Row.fetchOne(db, sql: """
-            SELECT COALESCE(SUM(g.status = 'playing'), 0)   AS playing,
-                   COALESCE(SUM(g.status = 'finished'), 0)  AS finished,
-                   COALESCE(SUM(g.status = 'completed'), 0) AS completed,
-                   COALESCE(SUM(g.status = 'abandoned'), 0) AS abandoned,
-                   COALESCE(SUM(g.status IS NULL), 0)       AS noStatus,
+            SELECT COALESCE(SUM(g.status = 'playing'), 0)                     AS playing,
+                   COALESCE(SUM(g.status = 'finished'), 0)                    AS finished,
+                   COALESCE(SUM(g.status = 'completed'), 0)                   AS completed,
+                   COALESCE(SUM(g.status = 'abandoned' AND g.revisit = 0), 0) AS abandoned,
+                   COALESCE(SUM(g.status = 'abandoned' AND g.revisit = 1), 0) AS toRevisit,
+                   COALESCE(SUM(g.status IS NULL), 0)                         AS noStatus,
                    COUNT(*) AS played
             FROM games g WHERE g.played = 1 AND \(s)
             """)!
         let statusCounts = LibraryStatsReport.StatusCounts(
             playing: st["playing"], finished: st["finished"], completed: st["completed"],
-            abandoned: st["abandoned"], noStatus: st["noStatus"])
+            abandoned: st["abandoned"], toRevisit: st["toRevisit"], noStatus: st["noStatus"])
         let playedForStatus: Int = st["played"]
         let completionRate: Double? = playedForStatus > 0
             ? Double(statusCounts.finished + statusCounts.completed) / Double(playedForStatus)

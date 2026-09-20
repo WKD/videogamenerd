@@ -44,7 +44,8 @@ final class ScriptedPlayNextBackend: PlayNextBackend, @unchecked Sendable {
         startedPlaying.append(gameID)
         defer { nextFeedbackID += 1 }
         return StartPlayingUndo(gameID: gameID, previousStatus: nil, previousPlayed: false,
-                                previousUpdatedAt: nil, pickedFeedbackID: nextFeedbackID)
+                                previousRevisit: false, previousUpdatedAt: nil,
+                                pickedFeedbackID: nextFeedbackID)
     }
     func undoStartPlaying(_ undo: StartPlayingUndo) async throws -> StartPlayingUndoOutcome {
         undone.append(undo)

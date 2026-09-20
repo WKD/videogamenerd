@@ -155,6 +155,7 @@ extension LibraryStore {
         }
 
         let statusRaw: String? = g["status"]
+        let revisit = (g["revisit"] as Int64?) == 1
         let owned = !copies.isEmpty
         let userEdited = UserEditedFields(raw: (g["user_edited"] as String?) ?? "")
         return GameDetail(
@@ -168,7 +169,7 @@ extension LibraryStore {
             decade: g["decade"],
             played: g["played"],
             owned: owned,
-            status: statusRaw.flatMap(PlayStatus.init(rawValue:)),
+            status: PlayStatus.from(dbStatus: statusRaw, revisit: revisit),
             tierID: g["tier_id"],
             tierLetter: g["tier_letter"],
             tierLabel: g["tier_label"],

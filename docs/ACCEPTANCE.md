@@ -485,6 +485,18 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   games"); it says "No games" at 0 and appends "· 5 selected" when several are selected; it never
   pushes the chips off-screen.
 
+## "To Revisit" play status (wave 20) [owner]
+- In the inspector, a played game's Status menu now lists **To Revisit** right after Abandoned (⌃⌘5);
+  pick it, and the inspector/grid shows "To Revisit". Setting any other status — or un-playing the game —
+  drops it back. Check the same value appears in **Mark Played As** (right-click a selection, the Game
+  menu, and ⇧M after you last used it) with the correct ✓/– over a mixed selection.
+- Filter ▸ Status ▸ **To Revisit** shows only revisit games; **Abandoned** no longer shows them (they are
+  separate chips). Stats ▸ Status lists **To Revisit** as its own line.
+- In **Play Next**, a To Revisit game shows up without turning on "include abandoned", reads "You wanted to
+  come back to it", and (if it has playtime) shows the time *left*. "Start playing" it, then Undo — it must
+  return to To Revisit, not plain Abandoned.
+- Confirm nothing became To Revisit by itself: only games you flagged carry it.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
