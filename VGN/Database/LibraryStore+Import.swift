@@ -133,6 +133,29 @@ extension LibraryStore {
         return (productID, true)
     }
 
+    /// The play time PSN recorded for a **whole collection** that was NOT routed to a single
+    /// member (PLAN §13.3 / D2 — "75 h on the whole collection (PSN)"). Returns the seconds when
+    /// an `import_titles` record for `(source, externalID)` carries `play_duration_s` **and** the
+    /// play data stayed on the collection — i.e. it was not the exactly-one-member case (which puts
+    /// the time on that member). Returns nil when there is no record, no play time, or the time was
+    /// routed to a single member (exactly one member is marked played in the persisted `match_json`).
+    /// The compilation detail view reads it by the compilation Product's `(source, external_id)`.
+    func collectionPlaytimeSeconds(source: String, externalID: String) async throws -> Int? {
+        try await dbReader.read { db in
+            guard let row = try Row.fetchOne(db, sql: """
+                SELECT play_duration_s, match_json FROM import_titles
+                WHERE source = ? AND external_id = ?
+                """, arguments: [source, externalID]) else { return nil }
+            guard let seconds: Int = row["play_duration_s"], seconds > 0 else { return nil }
+            if let json: String = row["match_json"],
+               let match = ImportStagingStore.decodeMatch(json),
+               match.bundle?.members.filter(\.played).count == 1 {
+                return nil   // routed to the single played member — the member carries it, not the collection
+            }
+            return seconds
+        }
+    }
+
     /// The `(externalID, productID)` of every currently-committed **subscription** copy for
     /// a source (PSN, PLAN §13.3) — the baseline for detecting a Plus claim that has
     /// disappeared on re-sync (proposed for removal, never applied silently).

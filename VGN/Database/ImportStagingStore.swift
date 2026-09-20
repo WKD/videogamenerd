@@ -543,7 +543,8 @@ struct ImportStagingStore: Sendable {
         }
 
         // The collection's play time / dates / status land on the single played member only.
-        if playedCount == 1, let target = memberIDs.first(where: { $0.draft.played })?.gameID {
+        let singlePlayedMember = playedCount == 1 ? memberIDs.first(where: { $0.draft.played })?.gameID : nil
+        if let target = singlePlayedMember {
             try LibraryStore.setPSNPlaytime(gameID: target, seconds: psn.playDurationS, db: db)
             try LibraryStore.setPSNPlayedDates(
                 gameID: target, first: psn.firstPlayedAt, last: psn.lastPlayedAt, db: db)
@@ -552,9 +553,13 @@ struct ImportStagingStore: Sendable {
             }
         }
 
-        // Mark the staging row matched so it never re-lists as *New* (records the first member;
-        // the `(source, external_id)` Product keeps re-import idempotent regardless).
-        if let gameID = firstMemberGameID {
+        // Remember which member the play data went to (D3): mark the staging row matched to that
+        // **single played member** when exactly one was ticked, else the first member. On re-sync
+        // the compilation is an *Already in your library* row whose `matched_game_id` is this game,
+        // so later play-time / date updates keep flowing to the remembered member (the exactly-one
+        // rule) without re-ticking — and the row never re-lists as *New*. The `(source, external_id)`
+        // Product keeps re-import idempotent regardless.
+        if let gameID = singlePlayedMember ?? firstMemberGameID {
             try markMatched(source: item.source, externalID: item.externalID, gameID: gameID, db: db)
         }
     }

@@ -14,6 +14,8 @@ final class IGDBLinkPresenter {
     var merge: IGDBMergeModel?
     /// The active bundle-expansion confirm sheet, or nil (PLAN §5.1).
     var bundleExpansion: BundleExpansionModel?
+    /// The active "Expand All Unplayed" batch sheet, or nil (PLAN §13.3 / §5.1 D4b).
+    var batchExpand: BundleBatchExpandModel?
     /// Notified after a bundle expansion or a "not a bundle" dismissal, so a live
     /// Bundles-to-Expand list (PLAN §5.1) can reload. A no-op unless a list is showing.
     var onBundleCandidatesChanged: () -> Void = {}
@@ -100,6 +102,49 @@ final class IGDBLinkPresenter {
         }
     }
 
+    // MARK: - Expand All Unplayed (batch, PLAN §13.3 / §5.1 D4b)
+
+    /// Expand every bundle candidate that carries no play data in one pass: fetch members one game
+    /// at a time (progress modal, cancellable), one confirmation, one undo step. Played placeholders
+    /// are left for the per-game sheet (D4c). Wired to the Bundles-to-Expand header button.
+    func expandAllUnplayedBundles() {
+        Task {
+            let candidates = (try? await store.unplayedBundleExpansionCandidates()) ?? []
+            guard !candidates.isEmpty else {
+                vm?.showBanner("No unplayed bundles to expand.", kind: .info); return
+            }
+            let searcher = self.searcher
+            let model = BundleBatchExpandModel(store: store, membersOf: { candidate in
+                guard let igdbID = candidate.igdbID else { return [] }
+                let raw = (try? await searcher.bundleMembers(bundleIGDBID: igdbID)) ?? []
+                return ImportBundleMapping.members(from: raw)
+            })
+            model.onClose = { [weak self] in self?.batchExpand = nil }
+            model.onFinished = { [weak self] finished in
+                guard let self else { return }
+                self.registerBatchUndo(finished)
+                if finished.expandedCount > 0 {
+                    self.vm?.showBanner("Expanded \(finished.expandedCount) bundle\(finished.expandedCount == 1 ? "" : "s").", kind: .info)
+                }
+                self.onBundleCandidatesChanged()
+                self.batchExpand = nil
+            }
+            batchExpand = model
+            await model.run(candidates)
+        }
+    }
+
+    private func registerBatchUndo(_ model: BundleBatchExpandModel) {
+        guard model.expandedCount > 0, let um = vm?.undoManager else { return }
+        let records = model.undoRecords
+        um.registerUndo(withTarget: self) { target in
+            Task { @MainActor in
+                for undo in records.reversed() { try? await target.store.restoreBundleExpansion(undo) }
+            }
+        }
+        um.setActionName("Expand Bundles")
+    }
+
     private func beginBundleExpansion(gameID: Int64, bundleIGDBID: Int64, bundleTitle: String) {
         Task { await runBundleExpansion(gameID: gameID, bundleIGDBID: bundleIGDBID, bundleTitle: bundleTitle) }
     }
@@ -118,11 +163,12 @@ final class IGDBLinkPresenter {
         let preview = try? await store.bundleExpansionPreview(gameID: gameID)
         let model = BundleExpansionModel(
             gameID: gameID, bundleTitle: bundleTitle, members: members,
-            carriesPlayData: preview?.carriesPlayData ?? false)
+            carriesPlayData: preview?.carriesPlayData ?? false,
+            isPlayed: preview?.isPlayed ?? false, isRanked: preview?.isRanked ?? false)
         model.onCancel = { [weak self] in self?.dismiss() }
         model.onConfirm = { [weak self] m in
             self?.performExpansion(gameID: gameID, bundleTitle: bundleTitle,
-                                   members: m.members, targetIndex: m.effectiveTargetIndex)
+                                   members: m.resolvedMembers, targetIndex: m.effectiveTargetIndex)
         }
         link = nil
         merge = nil
@@ -277,6 +323,9 @@ private struct IGDBLinkPresentationModifier: ViewModifier {
             }
             .sheet(item: $presenter.bundleExpansion) { model in
                 BundleExpansionSheet(model: model)
+            }
+            .sheet(item: $presenter.batchExpand) { model in
+                BundleBatchExpandSheet(model: model)
             }
     }
 }

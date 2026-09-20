@@ -10,6 +10,11 @@ import SwiftUI
 /// (The old, never-mounted `BundlesToExpandModel` / `BundlesToExpandView` were removed with this
 /// change — no dead code; the id provider is the store's shared candidate rule.)
 struct BundlesToExpandHeader: View {
+    @Bindable var vm: LibraryViewModel
+    /// Unplayed-candidate count for the "Expand All Unplayed (N)…" button; loaded from the store
+    /// and refreshed whenever the total candidate count changes (after an expansion).
+    @State private var unplayedCount = 0
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "square.stack.3d.up.fill")
@@ -20,16 +25,26 @@ struct BundlesToExpandHeader: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
             Spacer(minLength: 0)
+            if unplayedCount > 0 {
+                // Expand every candidate with no play data in one pass (PLAN §13.3 / §5.1 D4b).
+                Button("Expand All Unplayed (\(unplayedCount))…") { vm.onExpandAllUnplayedBundles() }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("bundles.expandAllUnplayed")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.5))
+        // Reload the unplayed count on appear and whenever the live candidate count changes
+        // (an expansion removes candidates, so the button count drops or the button disappears).
+        .task(id: vm.counts.bundlesToExpand) { unplayedCount = await vm.loadUnplayedBundleCount() }
     }
 }
 
 #if DEBUG
 #Preview("Bundles to Expand header") {
-    BundlesToExpandHeader().frame(width: 600)
+    BundlesToExpandHeader(vm: LibraryViewModel(dataSource: PreviewLibraryDataSource.large))
+        .frame(width: 600)
 }
 #endif

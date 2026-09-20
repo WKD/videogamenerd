@@ -129,6 +129,11 @@ final class LibraryViewModel {
     /// "Expand Bundle into Games…" for one game linked to an IGDB bundle (wired to the
     /// reconcile presenter — PLAN §5.1 repair path).
     var onExpandBundle: (Int64) -> Void = { _ in }
+    /// "Expand All Unplayed…" for the Bundles-to-Expand header (wired to the reconcile
+    /// presenter — PLAN §13.3 / §5.1 D4b). Batch-expands every unplayed candidate.
+    var onExpandAllUnplayedBundles: () -> Void = {}
+    /// Count of unplayed bundle candidates, for the header button label (wired to the store).
+    var loadUnplayedBundleCount: () async -> Int = { 0 }
 
     // MARK: Non-blocking user feedback (PLAN §8 — errors never swallowed)
     /// The current transient banner, or nil. Auto-dismisses after a few seconds.

@@ -456,6 +456,10 @@ final class AppEnvironment {
             })
         vm.onLinkToIGDB = { [weak igdbLink] id in igdbLink?.present(for: id) }
         vm.onExpandBundle = { [weak igdbLink] id in igdbLink?.presentBundleExpansion(for: id) }
+        vm.onExpandAllUnplayedBundles = { [weak igdbLink] in igdbLink?.expandAllUnplayedBundles() }
+        vm.loadUnplayedBundleCount = { [store] in
+            (try? await store.unplayedBundleExpansionCandidates().count) ?? 0
+        }
 
         return Wiring(quickAdd: quickAdd, controller: controller, enrichment: enrichment,
                       igdbLink: igdbLink, catalogSearcher: searcher)
