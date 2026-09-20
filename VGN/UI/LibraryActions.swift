@@ -472,26 +472,52 @@ final class LibraryActions {
 
     private func performCopyRemoval(_ productIDs: [Int64], gameTitle: String) async {
         guard !productIDs.isEmpty else { return }
-        var wouldOrphanProducts: [Int64] = []
-        for pid in productIDs {
-            do {
-                let outcome = try await store.removeProduct(pid)
-                if case .wouldOrphan = outcome { wouldOrphanProducts.append(pid) }
-            } catch {
-                vm?.showBanner("Couldn't remove the copy.", kind: .error); return
-            }
-        }
-        guard !wouldOrphanProducts.isEmpty else { return }
-        confirmOrphan(
-            title: "\u{201C}\(gameTitle)\u{201D} is neither owned nor played any more — delete it from the library?",
-            onConfirm: { [weak self] in
-                Task {
-                    for pid in wouldOrphanProducts {
-                        _ = try? await self?.store.removeProduct(pid, confirmOrphanDelete: true)
+        do {
+            let (outcome, undo) = try await store.removeProductsCapturingUndo(productIDs)
+            switch outcome {
+            case .ok:
+                if let undo { registerCopyRemovalUndo(undo, productIDs: productIDs, gameTitle: gameTitle) }
+            case .wouldOrphan:
+                // Removing the last copy would orphan the game — confirm, then remove + delete
+                // (still one undo step that restores the product AND the deleted game).
+                confirmOrphan(
+                    title: "\u{201C}\(gameTitle)\u{201D} is neither owned nor played any more — delete it from the library?",
+                    onConfirm: { [weak self] in
+                        Task {
+                            guard let self else { return }
+                            if let (_, undo) = try? await self.store.removeProductsCapturingUndo(
+                                productIDs, confirmOrphanDelete: true), let undo {
+                                self.registerCopyRemovalUndo(undo, productIDs: productIDs, gameTitle: gameTitle)
+                            }
+                        }
                     }
-                }
+                )
             }
-        )
+        } catch {
+            vm?.showBanner("Couldn't remove the copy.", kind: .error)
+        }
+    }
+
+    /// Register the undo for a copy removal: restore the reconcile snapshot (product rows,
+    /// `product_games`, any orphan-deleted game) and register re-removal as the redo.
+    private func registerCopyRemovalUndo(_ undo: ReconcileUndo, productIDs: [Int64], gameTitle: String) {
+        guard let um = vm?.undoManager else { return }
+        um.registerUndo(withTarget: self) { target in
+            Task { @MainActor in await target.undoCopyRemoval(undo, productIDs: productIDs, gameTitle: gameTitle) }
+        }
+        um.setActionName(undo.actionName)
+    }
+
+    /// Restore a copy-removal snapshot (undo) and register re-removal as redo. `internal` so a
+    /// test drives it directly (`UndoManager.undo()` hangs headless).
+    func undoCopyRemoval(_ undo: ReconcileUndo, productIDs: [Int64], gameTitle: String) async {
+        do { try await store.restoreReconcile(undo) }
+        catch { vm?.showBanner("Couldn't undo.", kind: .error); return }
+        guard let um = vm?.undoManager else { return }
+        um.registerUndo(withTarget: self) { target in
+            Task { @MainActor in await target.performCopyRemoval(productIDs, gameTitle: gameTitle) }
+        }
+        um.setActionName(undo.actionName)
     }
 
     private func copyLabel(_ copy: GameDetail.Copy) -> String {

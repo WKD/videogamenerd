@@ -339,6 +339,59 @@ extension LibraryStore {
         }
     }
 
+    // MARK: - Undoable copy removal (PLAN §8 — owner request 2026-09-20)
+
+    /// Remove one or more products (copies) in **one transaction**, capturing a full
+    /// ``ReconcileSnapshot`` of every affected game first so the whole thing is undoable —
+    /// restoring the product row(s) (incl. `external_id` / `subscription` / `acquired_at`),
+    /// their `product_games`, and any game that was orphan-deleted. Reuses the reconcile
+    /// snapshot/restore path (no second snapshotter). Returns the outcome and — when anything
+    /// actually changed — the undo. A `.wouldOrphan` (no confirm) rolls back and yields no undo.
+    /// `actionName` labels the undo ("Remove Copy" / "Remove from Compilation").
+    func removeProductsCapturingUndo(
+        _ productIDs: [Int64], confirmOrphanDelete: Bool = false, actionName: String = "Remove Copy"
+    ) async throws -> (outcome: WriteOutcome, undo: ReconcileUndo?) {
+        guard !productIDs.isEmpty else { return (.ok, nil) }
+        do {
+            return try await dbWriter.write { db in
+                let placeholders = productIDs.map { _ in "?" }.joined(separator: ", ")
+                let members = try Int64.fetchAll(
+                    db, sql: "SELECT DISTINCT game_id FROM product_games WHERE product_id IN (\(placeholders))",
+                    arguments: StatementArguments(productIDs))
+                let snapshot = try Self.captureSnapshot(members, db)
+                for pid in productIDs {
+                    try db.execute(sql: "DELETE FROM products WHERE id = ?", arguments: [pid])
+                }
+                let outcome = try Self.resolveOrphans(members, confirmOrphanDelete: confirmOrphanDelete, db: db)
+                let undo = ReconcileUndo(actionName: actionName, gameIDs: members, snapshot: snapshot)
+                return (outcome, undo)
+            }
+        } catch let rollback as RollbackWithOutcome {
+            return (rollback.outcome, nil)   // wouldOrphan → nothing changed, no undo
+        }
+    }
+
+    /// Remove one member from a compilation product (un-owns just that member), undoable.
+    /// Reuses the reconcile snapshot; restores the membership (and the game, if orphan-deleted).
+    func removeCompilationMemberCapturingUndo(
+        productID: Int64, gameID: Int64, confirmOrphanDelete: Bool = false
+    ) async throws -> (outcome: WriteOutcome, undo: ReconcileUndo?) {
+        do {
+            return try await dbWriter.write { db in
+                let snapshot = try Self.captureSnapshot([gameID], db)
+                try db.execute(sql: "DELETE FROM product_games WHERE product_id = ? AND game_id = ?",
+                               arguments: [productID, gameID])
+                try Self.purgeEmptyProduct(productID, db)
+                try Self.normalizeProductKind(productID, db)
+                let outcome = try Self.resolveOrphans([gameID], confirmOrphanDelete: confirmOrphanDelete, db: db)
+                let undo = ReconcileUndo(actionName: "Remove from Compilation", gameIDs: [gameID], snapshot: snapshot)
+                return (outcome, undo)
+            }
+        } catch let rollback as RollbackWithOutcome {
+            return (rollback.outcome, nil)
+        }
+    }
+
     /// Undo a link / merge / relink by restoring its captured rows verbatim.
     func restoreReconcile(_ undo: ReconcileUndo) async throws {
         try await dbWriter.write { db in
