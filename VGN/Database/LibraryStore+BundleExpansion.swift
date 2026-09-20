@@ -55,6 +55,10 @@ struct BundleExpansionPreview: Sendable, Equatable {
     var placeholder: BundlePlaceholderData
     /// True when the placeholder carries play data the expansion must move to a member.
     var carriesPlayData: Bool { !placeholder.isEmpty }
+    /// The placeholder was played — the expand sheet asks per-member played ticks (D4c).
+    var isPlayed: Bool { placeholder.played }
+    /// The placeholder carries a tier/rank — the expand sheet shows the tier/rank target picker (D4c).
+    var isRanked: Bool { placeholder.hasTier || placeholder.hasRank }
 }
 
 /// A library game that *looks* like an unexpanded bundle (PLAN §5.1 repair path). The
@@ -177,6 +181,10 @@ extension LibraryStore {
     /// bundle" dismissal — the count and the grid update themselves with no timer or callback.
     static func fetchBundleExpansionCandidates(_ db: Database) throws -> [BundleExpansionCandidate] {
         let dismissed = try readDismissedBundleIDs(db)
+        // A game whose persisted import match (`import_titles.match_json`) says bundle/pack is a
+        // candidate even when its title carries no hint (D4a — e.g. "Castlevania Requiem: Symphony
+        // of the Night & Rondo of Blood"). The title heuristic still catches Trilogy/Collection/…
+        let typedBundleGameIDs = try bundleTypedGameIDs(db)
         let rows = try Row.fetchAll(db, sql: """
             SELECT g.id AS id, g.title AS title, g.igdb_id AS igdb_id,
                    (SELECT COUNT(*) FROM product_games pg WHERE pg.game_id = g.id) AS product_count,
@@ -190,18 +198,50 @@ extension LibraryStore {
             let gameID: Int64 = row["id"]
             guard !dismissed.contains(gameID) else { return nil }
             let title: String = row["title"]
-            guard looksLikeBundleTitle(title) else { return nil }
+            guard looksLikeBundleTitle(title) || typedBundleGameIDs.contains(gameID) else { return nil }
             let productCount: Int = row["product_count"] ?? 0
             let maxMembers: Int = row["max_members"] ?? 0
-            // Skip games that are already a compilation member (max_members > 1).
+            // Skip games that are already a compilation member (max_members > 1) — this also excludes
+            // a bundle already expanded into a compilation, whose staging row's `matched_game_id`
+            // (a member) would otherwise flag that member through `bundleTypedGameIDs`.
             guard productCount == 0 || maxMembers <= 1 else { return nil }
             return BundleExpansionCandidate(gameID: row["id"], title: title, igdbID: row["igdb_id"])
         }
     }
 
+    /// Game ids whose persisted import match (`import_titles.match_json`) resolved to an IGDB
+    /// **bundle/pack** (D4a). SQL can't parse the JSON blob, so this reads the matched rows and
+    /// checks the decoded outcome's `game_type` in Swift. Shared by ``fetchBundleExpansionCandidates``.
+    static func bundleTypedGameIDs(_ db: Database) throws -> Set<Int64> {
+        var ids = Set<Int64>()
+        for row in try Row.fetchAll(db, sql: """
+            SELECT matched_game_id AS gid, match_json AS mj FROM import_titles
+            WHERE matched_game_id IS NOT NULL AND match_json IS NOT NULL
+            """) {
+            guard let gid: Int64 = row["gid"], let mj: String = row["mj"],
+                  let match = ImportStagingStore.decodeMatch(mj),
+                  match.outcome.best?.gameType?.isCompilation == true else { continue }
+            ids.insert(gid)
+        }
+        return ids
+    }
+
     /// The candidate game ids only (PLAN §5.1) — the id set the grid scope filters by.
     static func fetchBundleExpansionCandidateIDs(_ db: Database) throws -> [Int64] {
         try fetchBundleExpansionCandidates(db).map(\.gameID)
+    }
+
+    /// Bundle-expansion candidates that carry **no play data** (D4b — the "Expand All Unplayed"
+    /// batch): a candidate whose game has no played flag, tier, rank, status, playtime, dates or
+    /// hand-edit (``BundlePlaceholderData/isEmpty``). Played candidates are expanded one at a time
+    /// through the per-game sheet (D4c). Ordered like ``bundleExpansionCandidates``.
+    func unplayedBundleExpansionCandidates() async throws -> [BundleExpansionCandidate] {
+        try await dbReader.read { db in
+            try Self.fetchBundleExpansionCandidates(db).filter { candidate in
+                guard let g = try GameRecord.fetchOne(db, key: candidate.gameID) else { return false }
+                return BundlePlaceholderData(g).isEmpty
+            }
+        }
     }
 
     /// Expand a placeholder game into a compilation of `members` in one transaction

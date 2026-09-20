@@ -102,7 +102,7 @@ struct RootView: View {
             // could not be scrolled back up (owner bug, wave 17). Keeping the grid as the
             // ZStack's direct child in every scope fixes it.
             if vm.isBundlesToExpandSelection {
-                BundlesToExpandHeader()
+                BundlesToExpandHeader(vm: vm)
             }
             ZStack(alignment: .bottom) {
                 if vm.isRankingSelection {

@@ -44,6 +44,14 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
     var bundleMembers: [CompilationMemberDraft] = []
     /// A new row whose match is a bundle we could expand into a compilation.
     var isBundleExpansion: Bool { !bundleMembers.isEmpty }
+    /// **(PSN twin folding, PLAN §13.3 / D5)** When set, this row is a cross-gen twin folded under
+    /// the row with this external id (they clean to the same title + PlayStation family): it is
+    /// hidden from the groups and never committed — the kept row's copy covers it. On re-sync the
+    /// fold is deterministic, so both external ids stay idempotent (the folded one never commits).
+    var twinFoldedInto: String? = nil
+    /// **(PSN twin folding)** The "also: PS4 & PS5 version" note shown on the row that *kept* a
+    /// folded cross-gen twin, or nil.
+    var alsoOnNote: String? = nil
 
     var id: String { externalID }
 
@@ -52,7 +60,7 @@ struct ImportReviewRow: Identifiable, Equatable, Sendable {
         if shelfDuplicate { return .alreadyMatched }
         return matchedGameID == nil ? .new : .alreadyMatched
     }
-    var isCommittable: Bool { include && !ignored && !shelfDuplicate && !vaulted }
+    var isCommittable: Bool { include && !ignored && !shelfDuplicate && !vaulted && twinFoldedInto == nil }
     var matchedTitle: String? { proposedMatch?.name }
     var showsSourceTitle: Bool {
         guard let matched = proposedMatch?.name else { return true }
@@ -287,6 +295,7 @@ final class ImportReviewModel {
         let titles = (try? await staging.titles(source: source)) ?? []
         rows = titles.map { makeRow(from: $0) }
         if detectShelfDuplicates { markIntraImportDuplicates() }
+        if isPSN { foldPSNTwins() }
         if isPSN {
             let currentIDs = Set(transientByID.keys)
             proposedRemovals = (try? await staging.proposedSubscriptionRemovals(
@@ -390,6 +399,53 @@ final class ImportReviewModel {
         return "n:\(row.sourceTitle.lowercased())|\(platform)"
     }
 
+    // MARK: PSN cross-gen twin folding (PLAN §13.3 / D5)
+
+    /// Fold a cross-gen twin — a New PSN row whose cleaned title (or IGDB match) and PlayStation
+    /// platform family equal an already-matched row of the same sync — under that row, with an
+    /// "also: PS4 & PS5 version" note, instead of leaving it as a second New row. `PSNMapping`'s
+    /// merge index already collapses true twins (shared concept/title id or canonical name); this
+    /// is the display safety-net for the residual case where two entitlements clean to the same
+    /// title only after `cleanMatchTitle` drops the platform tail. The kept row (newest generation)
+    /// commits one copy; the folded row never commits, so re-sync stays idempotent for both ids.
+    private func foldPSNTwins() {
+        var groups: [String: [Int]] = [:]
+        for i in rows.indices {
+            let row = rows[i]
+            guard row.bucket == .new, !row.ignored, !row.vaulted, row.matchedGameID == nil,
+                  let platform = row.platform, PSNMapping.generationRankPublic(platform) > 0,
+                  let key = twinFoldKey(row) else { continue }
+            groups[key, default: []].append(i)
+        }
+        for indices in groups.values where indices.count > 1 {
+            // Keep the newest generation; fold the older twins under it.
+            let ordered = indices.sorted {
+                PSNMapping.generationRankPublic(rows[$0].platform ?? "") >
+                PSNMapping.generationRankPublic(rows[$1].platform ?? "")
+            }
+            let keep = ordered[0]
+            let platforms = ordered.compactMap { rows[$0].platform }
+            let note = platforms
+                .sorted { PSNMapping.generationRankPublic($0) < PSNMapping.generationRankPublic($1) }
+                .map { PlatformLabels.short($0) }
+                .joined(separator: " & ")
+            rows[keep].alsoOnNote = "also: \(note) version"
+            for idx in ordered.dropFirst() {
+                rows[idx].twinFoldedInto = rows[keep].externalID
+                rows[idx].include = false
+            }
+        }
+    }
+
+    /// The fold key for a PSN twin: the IGDB match id when both matched (the tail-strip makes the
+    /// twins match the same game), else the canonical form of the cleaned title. Platform is left
+    /// out of the key so a PS4 and a PS5 entitlement of one game land in the same group.
+    private func twinFoldKey(_ row: ImportReviewRow) -> String? {
+        if let igdbID = row.proposedMatch?.igdbID { return "i:\(igdbID)" }
+        let clean = PSNMapping.canonicalNameKey(PSNMapping.cleanMatchTitle(row.sourceTitle))
+        return clean.isEmpty ? nil : "t:\(clean)"
+    }
+
     // MARK: PSN bundle member ticks — "Which did you play?" (PLAN §13.3 / D2)
 
     /// Whether this bundle row asks "Which did you play?" — only a PSN bundle whose collection
@@ -410,6 +466,7 @@ final class ImportReviewModel {
                 row.bundleMembers[i].played = played
             }
         }
+        persistBundleTicks(externalID)
     }
 
     /// The All / None action for a bundle row's member list.
@@ -417,6 +474,24 @@ final class ImportReviewModel {
         mutate(externalID) { row in
             for i in row.bundleMembers.indices { row.bundleMembers[i].played = played }
         }
+        persistBundleTicks(externalID)
+    }
+
+    /// Persist the current member played ticks into `import_titles.match_json` (D3) so a
+    /// re-opened review of the same sync shows the remembered ticks pre-set. Best-effort:
+    /// only when the row still carries the matched outcome + a bundle expansion. The
+    /// committed compilation additionally remembers the single played member as the staging
+    /// row's `matched_game_id` (store side), which drives re-sync play-data routing.
+    private func persistBundleTicks(_ externalID: String) {
+        guard let row = rows.first(where: { $0.externalID == externalID }),
+              row.isBundleExpansion,
+              let outcome = matchByID[externalID],
+              let expansion = bundleExpansions[externalID] else { return }
+        let updated = ImportBundleExpansion(
+            bundleIGDBID: expansion.bundleIGDBID, title: expansion.title, members: row.bundleMembers)
+        let persisted = PersistedImportMatch(outcome: outcome, bundle: updated)
+        let store = staging, src = source
+        Task { try? await store.recordMatchOutcome(source: src, externalID: externalID, persisted) }
     }
 
     // MARK: Buckets
@@ -479,11 +554,12 @@ final class ImportReviewModel {
     }
 
     func psnRows(in group: PSNReviewGroup) -> [ImportReviewRow] {
-        rows.filter { psnGroup(for: $0) == group }
+        rows.filter { $0.twinFoldedInto == nil && psnGroup(for: $0) == group }
     }
     /// PSN groups present in this import, in display order.
     var presentPSNGroups: [PSNReviewGroup] {
-        PSNReviewGroup.allCases.filter { g in rows.contains { psnGroup(for: $0) == g } }
+        PSNReviewGroup.allCases.filter { g in
+            rows.contains { $0.twinFoldedInto == nil && psnGroup(for: $0) == g } }
     }
 
     /// PS Plus claims imported as owned-via-subscription copies (played > 10 min).
@@ -1504,6 +1580,11 @@ private struct PSNReviewRowView: View {
                     }
                     if let reason = row.ignoreReason, group == .ignored {
                         Text(reason.label).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if let note = row.alsoOnNote {
+                        Text(note).font(.caption2).foregroundStyle(.secondary)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
                     }
                 }
                 bundleSection

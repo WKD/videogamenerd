@@ -350,12 +350,29 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   title still reads "… PS4 & PS5").
 - [ ] **Empty review.** A sync with nothing to review shows "Everything is already in your library."
   rather than an empty list.
-- [ ] **Not yet built (deferred — see `docs/LIMITATIONS.md`):** *Bundles to Expand ▸ **Expand All
-  Unplayed (N)…*** for PSN bundles **already imported as singles** (e.g. *Castlevania Advance
-  Collection* 75 h, *BioShock: The Collection* 52 h), the per-game expand sheet with played ticks,
-  IGDB-type candidate detection, the remembered single-played member on re-sync, review twin folding,
-  and the compilation view's "N h on the whole collection (PSN)" line. Use the existing per-game
-  *Expand Bundle into Games…* repair path meanwhile.
+- [ ] **Expand All Unplayed (N)… (wave 18).** Select **Bundles to Expand**; the header shows an
+  **Expand All Unplayed (N)…** button (only when there are candidates with no play data). Clicking it
+  checks IGDB one game at a time (a cancellable progress sheet), then shows one confirmation listing
+  each "Title → its games", with a tick per row (untick any to keep as one game) and a "Not a bundle"
+  list for candidates IGDB has no members for (those leave the list for good). Confirming expands them
+  all; **⌘Z** undoes the whole batch in one step. Played bundles are **not** in this batch — expand
+  them one at a time (below).
+- [ ] **Candidate by IGDB type.** A bundle imported as one game whose **title has no hint** (e.g.
+  *Castlevania Requiem: Symphony of the Night & Rondo of Blood*) still appears in **Bundles to
+  Expand** because its saved IGDB match says "bundle".
+- [ ] **Played bundle → per-member ticks.** For a **played** bundle already imported as a single (e.g.
+  *Castlevania Advance Collection* 75 h, *BioShock: The Collection* 52 h), **Expand Bundle into
+  Games…** shows the members with a **played tick each (All / None, default none)**; ticking exactly
+  one routes the play time / dates to it; the tier/rank target picker appears only when the placeholder
+  was ranked.
+- [ ] **Re-sync keeps the play time on the chosen member.** After a bundle whose single played member
+  you picked at import is committed, a later PSN sync keeps sending its play-time/date updates to that
+  same member (it does not re-ask).
+- [ ] **Cross-gen twin folding.** A PSN twin like *Man of Medan PS4* / *Man of Medan PS5* that PSN did
+  not already merge shows as **one** row with an "also: PS4 & PS5 version" note, not two New rows.
+- [ ] **Not yet wired (ownership boundary — see `docs/LIMITATIONS.md`):** the compilation copy row in
+  the inspector does not yet show "N h on the whole collection (PSN)"; the data is available
+  (`LibraryStore.collectionPlaytimeSeconds`) and the Inspector lane will render it.
 
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line

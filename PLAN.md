@@ -508,10 +508,24 @@ on a member **only when exactly one is ticked** (otherwise they stay on the impo
 tails** — `PSNMapping.cleanMatchTitle` also drops "… PS4 & PS5", "… (PS4)", "… PS5", "for PS4" and
 the like (match-title only; the shown name is unchanged). ✅ **Re-sync** is idempotent on
 `(source, external_id)` — a committed compilation never re-lists as New nor duplicates its product.
-**Still to build (see `docs/LIMITATIONS.md`):** the **Expand All Unplayed** header action + per-game
-expand sheet for singles already in the library (D4); IGDB-type candidate detection; the remembered
-single-played member on re-sync; the review's cross-gen twin folding; the compilation view's
-"N h on the whole collection (PSN)" line.
+**Built — W18-A part 2 (2026-09-20).** ✅ **Bundles to Expand ▸ Expand All Unplayed (N)…** in the
+list header: unplayed candidates only, members fetched one game at a time through the shared IGDB
+client + rate limiter with a cancellable progress modal, ONE confirmation ("Title → members", rows
+individually untickable, non-bundles auto-dismissed as "not a bundle"), one transaction per game and
+ONE undo step for the batch (`BundleBatchExpandModel`). ✅ **Candidate detection also by IGDB type** —
+one rule in `fetchBundleExpansionCandidates`: a game whose persisted match (`import_titles.match_json`)
+says bundle/pack is a candidate even without a title hint (already-expanded members stay excluded by
+the member guard). ✅ **The per-game expand sheet for a played placeholder** gets the per-member played
+ticks (All/None, default none) with the exactly-one play-data rule, and the tier/rank target picker
+only when the placeholder is ranked. ✅ **Remembered single-played member** — a committed compilation's
+`import_titles.matched_game_id` is the single ticked member (else the first), so re-sync routes later
+play-time/date updates to it; member ticks are also persisted to `match_json` for a re-opened review.
+✅ **Cross-gen twin folding** — a New PSN twin that cleans to the same title/IGDB match + PlayStation
+family folds under the kept (newest-gen) row with an "also: PS4 & PS5 version" note, never a second
+row; both external ids stay idempotent. **One item is blocked by an ownership boundary this wave:** the
+compilation view's "N h on the whole collection (PSN)" *display line* belongs in `VGN/UI/Inspector/**`
+(owned by another lane this wave); its data layer is done (`LibraryStore.collectionPlaytimeSeconds`),
+ready for the Inspector lane to render.
 
 ### 13.4 Architecture
 `VGN/Services/Importers/` — `LibraryImporter` protocol (authenticate → fetch → emit staging rows → shared review sheet; GOG will be the second implementation), `PSN/PSNAuth` (WebView bridge, token actor with single-flight refresh, Keychain), `PSN/PSNClient` (actor: allow-list, serial queue, delay, budget, validation, cache-first reads through `PSNResponseCache`), `PSN/PSNMapping` (pure: DTO → staging rows, noise rules), `PSNSyncCoordinator` (orchestrates a sync, progress + summary). UI: Settings ▸ Accounts ▸ PlayStation (sign in, status, token expiry, last sync, cache age per data set, Force refresh, Sign out & wipe), the import review sheet (shared component with photo scan where it fits). Everything behind protocols with fakes; **unit tests never touch the network** — they run on recorded, scrubbed fixtures and an injected clock (TTL, delay, budget, reject paths, resume after a partial paged fetch).

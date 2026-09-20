@@ -18,24 +18,56 @@ final class BundleExpansionModel: Identifiable {
     /// True when the placeholder carries play data (played / tier / rank / status / playtime
     /// / dates / hand-edits) that the expansion must move to a member.
     let carriesPlayData: Bool
-    /// The chosen member (index into ``members``) to receive the placeholder's play data.
+    /// The placeholder was played — the sheet shows the per-member played ticks (D4c).
+    let isPlayed: Bool
+    /// The placeholder carries a tier/rank — the sheet shows the tier/rank target picker (D4c).
+    let isRanked: Bool
+    /// The chosen member (index into ``members``) to receive the placeholder's tier/rank when it is
+    /// not routed to a single played member.
     var playDataTargetIndex: Int = 0
+    /// The members the owner ticked as played (D4c — "Which did you play?", default none).
+    var playedIndices: Set<Int> = []
 
     var onConfirm: (BundleExpansionModel) -> Void = { _ in }
     var onCancel: () -> Void = {}
 
     init(gameID: Int64, bundleTitle: String, members: [CompilationMemberDraft],
-         carriesPlayData: Bool) {
+         carriesPlayData: Bool, isPlayed: Bool = false, isRanked: Bool = false) {
         self.gameID = gameID
         self.bundleTitle = bundleTitle
         self.members = members
         self.carriesPlayData = carriesPlayData
+        self.isPlayed = isPlayed
+        self.isRanked = isRanked
     }
 
     var memberCount: Int { members.count }
     var confirmTitle: String { "Expand into \(memberCount) Game\(memberCount == 1 ? "" : "s")" }
-    /// The index passed to the store — nil when there is no play data to move.
-    var effectiveTargetIndex: Int? { carriesPlayData ? playDataTargetIndex : nil }
+    var playedCount: Int { playedIndices.count }
+    /// The single ticked member, when exactly one is ticked (the exactly-one rule, D2/D4c).
+    var singlePlayedIndex: Int? { playedCount == 1 ? playedIndices.first : nil }
+
+    /// The member that inherits the placeholder's play data. The placeholder is deleted, so its play
+    /// time / dates / tier / rank must land somewhere: on the single ticked member when exactly one
+    /// (the exactly-one rule), else the tier/rank target picker (default the first). nil when the
+    /// placeholder carries no play data.
+    var effectiveTargetIndex: Int? {
+        guard carriesPlayData else { return nil }
+        return singlePlayedIndex ?? playDataTargetIndex
+    }
+
+    /// The members with the owner's played ticks applied (passed to the store).
+    var resolvedMembers: [CompilationMemberDraft] {
+        members.enumerated().map { index, member in
+            var m = member; m.played = playedIndices.contains(index); return m
+        }
+    }
+
+    func toggle(_ index: Int, _ on: Bool) {
+        if on { playedIndices.insert(index) } else { playedIndices.remove(index) }
+    }
+    func playedAll() { playedIndices = Set(members.indices) }
+    func playedNone() { playedIndices = [] }
 
     func confirm() { onConfirm(self) }
     func cancel() { onCancel() }
@@ -49,7 +81,7 @@ struct BundleExpansionSheet: View {
             header
             Divider()
             memberList
-            if model.carriesPlayData {
+            if model.isRanked {
                 Divider()
                 playDataPicker
             }
@@ -72,18 +104,44 @@ struct BundleExpansionSheet: View {
         .padding(16)
     }
 
+    @ViewBuilder
     private var memberList: some View {
+        if model.isPlayed {
+            // "Which did you play?" — a played tick per member with All / None (default none),
+            // exactly-one routes the play time / dates (D4c).
+            HStack(spacing: 6) {
+                Text("Which did you play?").font(.caption).foregroundStyle(.secondary)
+                Button("All") { model.playedAll() }.controlSize(.small)
+                Button("None") { model.playedNone() }.controlSize(.small)
+                Spacer()
+            }
+            .padding(.horizontal, 16).padding(.top, 8)
+        }
         List {
-            ForEach(Array(model.members.enumerated()), id: \.offset) { _, member in
-                HStack(spacing: 6) {
-                    Text(member.title)
-                    if let year = member.year {
-                        Text(String(year)).font(.caption).foregroundStyle(.secondary)
+            ForEach(Array(model.members.enumerated()), id: \.offset) { index, member in
+                if model.isPlayed {
+                    Toggle(isOn: Binding(
+                        get: { model.playedIndices.contains(index) },
+                        set: { model.toggle(index, $0) }
+                    )) {
+                        memberLabel(member)
                     }
+                    .toggleStyle(.checkbox)
+                } else {
+                    memberLabel(member)
                 }
             }
         }
         .listStyle(.inset)
+    }
+
+    private func memberLabel(_ member: CompilationMemberDraft) -> some View {
+        HStack(spacing: 6) {
+            Text(member.title)
+            if let year = member.year {
+                Text(String(year)).font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var playDataPicker: some View {

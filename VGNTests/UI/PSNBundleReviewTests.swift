@@ -275,6 +275,117 @@ struct PSNBundleReviewTests {
         #expect(m.launchedVaultCount == 1)
     }
 
+    private func matchedGameID(_ db: AppDatabase, _ externalID: String) async throws -> Int64? {
+        try await db.dbWriter.read {
+            try Int64.fetchOne($0, sql: "SELECT matched_game_id FROM import_titles WHERE external_id = ?",
+                               arguments: [externalID])
+        }
+    }
+
+    // MARK: - Remembered single-played member (D3)
+
+    @Test(.timeLimit(.minutes(2)))
+    func remembersSinglePlayedMemberAsMatchedGame() async throws {
+        let db = try await seededDB()
+        let row = ImportStagingRow(source: ImportSourceID.psn, externalID: "b1", name: "Collection",
+                                   platform: "ps4", signals: [.owned, .played], playDurationS: 9000)
+        let (m, staging) = try await makeModel(
+            row: row, members: [member(1, "A", position: 0), member(2, "B", position: 1)], db: db)
+        m.setInclude(true, externalID: "b1")
+        m.setBundleMemberPlayed(true, position: 1, externalID: "b1")   // exactly one: B
+        _ = try await staging.commit(m.commitItems())
+        // The staging row remembers B (matched_game_id) so re-sync routes play data to it.
+        let bID = try #require(try await game(igdbID: 2, db))?.id
+        #expect(try await matchedGameID(db, "b1") == bID)
+        #expect(try await game(igdbID: 2, db)?.psnPlaytimeS == 9000)
+    }
+
+    @Test(.timeLimit(.minutes(2)))
+    func remembersFirstMemberWhenSeveralPlayed() async throws {
+        let db = try await seededDB()
+        let row = ImportStagingRow(source: ImportSourceID.psn, externalID: "b1", name: "Collection",
+                                   platform: "ps4", signals: [.owned, .played], playDurationS: 9000)
+        let (m, staging) = try await makeModel(
+            row: row, members: [member(1, "A", position: 0), member(2, "B", position: 1)], db: db)
+        m.setInclude(true, externalID: "b1")
+        m.setAllBundleMembersPlayed(true, externalID: "b1")   // several
+        _ = try await staging.commit(m.commitItems())
+        let aID = try #require(try await game(igdbID: 1, db))?.id
+        #expect(try await matchedGameID(db, "b1") == aID)     // first member
+    }
+
+    // MARK: - Cross-gen twin folding (D5)
+
+    @Test(.timeLimit(.minutes(1)))
+    func crossGenTwinIsFoldedUnderOneRow() async throws {
+        let db = try await seededDB()
+        let staging = ImportStagingStore(db)
+        // Two entitlements PSNMapping did not merge (different ids), both matching IGDB game 42.
+        let ps4 = ImportStagingRow(source: ImportSourceID.psn, externalID: "ps4id",
+                                   name: "Man of Medan PS4", platform: "ps4", signals: [.owned])
+        let ps5 = ImportStagingRow(source: ImportSourceID.psn, externalID: "ps5id",
+                                   name: "Man of Medan PS5", platform: "ps5", signals: [.owned])
+        try await staging.upsert([ps4, ps5])
+        func matched(_ ext: String, _ platform: String) -> ImportMatchResult {
+            ImportMatchResult(externalID: ext, name: "Man of Medan", outcome: ScanMatchOutcome(
+                best: ScanMatch(igdbID: 42, name: "Man of Medan", releaseYear: nil, coverImageID: nil,
+                                platformSlugs: [platform], score: 0.95, matchedName: "Man of Medan"),
+                alternatives: [], bucket: .confident))
+        }
+        let result = ImportSyncResult(
+            summary: ImportSyncSummary(source: ImportSourceID.psn),
+            matches: [matched("ps4id", "ps4"), matched("ps5id", "ps5")], rows: [ps4, ps5])
+        let m = ImportReviewModel(source: ImportSourceID.psn, sourceLabel: "PlayStation",
+                                  staging: staging, result: result, productFormat: .digital,
+                                  platformChoices: ["ps5", "ps4"])
+        await m.load()
+        // The ps5 row is kept (newest); the ps4 row folds under it.
+        let kept = try #require(m.rows.first { $0.externalID == "ps5id" })
+        let folded = try #require(m.rows.first { $0.externalID == "ps4id" })
+        #expect(kept.twinFoldedInto == nil)
+        #expect(folded.twinFoldedInto == "ps5id")
+        #expect(kept.alsoOnNote == "also: PS4 & PS5 version")
+        // Only the kept row is committable / shown; the folded one is hidden and never commits.
+        #expect(!folded.isCommittable)
+        #expect(m.psnRows(in: .purchased).contains { $0.externalID == "ps5id" })
+        #expect(!m.psnRows(in: .purchased).contains { $0.externalID == "ps4id" })
+    }
+
+    // MARK: - Collection playtime read (item 4 data layer)
+
+    @Test(.timeLimit(.minutes(1)))
+    func collectionPlaytimeShownOnlyWhenNotRoutedToOneMember() async throws {
+        let db = try await seededDB()
+        let staging = ImportStagingStore(db)
+        let store = LibraryStore(db)
+        try await staging.upsert([ImportStagingRow(source: ImportSourceID.psn, externalID: "coll",
+                                                   name: "Collection", platform: "ps4",
+                                                   signals: [.owned, .played], playDurationS: 270_000)])
+        // No match_json yet → collection carries the time.
+        #expect(try await store.collectionPlaytimeSeconds(source: ImportSourceID.psn, externalID: "coll") == 270_000)
+        // Several members played → still on the collection.
+        try await recordBundle(staging, externalID: "coll", playedIndices: [0, 1])
+        #expect(try await store.collectionPlaytimeSeconds(source: ImportSourceID.psn, externalID: "coll") == 270_000)
+        // Exactly one member played → routed to that member, so the collection line is hidden.
+        try await recordBundle(staging, externalID: "coll", playedIndices: [0])
+        #expect(try await store.collectionPlaytimeSeconds(source: ImportSourceID.psn, externalID: "coll") == nil)
+        // No record at all → nil.
+        #expect(try await store.collectionPlaytimeSeconds(source: ImportSourceID.psn, externalID: "nope") == nil)
+    }
+
+    private func recordBundle(_ staging: ImportStagingStore, externalID: String, playedIndices: Set<Int>) async throws {
+        var members = [member(1, "A", position: 0), member(2, "B", position: 1)]
+        for i in members.indices { members[i].played = playedIndices.contains(i) }
+        let outcome = ScanMatchOutcome(
+            best: ScanMatch(igdbID: 900, name: "Collection", releaseYear: nil, coverImageID: nil,
+                            platformSlugs: ["ps4"], score: 0.9, matchedName: "Collection", gameType: .bundle),
+            alternatives: [], bucket: .confident)
+        try await staging.recordMatchOutcome(
+            source: ImportSourceID.psn, externalID: externalID,
+            PersistedImportMatch(outcome: outcome, bundle: ImportBundleExpansion(
+                bundleIGDBID: 900, title: "Collection", members: members)))
+    }
+
     // MARK: - Empty state (D6)
 
     @Test(.timeLimit(.minutes(1)))
