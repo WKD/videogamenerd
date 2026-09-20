@@ -71,15 +71,10 @@ final class DiscoverModel {
     // MARK: - Open on IGDB (D7)
 
     /// The IGDB web URL for an entry that carries an `igdb_id`, or nil (no button then).
-    // TODO(merge): replace with the shared `IGDBWebLink` helper (wave-17-B) once it lands — that
-    // one builds a canonical `/games/<id>` URL from the id; this reuses the reconcile sheet's
-    // search-by-name scheme, which is what this lane's base has.
+    /// Delegates to the shared ``IGDBWebLink`` helper — the same canonical link Play Next's
+    /// hero card uses (owner 2026-09-20) — so every "Open on IGDB" affordance is one scheme.
     nonisolated static func igdbURL(for entry: RomCatalogEntry) -> URL? {
-        guard entry.igdbID != nil else { return nil }
-        var comps = URLComponents(string: "https://www.igdb.com/search")
-        comps?.queryItems = [URLQueryItem(name: "type", value: "1"),
-                             URLQueryItem(name: "q", value: entry.name)]
-        return comps?.url
+        IGDBWebLink.pageURL(igdbID: entry.igdbID, title: entry.name)
     }
 
     /// Open a vault card's IGDB page through the injected opener (D7). No-op when unmatched.

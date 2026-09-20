@@ -22,6 +22,8 @@ struct DiscoverIGDBLinkTests {
         #expect(url?.absoluteString.contains("igdb.com") == true)
         #expect(url?.absoluteString.contains("Chrono") == true)
         #expect(DiscoverModel.igdbURL(for: unmatched) == nil)
+        // It now routes through the shared IGDBWebLink helper (same link as Play Next's hero card).
+        #expect(DiscoverModel.igdbURL(for: matched) == IGDBWebLink.pageURL(igdbID: 555, title: "Chrono Trigger"))
     }
 
     @Test(.timeLimit(.minutes(1)))
