@@ -137,6 +137,28 @@ The four suites above (Stats, Batocera, GOG, Delicious) were added to disk in wa
 but were **missing from `scripts/snapshots.sh`** until wave 18, so their references had
 never been recorded; they are now in the script and recorded.
 
+**Wave 18 owner-review additions** (seeded so the wave-14–18 UI is reviewable without
+driving every screen — open `.build/snapshots/index.html`):
+
+| Suite | New screens |
+|---|---|
+| `LibrarySnapshotTests` | `library-sidebar-seeded` (THE VAULT with all four sources, Unlinked + Bundles to Expand rows, BY LENGTH pace-only title), `library-cell-badges` (physical / digital / ROM / PS Plus-only / physical+ROM / digital+PS Plus / played / not-owned) |
+| `InspectorSnapshotTests` | `inspector-detail-rich` (playtime table + PSN row + "You … % of …" summary + ⚠︎ suspicious-estimate row + compilation collection-playtime caption + PS Plus copy badge + stacked actions), `inspector-estimate-dismissed`, `inspector-actions-row` (440 pt) / `inspector-actions-stacked` (300 pt) |
+| `VaultSnapshotTests` | `vault-rows` (matched PS Plus w/ year·genre·rating · unmatched "not matched yet" · hand-vaulted Owned pill · In Library), `vault-browser`, `vault-empty-unconfigured`, `vault-empty-filtered` |
+| `PSNReviewSnapshotTests` | `psn-review-groups` (all groups + Launched "unticked → Vault" switch + own-as segment + In the Vault collapsed + Ignored), `psn-review-bundle-twin` (bundle member played-ticks + "also: PS4 & PS5 version" twin note), `psn-review-empty` |
+| `MiscSnapshotTests` | `sheet-bundle-batch-expand` (3 bundles, one unticked, + a "not a bundle" entry), `bundles-to-expand-header` ("Expand All Unplayed (N)…" over the grid) |
+
+**Two variants deliberately NOT recorded (would render misleadingly headless — reported,
+not blessed):**
+* The PSN "own the ticked rows as ▸ **Physical** selected" state: `ownTickedAs(.physical)`
+  works at the model level (unit-tested in `PSNReviewGroupingTests`) but the segment's
+  `ownAsSelection` reads back neutral in an off-screen capture, so a Physical-selected shot is
+  identical to the neutral one already in `psn-review-groups`.
+* The **In the Vault expanded** state (with per-row "Bring back"): the group is a
+  `DisclosureGroup` whose expansion is private `@State` that can't be driven without a real
+  click, so only the collapsed group (in `psn-review-groups`) is captured. Both are exercised
+  live by the XCUITest suite / model tests.
+
 Layout-sensitive screens (main window, Tier Board 300, Play Next, scan review) are
 captured at two sizes (≈ 1200×780 and ≈ 900×600); the rest at one representative
 size. Everything is captured in both light and dark.
