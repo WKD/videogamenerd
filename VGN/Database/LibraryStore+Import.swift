@@ -141,19 +141,23 @@ extension LibraryStore {
     /// routed to a single member (exactly one member is marked played in the persisted `match_json`).
     /// The compilation detail view reads it by the compilation Product's `(source, external_id)`.
     func collectionPlaytimeSeconds(source: String, externalID: String) async throws -> Int? {
-        try await dbReader.read { db in
-            guard let row = try Row.fetchOne(db, sql: """
-                SELECT play_duration_s, match_json FROM import_titles
-                WHERE source = ? AND external_id = ?
-                """, arguments: [source, externalID]) else { return nil }
-            guard let seconds: Int = row["play_duration_s"], seconds > 0 else { return nil }
-            if let json: String = row["match_json"],
-               let match = ImportStagingStore.decodeMatch(json),
-               match.bundle?.members.filter(\.played).count == 1 {
-                return nil   // routed to the single played member — the member carries it, not the collection
-            }
-            return seconds
+        try await dbReader.read { db in try Self.collectionPlaytimeSeconds(source: source, externalID: externalID, db: db) }
+    }
+
+    /// The `db`-based core (also called inside the game-detail read so the inspector's compilation
+    /// copy row gets the value through the existing detail-loading path — never a read from a `body`).
+    static func collectionPlaytimeSeconds(source: String, externalID: String, db: Database) throws -> Int? {
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT play_duration_s, match_json FROM import_titles
+            WHERE source = ? AND external_id = ?
+            """, arguments: [source, externalID]) else { return nil }
+        guard let seconds: Int = row["play_duration_s"], seconds > 0 else { return nil }
+        if let json: String = row["match_json"],
+           let match = ImportStagingStore.decodeMatch(json),
+           match.bundle?.members.filter(\.played).count == 1 {
+            return nil   // routed to the single played member — the member carries it, not the collection
         }
+        return seconds
     }
 
     /// The `(externalID, productID)` of every currently-committed **subscription** copy for

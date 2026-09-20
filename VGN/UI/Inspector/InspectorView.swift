@@ -352,6 +352,11 @@ private struct SingleGameInspector: View {
                          + Text(copy.title ?? "a compilation").italic()
                          + Text(" (\(PlatformLabels.short(copy.platformID))) · ^[\(copy.memberCount) game](inflect: true)"))
                             .font(.caption).foregroundStyle(.secondary)
+                        // PLAN §13.3 / D2: PSN play time recorded for the whole collection (not split
+                        // per member). Nothing when there is no such record.
+                        if let seconds = copy.collectionPlaytimeS {
+                            CompilationCollectionPlaytimeLabel(seconds: seconds)
+                        }
                     }
                 }
                 Spacer()
@@ -850,6 +855,21 @@ struct PlaytimeComparisonLabel: View {
                 .minimumScaleFactor(0.85)
                 .accessibilityLabel("\(c.mineText), \(c.comparison)\(c.beyond ? ", beyond every estimate" : "")")
         }
+    }
+}
+
+/// The "75 h on the whole collection (PSN)" caption under a compilation copy's "Part of …" line
+/// (PLAN §13.3 / D2): PSN play time recorded for the whole collection, not split per member. Uses
+/// the same duration formatting as the Playtime section; one line, scales down before it wraps so
+/// it survives the inspector's 300 pt minimum width. Extracted so `InspectorLayoutTests` can host it.
+struct CompilationCollectionPlaytimeLabel: View {
+    let seconds: Int
+    var body: some View {
+        Text("\(PlaytimeParser.format(seconds: seconds)) on the whole collection (PSN)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
     }
 }
 

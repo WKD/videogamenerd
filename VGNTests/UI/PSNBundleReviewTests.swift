@@ -373,6 +373,30 @@ struct PSNBundleReviewTests {
         #expect(try await store.collectionPlaytimeSeconds(source: ImportSourceID.psn, externalID: "nope") == nil)
     }
 
+    @Test(.timeLimit(.minutes(2)))
+    func compilationCopyExposesCollectionPlaytimeThroughDetail() async throws {
+        let db = try await seededDB()
+        let row = ImportStagingRow(source: ImportSourceID.psn, externalID: "coll", name: "Collection",
+                                   platform: "ps4", signals: [.owned, .played], playDurationS: 270_000)
+        let (m, staging) = try await makeModel(
+            row: row, members: [member(1, "A", position: 0), member(2, "B", position: 1)], db: db)
+        m.setInclude(true, externalID: "coll")
+        _ = try await staging.commit(m.commitItems())
+        let store = LibraryStore(db)
+        let aID = try #require(try await game(igdbID: 1, db)?.id)
+
+        // Several members played → the time stays on the collection → the detail copy exposes it.
+        try await recordBundle(staging, externalID: "coll", playedIndices: [0, 1])
+        let copy1 = try #require(try await store.gameDetail(id: aID)?.copies.first(where: \.isCompilation))
+        #expect(copy1.collectionPlaytimeS == 270_000)
+        #expect(PlaytimeParser.format(seconds: 270_000) == "75 h")   // the caption string
+
+        // Exactly one played → routed to that member → no collection caption.
+        try await recordBundle(staging, externalID: "coll", playedIndices: [0])
+        let copy2 = try #require(try await store.gameDetail(id: aID)?.copies.first(where: \.isCompilation))
+        #expect(copy2.collectionPlaytimeS == nil)
+    }
+
     private func recordBundle(_ staging: ImportStagingStore, externalID: String, playedIndices: Set<Int>) async throws {
         var members = [member(1, "A", position: 0), member(2, "B", position: 1)]
         for i in members.indices { members[i].played = playedIndices.contains(i) }

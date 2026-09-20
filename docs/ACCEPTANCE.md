@@ -378,9 +378,11 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   same member (it does not re-ask).
 - [ ] **Cross-gen twin folding.** A PSN twin like *Man of Medan PS4* / *Man of Medan PS5* that PSN did
   not already merge shows as **one** row with an "also: PS4 & PS5 version" note, not two New rows.
-- [ ] **Not yet wired (ownership boundary — see `docs/LIMITATIONS.md`):** the compilation copy row in
-  the inspector does not yet show "N h on the whole collection (PSN)"; the data is available
-  (`LibraryStore.collectionPlaytimeSeconds`) and the Inspector lane will render it.
+- [ ] **"N h on the whole collection (PSN)" (wave 18 part 3).** Open a PSN compilation whose play
+  time stayed on the whole collection (several members played, or none picked). The inspector's copy
+  row shows "**75 h on the whole collection (PSN)**" under the "Part of …" line. It does not appear
+  when the play time was routed to a single member, nor for a non-PSN compilation. At the inspector's
+  narrowest width it stays one line (scales down, never wraps).
 
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line

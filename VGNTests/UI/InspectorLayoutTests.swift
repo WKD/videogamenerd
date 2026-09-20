@@ -86,6 +86,15 @@ struct InspectorLayoutTests {
         #expect(hFlagged < 160, "warning too tall at 300 pt: \(hFlagged)")
     }
 
+    /// The compilation "N h on the whole collection (PSN)" caption stays one line at the 300 pt
+    /// minimum — a long value scales down (minimumScaleFactor) instead of wrapping (PLAN §13.3/D2).
+    @Test func collectionPlaytimeCaptionStaysOneLine() {
+        let label = CompilationCollectionPlaytimeLabel(seconds: 2310 * 3600 + 6 * 60)  // "2310 h 6"
+        let narrow = fittingHeight(label, width: Self.inner(300))
+        let wide = fittingHeight(label, width: Self.inner(440))
+        #expect(narrow == wide, "collection playtime caption wrapped: \(narrow) vs \(wide)")
+    }
+
     /// The one-line me-vs-average summary stays one line (it scales down before wrapping).
     @Test func playtimeComparisonStaysOneLine() {
         let bar = PlaytimeBar.make(mineSeconds: 2310 * 3600 + 5 * 60,
