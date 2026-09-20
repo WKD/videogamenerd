@@ -3,8 +3,17 @@ import GRDB
 
 /// DB-backed ``CatalogCaching`` over the `catalog_cache` table (PLAN §4/§9): raw
 /// IGDB game JSON keyed by igdb id with a `fetched_at` stamp. This is what makes
-/// repeat autocomplete instant/offline and lets the enrichment metadata job skip
-/// the network on a fresh hit.
+/// repeat autocomplete instant/offline and lets id-keyed IGDB reads (the enrichment
+/// metadata job, the Vault trait matcher, importers, bundle-member and Choose Cover
+/// artwork lookups) serve a fresh hit without a request — see ``IGDBClient``'s
+/// read-through. The cache exists to make the app faster and to avoid re-asking IGDB
+/// for what we already hold; it is never a way to issue more or faster requests: a
+/// miss still goes through the client's one `RateLimiter`, unchanged.
+///
+/// Because a game's blob may have been written by a query with fewer fields than a
+/// later caller needs, each blob carries a `_vgn_fields` shape marker
+/// (``CatalogFieldShape``) and every write is shape-merged onto the existing row
+/// (``CatalogCacheMerge``) so a slimmer write never drops richer fields.
 ///
 /// Staleness policy: `entry(forID:)` returns only a *fresh* entry (within
 /// `staleAfter`, 30 days by default) so a stale row transparently forces a refetch;
@@ -45,16 +54,33 @@ struct CatalogCacheStore: CatalogCaching, CatalogTitleSearching {
     }
 
     func store(_ entry: CatalogCacheEntry) async {
-        try? await dbWriter.write { db in try Self.upsert(entry, db) }
-        await titleIndex?.upsert([entry])
+        await store([entry])
     }
 
     func store(_ entries: [CatalogCacheEntry]) async {
         guard !entries.isEmpty else { return }
-        try? await dbWriter.write { db in
-            for entry in entries { try Self.upsert(entry, db) }
-        }
-        await titleIndex?.upsert(entries)
+        // Shape-merge each incoming payload onto the row already stored for its id, so
+        // a slimmer write never downgrades a richer blob and orthogonal shapes
+        // accumulate. The merged rows keep the title index warm.
+        let merged: [CatalogCacheEntry] = (try? await dbWriter.write { db in
+            var out: [CatalogCacheEntry] = []
+            out.reserveCapacity(entries.count)
+            for entry in entries {
+                let existing = try CatalogCacheRecord.fetchOne(db, key: entry.igdbID).map(Self.entry(from:))
+                let final = CatalogCacheMerge.merged(existing: existing, incoming: entry)
+                try Self.upsert(final, db)
+                out.append(final)
+            }
+            return out
+        }) ?? entries
+        await titleIndex?.upsert(merged)
+    }
+
+    // MARK: - CatalogCaching (bulk read-through by id)
+
+    /// Fresh-only bulk get (the read-through path). Delegates to ``entries(forIDs:includingStale:)``.
+    func freshEntries(forIDs ids: [Int64]) async -> [Int64: CatalogCacheEntry] {
+        await entries(forIDs: ids)
     }
 
     // MARK: - CatalogTitleSearching (instant/offline Quick Add title search)

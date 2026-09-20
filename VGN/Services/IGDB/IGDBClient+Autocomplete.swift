@@ -27,10 +27,28 @@ extension IGDBClient {
         _ text: String,
         platformIGDBIDs: [Int]? = nil,
         limit: Int = 12,
-        fallbackThreshold: Int = 4
+        fallbackThreshold: Int = 4,
+        force: Bool = false
     ) async throws -> [IGDBSearchResult] {
+        // Short-circuit the 3-char guard before the cache (no request, nothing to cache).
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 3 else { return [] }
+        // Serve an identical in-session query without a request, and coalesce concurrent
+        // twins onto one network op (PLAN §6.1). A miss still runs on the one rate limiter.
+        let key = IGDBSearchCache.Key(kind: "autocomplete", text: trimmed, platforms: platformIGDBIDs, limit: limit)
+        return try await searchCache.value(for: key, force: force) { [self] in
+            try await autocompleteUncached(
+                trimmed, platformIGDBIDs: platformIGDBIDs, limit: limit, fallbackThreshold: fallbackThreshold)
+        }
+    }
+
+    /// The live multi-query autocomplete (no result cache — that is the caller's job).
+    private func autocompleteUncached(
+        _ trimmed: String,
+        platformIGDBIDs: [Int]?,
+        limit: Int,
+        fallbackThreshold: Int
+    ) async throws -> [IGDBSearchResult] {
 
         // A year in the query ("super mario bros 1985") disambiguates long series: the
         // plain search returns 12 of dozens of entries and the wanted one may not be among
@@ -49,8 +67,8 @@ extension IGDBClient {
             if !merged.isEmpty { return merged }
             // Nothing for that year (typo, regional date): fall through to the plain path
             // on the text without the year.
-            return try await autocomplete(split.text, platformIGDBIDs: platformIGDBIDs,
-                                          limit: limit, fallbackThreshold: fallbackThreshold)
+            return try await autocompleteUncached(split.text, platformIGDBIDs: platformIGDBIDs,
+                                                  limit: limit, fallbackThreshold: fallbackThreshold)
         }
 
         let primary = try await runGamesSearch(
