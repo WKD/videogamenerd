@@ -131,34 +131,52 @@ struct LibraryGridView: View {
         // endless invalidate → rebuild loop (100 % CPU). Selection changes happen
         // only inside the action closures, via `act(on:)`.
         let ids = targetIDs(for: game)
+        // The target games' already-loaded summaries, so each submenu shows the current
+        // state as ✓ (all) / – (mixed) / nothing (none) without a DB read (PLAN §8, wave 17).
+        let targets = vm.games(for: ids)
         Menu("Set Tier") {
             ForEach(["S", "A", "B", "C", "D", "F"], id: \.self) { letter in
-                Button(letter) { act(on: game) { vm.setTier(letter, for: $0) } }
+                StateMenuButton(title: letter, state: targets.tierState(letter: letter)) {
+                    act(on: game) { vm.setTier(letter, for: $0) }
+                }
             }
             Divider()
-            Button("Clear") { act(on: game) { vm.setTier(nil, for: $0) } }
+            StateMenuButton(title: "Clear", state: targets.clearTierState) {
+                act(on: game) { vm.setTier(nil, for: $0) }
+            }
         }
         // Mark Played As (PLAN §8, owner request). The top-level item repeats the
         // last-chosen value; ⇧M is shown as a title hint only — NOT a menu key
         // equivalent, which (shift-only) would steal a capital "M" typed in the
         // search field / Quick Add. The key itself is handled by the grid router.
         let lastMark = vm.lastPlayedMark
-        Button("\(lastMark.menuTitle)   ⇧M") { act(on: game) { vm.markPlayed($0, as: lastMark) } }
+        StateMenuButton(title: "\(lastMark.menuTitle)   ⇧M", state: targets.playedMarkState(lastMark)) {
+            act(on: game) { vm.markPlayed($0, as: lastMark) }
+        }
         Menu("Mark Played As") {
             ForEach(PlayedMark.allCases) { mark in
-                Button {
+                StateMenuButton(title: mark.label, state: targets.playedMarkState(mark)) {
                     act(on: game) { vm.markPlayed($0, as: mark) }
-                } label: {
-                    if mark == lastMark { Label(mark.label, systemImage: "checkmark") }
-                    else { Text(mark.label) }
                 }
             }
         }
-        Button("Mark Owned") { act(on: game) { vm.setOwned(true, for: $0) } }
+        StateMenuButton(title: "Mark Owned", state: targets.ownedState) {
+            act(on: game) { vm.setOwned(true, for: $0) }
+        }
         // Change the ownership format of the selection's single-copy games (PLAN §13.3).
+        // Ticks the current format(s); a mixed set shows "–"; multi-copy games are ignored
+        // for the state and called out in a disabled footer.
         Menu("Change Copy Format") {
             ForEach(ProductFormat.allCases, id: \.self) { format in
-                Button(format.label) { act(on: game) { vm.changeCopyFormat($0, to: format) } }
+                StateMenuButton(title: format.label, state: targets.copyFormatState(format)) {
+                    act(on: game) { vm.changeCopyFormat($0, to: format) }
+                }
+            }
+            let several = targets.severalCopiesCount
+            if several > 0 {
+                Divider()
+                Button { } label: { Text("^[\(several) game](inflect: true) with several copies not changed") }
+                    .disabled(true)
             }
         }
         Divider()

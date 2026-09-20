@@ -806,6 +806,13 @@ final class LibraryViewModel {
         games.filter { selectedGameIDs.contains($0.id) }
     }
 
+    /// The loaded summaries for a set of ids — the games a context-menu action targets, so
+    /// its mixed-state menu (tier / format / played / owned) reads from already-loaded
+    /// values (never the DB). Pure; safe to call from a menu builder.
+    func games(for ids: Set<Int64>) -> [GameSummary] {
+        games.filter { ids.contains($0.id) }
+    }
+
     // MARK: Keyboard / context-menu intents (stubbed via hooks)
 
     /// Route a key intent. Returns true if it was handled (so the view can
