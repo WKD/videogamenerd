@@ -214,6 +214,33 @@ extension LibraryStore {
         }
     }
 
+    /// For a library game that is an IGDB **port** (game_type 11), the library game id of its
+    /// **original** — the `parent_game` / `version_parent` IGDB id that is also in the library
+    /// (PLAN §5.1 "Same Game, Two Entries"). `nil` when the game is not such a port or its
+    /// parent is not in the library. Pure cached read (no request), the merge target for
+    /// "Merge into the Original…".
+    func originalGameID(forPort gameID: Int64) async throws -> Int64? {
+        try await dbReader.read { db in try Self.fetchOriginalGameID(forPort: gameID, db) }
+    }
+
+    static func fetchOriginalGameID(forPort gameID: Int64, _ db: Database) throws -> Int64? {
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT json_extract(cc.json, '$.parent_game')   AS parent,
+                   json_extract(cc.json, '$.version_parent') AS version_parent
+            FROM catalog_cache cc JOIN games g ON g.igdb_id = cc.igdb_id
+            WHERE g.id = ?
+              AND COALESCE(json_extract(cc.json, '$.game_type'), json_extract(cc.json, '$.category')) = 11
+            """, arguments: [gameID]) else { return nil }
+        for parentIGDBID in [row["parent"] as Int64?, row["version_parent"] as Int64?].compactMap({ $0 }) {
+            if let target = try Int64.fetchOne(
+                db, sql: "SELECT id FROM games WHERE igdb_id = ? AND id <> ?",
+                arguments: [parentIGDBID, gameID]) {
+                return target
+            }
+        }
+        return nil
+    }
+
     /// The library game already holding `igdbID`, if any (excluding `excluding`).
     func existingGameID(forIGDBID igdbID: Int64, excluding: Int64? = nil) async throws -> Int64? {
         try await dbReader.read { db in
