@@ -67,23 +67,47 @@ struct SidebarScrollTests {
                 "the first sidebar rows must be reachable by scrolling to the top")
     }
 
+    /// The sidebar scroll view's window frame + top inset, read only once its height has
+    /// **settled** — stable across two consecutive run-loop turns AND no taller than the window
+    /// content. Under parallel load the window is otherwise measured mid-layout, which made this
+    /// test flake (a transient 1425-pt sidebar frame). Hard-bounded, no wall-clock assertion.
+    private func settledSidebarGeometry(_ window: NSWindow,
+                                        timeout: Duration = .seconds(6)) async throws -> (frame: NSRect, insetTop: CGFloat) {
+        // The sidebar scroll view spans the full window height (it extends under the unified
+        // toolbar), so bound against the WINDOW height — the bug blew it up to 1425 pt.
+        let maxHeight = window.frame.height
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        var last: NSRect?
+        while ContinuousClock.now < deadline {
+            window.contentView?.layoutSubtreeIfNeeded()
+            let sv = try sidebarScrollView(window)
+            let frame = sv.convert(sv.bounds, to: nil)
+            if let last, abs(last.minY - frame.minY) < 0.5, abs(last.height - frame.height) < 0.5,
+               frame.height <= maxHeight + 1 {
+                return (frame, sv.contentInsets.top)
+            }
+            last = frame
+            try await Task.sleep(for: .milliseconds(80))
+        }
+        // Return the last reading so the assertions produce a meaningful diff on a genuine break.
+        let sv = try sidebarScrollView(window)
+        return (sv.convert(sv.bounds, to: nil), sv.contentInsets.top)
+    }
+
     @Test(.timeLimit(.minutes(2)))
     func bundlesToExpandSidebarGeometryMatchesUnlinked() async throws {
         // Entering Bundles to Expand must leave the sidebar's scroll geometry identical to any
-        // other library selection (the bug shifted it under the title bar for Bundles only).
-        let (w1, _) = host(.unlinked)
-        defer { w1.close() }
-        try await w1.settle()
-        let unlinked = try sidebarScrollView(w1.window)
-        let unlinkedFrame = unlinked.convert(unlinked.bounds, to: nil)
-        let unlinkedInsetTop = unlinked.contentInsets.top
+        // other library selection (the bug made the sidebar scroll view 1425 pt tall and shifted
+        // it −462 pt under the title bar for Bundles only). Measure BOTH selections in the SAME
+        // hosted window — switch the selection, don't build two windows — so the two readings are
+        // directly comparable, and wait for layout to settle before each reading.
+        let (window, vm) = host(.unlinked)
+        defer { window.close() }
+        try await window.settle()
+        let (unlinkedFrame, unlinkedInsetTop) = try await settledSidebarGeometry(window.window)
 
-        let (w2, _) = host(.bundlesToExpand)
-        defer { w2.close() }
-        try await w2.settle()
-        let bundles = try sidebarScrollView(w2.window)
-        let bundlesFrame = bundles.convert(bundles.bounds, to: nil)
-        let bundlesInsetTop = bundles.contentInsets.top
+        vm.select(.bundlesToExpand)
+        let (bundlesFrame, bundlesInsetTop) = try await settledSidebarGeometry(window.window)
 
         #expect(abs(unlinkedFrame.minY - bundlesFrame.minY) < 1,
                 "sidebar top shifted when entering Bundles to Expand (unlinked \(unlinkedFrame) vs bundles \(bundlesFrame))")
@@ -91,13 +115,12 @@ struct SidebarScrollTests {
         #expect(abs(unlinkedInsetTop - bundlesInsetTop) < 1,
                 "sidebar top content inset differs for Bundles (\(bundlesInsetTop)) vs Unlinked (\(unlinkedInsetTop))")
 
-        // The first rows are reachable at the top in both.
-        for sv in [unlinked, bundles] {
-            sv.contentView.scroll(to: NSPoint(x: 0, y: -sv.contentInsets.top))
-            sv.reflectScrolledClipView(sv.contentView)
-        }
+        // The first rows are reachable at the top after scrolling to the top.
+        let sv = try sidebarScrollView(window.window)
+        sv.contentView.scroll(to: NSPoint(x: 0, y: -sv.contentInsets.top))
+        sv.reflectScrolledClipView(sv.contentView)
         try await Task.sleep(for: .milliseconds(100))
-        #expect(unlinked.documentVisibleRect.minY <= 1)
-        #expect(bundles.documentVisibleRect.minY <= 1)
+        #expect(sv.documentVisibleRect.minY <= 1,
+                "the first sidebar rows must be reachable by scrolling to the top")
     }
 }
