@@ -59,13 +59,15 @@ struct BundlesToExpandScopeTests {
     func gridScopeReturnsExactlyTheCandidates() async throws {
         let store = try await TestDB.makeStore()
         let trilogy = try await addLoneSingle(store, title: "The Tomb Raider Trilogy", igdbID: 10)
-        let anthology = try await addLoneSingle(
+        let collection = try await addLoneSingle(store, title: "God of War Collection", igdbID: 12)
+        // A series entry: keyword-before-colon + a specific subtitle → a single, not a bundle (W19 2B).
+        _ = try await addLoneSingle(
             store, title: "The Dark Pictures Anthology: House of Ashes", igdbID: 11)
         _ = try await addLoneSingle(store, title: "Bloodborne", igdbID: 20)           // ordinary
         _ = try await addCompilationMember(store, memberTitle: "Some Trilogy")        // already a member
 
         let ids = try await candidateIDs(store)
-        #expect(ids == [trilogy, anthology])
+        #expect(ids == [trilogy, collection])
 
         // The grid scope and the async candidate API agree (one rule).
         let apiIDs = Set(try await store.bundleExpansionCandidates().map(\.gameID))
@@ -75,12 +77,12 @@ struct BundlesToExpandScopeTests {
     @Test(.timeLimit(.minutes(1)))
     func dismissingAGameRemovesItFromTheGrid() async throws {
         let store = try await TestDB.makeStore()
-        let ashes = try await addLoneSingle(
-            store, title: "The Dark Pictures Anthology: House of Ashes", igdbID: 11)
-        #expect(try await candidateIDs(store).contains(ashes))   // included until dismissed
+        let collection = try await addLoneSingle(
+            store, title: "God of War Collection", igdbID: 12)
+        #expect(try await candidateIDs(store).contains(collection))   // included until dismissed
 
-        try await store.dismissBundleCandidate(gameID: ashes)
-        #expect(!(try await candidateIDs(store).contains(ashes)))
+        try await store.dismissBundleCandidate(gameID: collection)
+        #expect(!(try await candidateIDs(store).contains(collection)))
     }
 
     @Test(.timeLimit(.minutes(1)))

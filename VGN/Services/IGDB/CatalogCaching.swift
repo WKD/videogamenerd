@@ -17,6 +17,12 @@ protocol CatalogCaching: Sendable {
     func entry(forID id: Int64) async -> CatalogCacheEntry?
     /// Bulk fresh get for a set of ids (read-through by id). Default loops `entry(forID:)`.
     func freshEntries(forIDs ids: [Int64]) async -> [Int64: CatalogCacheEntry]
+    /// A cached entry that satisfies `shape` — present in the mask AND per-shape fresh
+    /// (W19 part 2A). Default falls back to `entry(forID:)` + a mask-only check (in-memory
+    /// caches have no staleness); the DB store overrides with per-shape freshness.
+    func freshEntry(forID id: Int64, satisfying shape: CatalogFieldShape) async -> CatalogCacheEntry?
+    /// Bulk shape-satisfying get. Default loops `freshEntry(forID:satisfying:)`.
+    func freshEntries(forIDs ids: [Int64], satisfying shape: CatalogFieldShape) async -> [Int64: CatalogCacheEntry]
     func store(_ entry: CatalogCacheEntry) async
     /// Bulk store; default calls `store` per entry.
     func store(_ entries: [CatalogCacheEntry]) async
@@ -31,6 +37,21 @@ extension CatalogCaching {
         var out: [Int64: CatalogCacheEntry] = [:]
         for id in ids where out[id] == nil {
             if let entry = await entry(forID: id) { out[id] = entry }
+        }
+        return out
+    }
+
+    func freshEntry(forID id: Int64, satisfying shape: CatalogFieldShape) async -> CatalogCacheEntry? {
+        guard let entry = await entry(forID: id),
+              CatalogCacheShapeJSON.shapes(in: entry.json).isSuperset(of: shape)
+        else { return nil }
+        return entry
+    }
+
+    func freshEntries(forIDs ids: [Int64], satisfying shape: CatalogFieldShape) async -> [Int64: CatalogCacheEntry] {
+        var out: [Int64: CatalogCacheEntry] = [:]
+        for id in ids where out[id] == nil {
+            if let entry = await freshEntry(forID: id, satisfying: shape) { out[id] = entry }
         }
         return out
     }

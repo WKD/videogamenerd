@@ -38,4 +38,17 @@ struct IGDBLinkQueryTests {
     @Test func neverEmptiesTheTitle() {
         #expect(IGDBLinkQuery.clean("Remastered") == "Remastered")   // whole title is an edition word
     }
+
+    /// W19 part 2C: a PSN twin's bare PlayStation platform tail is dropped from the PREFILL so
+    /// it finds the same IGDB game as its sibling (the shown "Current: …" line keeps the real
+    /// title). Counter-case: a title that merely ends in a number is untouched.
+    @Test(arguments: [
+        ("The Dark Pictures Anthology: Man of Medan PS4 & PS5", "The Dark Pictures Anthology: Man of Medan"),
+        ("Aliens: Fireteam Elite PS4 & PS5", "Aliens: Fireteam Elite"),
+        ("Ghost of Tsushima (PS4)", "Ghost of Tsushima"),
+        ("Persona 5", "Persona 5"),   // no platform tail — untouched
+    ])
+    func stripsPlayStationPlatformTails(_ input: String, _ expected: String) {
+        #expect(IGDBLinkQuery.clean(input) == expected)
+    }
 }

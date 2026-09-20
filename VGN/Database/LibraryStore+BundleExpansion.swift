@@ -96,13 +96,40 @@ extension LibraryStore {
 
     /// A title heuristic for the repair-path candidate list (PLAN §5.1) — loose on purpose,
     /// verified against IGDB only on click. Case-insensitive, word-boundary-ish.
+    ///
+    /// Series-entry guard (W19 part 2B): a bundle keyword in the part *before* a colon,
+    /// followed by a specific subtitle, is a **series entry** (one game), not a bundle —
+    /// "The Dark Pictures Anthology: Man of Medan", "LEGO Harry Potter Collection: Years 1-4".
+    /// The exception is a **volume marker** subtitle ("Volume I", "Vol. 2", a bare number), as
+    /// in "8-bit Adventure Anthology: Volume I", which stays a bundle. A keyword only in the
+    /// subtitle ("Halo: The Master Chief Collection") or with no colon is a bundle as before.
     static func looksLikeBundleTitle(_ title: String) -> Bool {
         let lower = title.lowercased()
         let words = ["trilogy", "collection", "anthology", "compilation", "pack",
                      "hd classics", "classics collection", "the orange box", "the master chief collection"]
-        if words.contains(where: { lower.contains($0) }) { return true }
-        // "N in 1" / "3-in-1".
-        if lower.range(of: #"\b\d+\s*[- ]?in[- ]?1\b"#, options: .regularExpression) != nil { return true }
+        let hasKeyword = words.contains { lower.contains($0) }
+        let hasNInOne = lower.range(of: #"\b\d+\s*[- ]?in[- ]?1\b"#, options: .regularExpression) != nil
+        guard hasKeyword || hasNInOne else { return false }
+
+        if hasKeyword, let colon = title.firstIndex(of: ":") {
+            let before = title[..<colon].lowercased()
+            let after = String(title[title.index(after: colon)...])
+            // Keyword lives in the series NAME (before the colon) and a specific subtitle
+            // follows → a series entry, unless that subtitle is a volume marker.
+            if words.contains(where: { before.contains($0) }), !isVolumeMarker(after) {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// A subtitle that marks a numbered volume of a set — "Volume I", "Vol. 2", a bare
+    /// number or roman numeral. "Years 1-4" is *not* one (it is a range description).
+    static func isVolumeMarker(_ subtitle: String) -> Bool {
+        let s = subtitle.trimmingCharacters(in: .whitespaces).lowercased()
+        if s.range(of: #"^(vol\.?|volume)\b"#, options: .regularExpression) != nil { return true }
+        if s.range(of: #"^\d+$"#, options: .regularExpression) != nil { return true }
+        if s.range(of: #"^[ivxlcdm]+$"#, options: .regularExpression) != nil { return true }
         return false
     }
 
@@ -185,20 +212,39 @@ extension LibraryStore {
         // candidate even when its title carries no hint (D4a — e.g. "Castlevania Requiem: Symphony
         // of the Night & Rondo of Blood"). The title heuristic still catches Trilogy/Collection/…
         let typedBundleGameIDs = try bundleTypedGameIDs(db)
+        // W19 part 2B: for a LINKED game, its own cached IGDB payload (joined by igdb id, any
+        // freshness — this is a classification hint, not displayed data) tells us the real
+        // `game_type`. When we can read a *known* type it is authoritative: bundle/pack → in
+        // even without a title hint; anything else → out even when the title matches the
+        // heuristic. No cached payload / no type / an unrecognised type → fall back to today's
+        // title-or-typed rule. Pure DB read, no request — one LEFT JOIN, `game_type` (or legacy
+        // `category`) via json_extract on the candidate subset.
         let rows = try Row.fetchAll(db, sql: """
             SELECT g.id AS id, g.title AS title, g.igdb_id AS igdb_id,
                    (SELECT COUNT(*) FROM product_games pg WHERE pg.game_id = g.id) AS product_count,
                    (SELECT MAX(mc) FROM (
                         SELECT (SELECT COUNT(*) FROM product_games pg2 WHERE pg2.product_id = pg.product_id) AS mc
-                        FROM product_games pg WHERE pg.game_id = g.id)) AS max_members
+                        FROM product_games pg WHERE pg.game_id = g.id)) AS max_members,
+                   COALESCE(json_extract(cc.json, '$.game_type'),
+                            json_extract(cc.json, '$.category')) AS cached_type
             FROM games g
+            LEFT JOIN catalog_cache cc ON cc.igdb_id = g.igdb_id
             ORDER BY g.sort_title
             """)
         return rows.compactMap { row in
             let gameID: Int64 = row["id"]
             guard !dismissed.contains(gameID) else { return nil }
             let title: String = row["title"]
-            guard looksLikeBundleTitle(title) || typedBundleGameIDs.contains(gameID) else { return nil }
+            let titleOrTyped = looksLikeBundleTitle(title) || typedBundleGameIDs.contains(gameID)
+            // Authoritative cached-type override (only when the type is one we recognise).
+            let isCandidate: Bool
+            if let raw: Int = row["cached_type"], case let type = IGDBGameType(rawValue: raw),
+               Self.isRecognisedGameType(type) {
+                isCandidate = type.isCompilation
+            } else {
+                isCandidate = titleOrTyped
+            }
+            guard isCandidate else { return nil }
             let productCount: Int = row["product_count"] ?? 0
             let maxMembers: Int = row["max_members"] ?? 0
             // Skip games that are already a compilation member (max_members > 1) — this also excludes
@@ -207,6 +253,13 @@ extension LibraryStore {
             guard productCount == 0 || maxMembers <= 1 else { return nil }
             return BundleExpansionCandidate(gameID: row["id"], title: title, igdbID: row["igdb_id"])
         }
+    }
+
+    /// Whether `type` is a `game_type` value VGN recognises (not `.unknown`) — only then is a
+    /// cached type authoritative for the candidate rule (W19 part 2B).
+    static func isRecognisedGameType(_ type: IGDBGameType) -> Bool {
+        if case .unknown = type { return false }
+        return true
     }
 
     /// Game ids whose persisted import match (`import_titles.match_json`) resolved to an IGDB

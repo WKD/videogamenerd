@@ -53,6 +53,11 @@ enum IGDBLinkQuery {
         // 2. Peel trailing " - <region/platform>" segments (repeatedly).
         s = stripTrailingTailSegments(s)
 
+        // 2b. Drop a bare PlayStation platform tail Sony appends to a PSN twin ("… PS4 & PS5",
+        // "… (PS4)") — shared with the PSN importer via `PlatformTail` (PLAN §5.1 / §13.3). The
+        // displayed "Current: …" line keeps the real title; only this prefill is cleaned.
+        s = PlatformTail.drop(s)
+
         // 3. Drop trailing edition phrases (never emptying the title).
         s = stripEditionPhrases(s)
 

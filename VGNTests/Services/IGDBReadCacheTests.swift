@@ -271,6 +271,91 @@ struct IGDBReadThroughTests {
     }
 }
 
+// MARK: - Per-shape freshness (W19 part 2A)
+
+@Suite(.serialized)
+struct IGDBPerShapeFreshnessTests {
+    private func day(_ n: Double) -> TimeInterval { n * 24 * 60 * 60 }
+
+    @Test("A search write does not refresh stale metadata")
+    func searchDoesNotRefreshMetadata() async throws {
+        let db = try await TestDB.makeSeeded()
+        let date = MutableDate()
+        let cache = CatalogCacheStore(db, now: { date.now })
+        let old = date.now.addingTimeInterval(-day(60))
+        await cache.store(CatalogCacheEntry(igdbID: 5,
+            json: CatalogCacheShapeJSON.stamped(["id": 5, "name": "G5", "summary": "S5"], shapes: [.search, .metadata], at: old),
+            fetchedAt: old))
+        // A search sighting today renews only the search stamp.
+        await cache.store(CatalogCacheEntry(igdbID: 5,
+            json: CatalogCacheShapeJSON.stamped(["id": 5, "name": "G5"], shapes: .search, at: date.now),
+            fetchedAt: date.now))
+
+        #expect(await cache.freshEntry(forID: 5, satisfying: .search) != nil)     // search fresh
+        #expect(await cache.freshEntry(forID: 5, satisfying: .metadata) == nil)   // metadata still stale
+
+        let transport = MetadataCountingTransport()
+        let client = ReadCacheHarness.client(transport: transport, cache: cache)
+        _ = try await client.games(ids: [5])
+        #expect(transport.apiRequestCount == 1)   // refetched despite the fresh search sighting
+    }
+
+    @Test("Metadata goes stale after 30 days even with daily search sightings")
+    func metadataStaleDespiteDailySearch() async throws {
+        let db = try await TestDB.makeSeeded()
+        let date = MutableDate()
+        let cache = CatalogCacheStore(db, now: { date.now })
+        await cache.store(CatalogCacheEntry(igdbID: 7,
+            json: CatalogCacheShapeJSON.stamped(["id": 7, "name": "G7", "summary": "S7"], shapes: [.search, .metadata], at: date.now),
+            fetchedAt: date.now))
+        for _ in 0..<40 {
+            date.advance(by: day(1))
+            await cache.store(CatalogCacheEntry(igdbID: 7,
+                json: CatalogCacheShapeJSON.stamped(["id": 7, "name": "G7"], shapes: .search, at: date.now),
+                fetchedAt: date.now))
+        }
+        #expect(await cache.freshEntry(forID: 7, satisfying: .search) != nil)     // search still fresh
+        #expect(await cache.freshEntry(forID: 7, satisfying: .metadata) == nil)   // metadata > 30 d old
+    }
+
+    @Test("force overwrites the shape's own stamp")
+    func forceRefreshesStamp() async throws {
+        let db = try await TestDB.makeSeeded()
+        let date = MutableDate()
+        let cache = CatalogCacheStore(db, now: { date.now })
+        let old = date.now.addingTimeInterval(-day(60))
+        await cache.store(CatalogCacheEntry(igdbID: 9,
+            json: CatalogCacheShapeJSON.stamped(["id": 9, "name": "G9", "summary": "S9"], shapes: [.search, .metadata], at: old),
+            fetchedAt: old))
+        #expect(await cache.freshEntry(forID: 9, satisfying: .metadata) == nil)   // stale
+
+        let transport = MetadataCountingTransport()
+        let client = ReadCacheHarness.client(transport: transport, cache: cache)
+        _ = try await client.games(ids: [9], force: true)
+        #expect(transport.apiRequestCount == 1)
+        #expect(await cache.freshEntry(forID: 9, satisfying: .metadata) != nil)   // stamp refreshed
+        _ = try await client.games(ids: [9])
+        #expect(transport.apiRequestCount == 1)                                   // now a hit
+    }
+
+    @Test("A part-1 blob (mask, no per-shape stamps) falls back to the row fetched_at")
+    func partOneBlobFallsBack() async throws {
+        let db = try await TestDB.makeSeeded()
+        let date = MutableDate()
+        let cache = CatalogCacheStore(db, now: { date.now })
+        // Fresh row, tagged mask-only (the pre-part-2 format) → hit via the row stamp fallback.
+        await cache.store(CatalogCacheEntry(igdbID: 3,
+            json: CatalogCacheShapeJSON.tagged(["id": 3, "name": "G3", "summary": "S3"], shapes: [.search, .metadata]),
+            fetchedAt: date.now))
+        #expect(await cache.freshEntry(forID: 3, satisfying: .metadata) != nil)
+        // Same blob on a 40-day-old row → stale via the fallback.
+        await cache.store(CatalogCacheEntry(igdbID: 4,
+            json: CatalogCacheShapeJSON.tagged(["id": 4, "name": "G4", "summary": "S4"], shapes: [.search, .metadata]),
+            fetchedAt: date.now.addingTimeInterval(-day(40))))
+        #expect(await cache.freshEntry(forID: 4, satisfying: .metadata) == nil)
+    }
+}
+
 // MARK: - Search LRU (D2/D3) — actor in isolation, deterministic
 
 /// File-scope helpers so the `@Sendable` produce closures capture no test-struct `self`.

@@ -37,11 +37,23 @@ struct CatalogFieldShape: OptionSet, Sendable, Hashable {
     }
 }
 
-/// Reads/writes the `_vgn_fields` shape marker (and the `_vgn_bundle_members` list)
-/// carried inside a cached IGDB game blob. Pure JSON surgery — no network, no DB.
+/// Reads/writes the `_vgn_fields` shape marker, the **per-shape fetched-at stamps**
+/// (`_vgn_fetched`, keyed by the shape's bit value) and the `_vgn_bundle_members`
+/// list carried inside a cached IGDB game blob. Pure JSON surgery — no network, no DB.
+///
+/// Per-shape freshness (W19 part 2A): a blob's fields may have been written by several
+/// queries at different times — a search sighting today must NOT make months-old full
+/// metadata look fresh. So each shape carries its own timestamp and a read is a hit
+/// only when the needed shape is present *and* its own stamp is within `staleAfter`.
+/// Blobs written before this (a mask but no stamps) fall back to the row's
+/// `fetched_at` for every shape they carry — safe, since those rows are at most hours old.
 enum CatalogCacheShapeJSON {
     static let fieldsKey = "_vgn_fields"
+    static let fetchedKey = "_vgn_fetched"
     static let bundleMembersKey = "_vgn_bundle_members"
+
+    /// The individual shape bits VGN defines (search / metadata / artworks / bundleMembers).
+    static let allShapes: [CatalogFieldShape] = [.search, .metadata, .artworks, .bundleMembers]
 
     /// The shapes a cached blob satisfies (empty when the marker is absent/unknown).
     static func shapes(in json: Data) -> CatalogFieldShape {
@@ -49,6 +61,36 @@ enum CatalogCacheShapeJSON {
               let raw = (object[fieldsKey] as? NSNumber)?.intValue
         else { return [] }
         return CatalogFieldShape(rawValue: raw)
+    }
+
+    /// Per-shape fetched-at stamps, keyed by the shape's bit value.
+    static func fetchedStamps(in json: Data) -> [Int: Date] {
+        guard let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
+              let raw = object[fetchedKey] as? [String: Any]
+        else { return [:] }
+        var out: [Int: Date] = [:]
+        for (key, value) in raw {
+            if let bit = Int(key), let secs = (value as? NSNumber)?.doubleValue {
+                out[bit] = Date(timeIntervalSince1970: secs)
+            }
+        }
+        return out
+    }
+
+    /// Is `json` a hit for `shape` — present in the mask AND each of the shape's bits
+    /// stamped within `staleAfter` of `now` (falling back to `rowFetchedAt` for a bit
+    /// with no stamp, i.e. a pre-part-2 blob)?
+    static func isFresh(
+        _ json: Data, satisfying shape: CatalogFieldShape,
+        rowFetchedAt: Date, now: Date, staleAfter: TimeInterval
+    ) -> Bool {
+        guard shapes(in: json).isSuperset(of: shape) else { return false }
+        let stamps = fetchedStamps(in: json)
+        for bit in allShapes where shape.contains(bit) {
+            let stamp = stamps[bit.rawValue] ?? rowFetchedAt
+            if now.timeIntervalSince(stamp) >= staleAfter { return false }
+        }
+        return true
     }
 
     /// The cached expanded member-id list of a bundle blob, or `nil` when absent.
@@ -59,17 +101,47 @@ enum CatalogCacheShapeJSON {
         return raw.compactMap { ($0 as? NSNumber)?.int64Value }
     }
 
-    /// Tag a JSON game object with `shapes` (unioned onto any marker already present).
+    /// Tag a JSON game object with `shapes` (unioned onto any marker already present),
+    /// without touching the per-shape stamps.
     static func tag(_ object: inout [String: Any], shapes: CatalogFieldShape) {
         let existing = (object[fieldsKey] as? NSNumber)?.intValue ?? 0
         object[fieldsKey] = existing | shapes.rawValue
     }
 
-    /// Serialise a JSON game object tagged with `shapes` (test/helper convenience).
+    /// Tag `shapes` AND stamp each of its bits at `date` (a real write does both).
+    static func tag(_ object: inout [String: Any], shapes: CatalogFieldShape, stampedAt date: Date) {
+        tag(&object, shapes: shapes)
+        var stamps = (object[fetchedKey] as? [String: Any]) ?? [:]
+        let ts = date.timeIntervalSince1970
+        for bit in allShapes where shapes.contains(bit) { stamps[String(bit.rawValue)] = ts }
+        object[fetchedKey] = stamps
+    }
+
+    /// Serialise a game object tagged with `shapes`, **no stamps** (mimics a pre-part-2
+    /// blob; the read then falls back to the row `fetched_at`). Test/helper convenience.
     static func tagged(_ object: [String: Any], shapes: CatalogFieldShape) -> Data {
         var copy = object
         tag(&copy, shapes: shapes)
         return (try? JSONSerialization.data(withJSONObject: copy)) ?? Data("{}".utf8)
+    }
+
+    /// Serialise a game object tagged AND per-shape-stamped at `date`. Test/helper convenience.
+    static func stamped(_ object: [String: Any], shapes: CatalogFieldShape, at date: Date) -> Data {
+        var copy = object
+        tag(&copy, shapes: shapes, stampedAt: date)
+        return (try? JSONSerialization.data(withJSONObject: copy)) ?? Data("{}".utf8)
+    }
+
+    /// The raw (JSON-friendly) per-shape stamp dict, for merging.
+    static func rawStamps(in json: Data) -> [String: Double] {
+        guard let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
+              let raw = object[fetchedKey] as? [String: Any]
+        else { return [:] }
+        var out: [String: Double] = [:]
+        for (key, value) in raw where Int(key) != nil {
+            if let secs = (value as? NSNumber)?.doubleValue { out[key] = secs }
+        }
+        return out
     }
 }
 
@@ -77,7 +149,10 @@ enum CatalogCacheShapeJSON {
 /// same id, so a *slimmer* write never drops the richer fields we already hold and
 /// orthogonal shapes accumulate (a metadata blob keeps its `artworks`, a bundle keeps
 /// its member list). The incoming payload's own keys win for the fields it carries,
-/// the `_vgn_fields` shapes are unioned, and the (newer) incoming `fetchedAt` stands.
+/// the `_vgn_fields` shapes are unioned, and the **per-shape `_vgn_fetched` stamps are
+/// merged per bit** (incoming wins for the bits it just wrote, existing stamps for the
+/// others stand — so a search write never renews the metadata stamp). The (newer)
+/// incoming row `fetchedAt` stands.
 enum CatalogCacheMerge {
     static func merged(existing: CatalogCacheEntry?, incoming: CatalogCacheEntry) -> CatalogCacheEntry {
         guard let existing,
@@ -87,10 +162,15 @@ enum CatalogCacheMerge {
 
         let unioned = CatalogCacheShapeJSON.shapes(in: existing.json)
             .union(CatalogCacheShapeJSON.shapes(in: incoming.json))
-        for (key, value) in new where key != CatalogCacheShapeJSON.fieldsKey {
+        var stamps = CatalogCacheShapeJSON.rawStamps(in: existing.json)
+        for (bit, ts) in CatalogCacheShapeJSON.rawStamps(in: incoming.json) { stamps[bit] = ts }
+
+        for (key, value) in new
+        where key != CatalogCacheShapeJSON.fieldsKey && key != CatalogCacheShapeJSON.fetchedKey {
             base[key] = value
         }
         base[CatalogCacheShapeJSON.fieldsKey] = unioned.rawValue
+        if !stamps.isEmpty { base[CatalogCacheShapeJSON.fetchedKey] = stamps }
         guard let mergedJSON = try? JSONSerialization.data(withJSONObject: base) else { return incoming }
         return CatalogCacheEntry(igdbID: incoming.igdbID, json: mergedJSON, fetchedAt: incoming.fetchedAt)
     }

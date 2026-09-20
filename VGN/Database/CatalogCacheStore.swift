@@ -78,9 +78,30 @@ struct CatalogCacheStore: CatalogCaching, CatalogTitleSearching {
 
     // MARK: - CatalogCaching (bulk read-through by id)
 
-    /// Fresh-only bulk get (the read-through path). Delegates to ``entries(forIDs:includingStale:)``.
+    /// Fresh-only bulk get (row-level staleness). Delegates to ``entries(forIDs:includingStale:)``.
     func freshEntries(forIDs ids: [Int64]) async -> [Int64: CatalogCacheEntry] {
         await entries(forIDs: ids)
+    }
+
+    /// A cached entry that satisfies `shape` with **per-shape freshness** (W19 part 2A):
+    /// the shape is present in the mask and each of its bits is stamped within
+    /// `staleAfter` (pre-part-2 blobs fall back to the row `fetched_at`).
+    func freshEntry(forID id: Int64, satisfying shape: CatalogFieldShape) async -> CatalogCacheEntry? {
+        guard let entry = await rawEntry(forID: id) else { return nil }
+        return isFresh(entry, satisfying: shape) ? entry : nil
+    }
+
+    func freshEntries(forIDs ids: [Int64], satisfying shape: CatalogFieldShape) async -> [Int64: CatalogCacheEntry] {
+        guard !ids.isEmpty else { return [:] }
+        let all = await entries(forIDs: ids, includingStale: true)
+        return all.filter { isFresh($1, satisfying: shape) }
+    }
+
+    /// Per-shape freshness for one entry.
+    func isFresh(_ entry: CatalogCacheEntry, satisfying shape: CatalogFieldShape) -> Bool {
+        CatalogCacheShapeJSON.isFresh(
+            entry.json, satisfying: shape,
+            rowFetchedAt: entry.fetchedAt, now: now(), staleAfter: staleAfter)
     }
 
     // MARK: - CatalogTitleSearching (instant/offline Quick Add title search)
