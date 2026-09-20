@@ -167,6 +167,9 @@ struct PlayNextHeroCard: View {
     var onNot: () -> Void
     var onNever: () -> Void
     var onInspect: () -> Void
+    /// Opens a URL in the browser; the "Open on IGDB" button shows only when this and the
+    /// game's IGDB page URL are both available.
+    var openURL: (@MainActor (URL) -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 18) {
@@ -210,6 +213,17 @@ struct PlayNextHeroCard: View {
                     }
                     .labelStyle(.iconOnly)
                     .help("Open in inspector (⌘I)")
+
+                    if let url = IGDBWebLink.pageURL(igdbID: suggestion.igdbID, title: suggestion.title),
+                       let openURL {
+                        Button { openURL(url) } label: {
+                            Label("Open on IGDB", systemImage: "arrow.up.right.square")
+                        }
+                        .labelStyle(.iconOnly)
+                        .help("Open on IGDB")
+                        .accessibilityLabel("Open \(suggestion.title) on IGDB")
+                        .accessibilityIdentifier("playnext.openIGDB.\(suggestion.id)")
+                    }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -239,6 +253,7 @@ struct PlayNextAlternativeCard: View {
     var onNot: () -> Void
     var onNever: () -> Void
     var onInspect: () -> Void
+    var openURL: (@MainActor (URL) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -270,6 +285,13 @@ struct PlayNextAlternativeCard: View {
                     .help("Not this one")
                 Button(action: onInspect) { Image(systemName: "sidebar.right") }
                     .help("Inspect (⌘I)")
+                if let url = IGDBWebLink.pageURL(igdbID: suggestion.igdbID, title: suggestion.title),
+                   let openURL {
+                    Button { openURL(url) } label: { Image(systemName: "arrow.up.right.square") }
+                        .help("Open on IGDB")
+                        .accessibilityLabel("Open \(suggestion.title) on IGDB")
+                        .accessibilityIdentifier("playnext.openIGDB.\(suggestion.id)")
+                }
                 Menu {
                     Button("Never", role: .destructive, action: onNever)
                 } label: { Image(systemName: "ellipsis") }

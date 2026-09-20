@@ -169,7 +169,8 @@ enum RecommendationEngine {
             score: finalScore,
             matchStrength: strength,
             reasons: reasons,
-            hasMetadata: candidate.hasMetadata
+            hasMetadata: candidate.hasMetadata,
+            igdbID: candidate.igdbID
         )
         return Scored(id: candidate.id, finalScore: finalScore, suggestion: suggestion)
     }

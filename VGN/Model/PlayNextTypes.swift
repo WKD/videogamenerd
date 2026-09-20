@@ -168,6 +168,9 @@ struct PlayNextSuggestion: Hashable, Sendable, Identifiable {
     var reasons: [PlayNextReason]
     /// False when the game has no IGDB metadata (flagged "no metadata").
     var hasMetadata: Bool
+    /// The game's IGDB id, when it is matched — drives the card's "Open on IGDB" button
+    /// (nil for a manual / unmatched entry, which shows no button). Additive.
+    var igdbID: Int64?
 
     init(
         id: GameID,
@@ -182,7 +185,8 @@ struct PlayNextSuggestion: Hashable, Sendable, Identifiable {
         score: Double,
         matchStrength: MatchStrength,
         reasons: [PlayNextReason],
-        hasMetadata: Bool
+        hasMetadata: Bool,
+        igdbID: Int64? = nil
     ) {
         self.id = id
         self.title = title
@@ -197,6 +201,7 @@ struct PlayNextSuggestion: Hashable, Sendable, Identifiable {
         self.matchStrength = matchStrength
         self.reasons = reasons
         self.hasMetadata = hasMetadata
+        self.igdbID = igdbID
     }
 }
 

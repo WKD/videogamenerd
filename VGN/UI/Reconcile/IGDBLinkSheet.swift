@@ -117,7 +117,7 @@ struct IGDBLinkSheet: View {
     private var footer: some View {
         HStack {
             let selected = model.results.indices.contains(model.selectedIndex) ? model.results[model.selectedIndex] : nil
-            if let selected, let url = igdbSearchURL(selected.result.name) {
+            if let selected, let url = IGDBWebLink.searchURL(name: selected.result.name) {
                 Link(destination: url) { Label("Open on IGDB", systemImage: "arrow.up.forward.square") }
                     .font(.caption)
             }
@@ -137,11 +137,6 @@ struct IGDBLinkSheet: View {
         return model.results[model.selectedIndex].isChoosable
     }
 
-    private func igdbSearchURL(_ name: String) -> URL? {
-        var comps = URLComponents(string: "https://www.igdb.com/search")
-        comps?.queryItems = [URLQueryItem(name: "type", value: "1"), URLQueryItem(name: "q", value: name)]
-        return comps?.url
-    }
 }
 
 /// One IGDB search result row in the link sheet.

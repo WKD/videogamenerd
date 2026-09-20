@@ -39,7 +39,7 @@ struct PlayNextScreen: View {
 
     var body: some View {
         PlayNextBody(model: model, loader: env.coverLoader, inspect: env.inspect,
-                     paceModel: env.paceModel)
+                     paceModel: env.paceModel, openURL: env.openURL)
     }
 }
 
@@ -52,6 +52,9 @@ struct PlayNextBody: View {
     var inspect: (@MainActor (Int64) -> Void)?
     /// The shared pace controller; a change to its pace recomputes the picks once.
     var paceModel: PlayPaceModel?
+    /// Opens a URL in the browser (the card "Open on IGDB" action). Defaults to a no-op so the
+    /// previews and any caller that doesn't wire it never open a browser.
+    var openURL: (@MainActor (URL) -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.rankingActions) private var rankingActions
@@ -138,7 +141,8 @@ struct PlayNextBody: View {
                         onStart: { act { await model.startPlaying(hero) } },
                         onNot: { act { await model.notThisOne(hero) } },
                         onNever: { act { await model.never(hero) } },
-                        onInspect: { inspect?(hero.id) })
+                        onInspect: { inspect?(hero.id) },
+                        openURL: openURL)
                         .accessibilityIdentifier(A11yID.playNextHero)
                 }
                 alternatives(result)
@@ -174,7 +178,8 @@ struct PlayNextBody: View {
                                 onStart: { act { await model.startPlaying(alt) } },
                                 onNot: { act { await model.notThisOne(alt) } },
                                 onNever: { act { await model.never(alt) } },
-                                onInspect: { inspect?(alt.id) })
+                                onInspect: { inspect?(alt.id) },
+                                openURL: openURL)
                         }
                     }
                     .padding(.vertical, 2)
@@ -196,7 +201,8 @@ struct PlayNextBody: View {
                                 onStart: { act { await model.startPlaying(game) } },
                                 onNot: { act { await model.notThisOne(game) } },
                                 onNever: { act { await model.never(game) } },
-                                onInspect: { inspect?(game.id) })
+                                onInspect: { inspect?(game.id) },
+                                openURL: openURL)
                         }
                     }
                     .padding(.vertical, 4)
