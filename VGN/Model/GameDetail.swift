@@ -39,6 +39,8 @@ struct GameDetail: Sendable, Hashable, Identifiable {
 
     var myPlaytimeS: Int?
     var psnPlaytimeS: Int?
+    /// Batocera's own play time (v17). The inspector lists it on its own row.
+    var batoceraPlaytimeS: Int? = nil
     var ttbHastilyS: Int?
     var ttbNormallyS: Int?
     var ttbCompletelyS: Int?
@@ -73,9 +75,11 @@ struct GameDetail: Sendable, Hashable, Identifiable {
         owned && !copies.isEmpty && copies.allSatisfy { $0.subscription != nil }
     }
 
-    /// The effective playtime shown to the user: manual value wins over PSN
-    /// (PLAN §6.4).
-    var effectivePlaytimeS: Int? { myPlaytimeS ?? psnPlaytimeS }
+    /// The effective playtime shown to the user: manual value wins, else the larger of
+    /// PSN and Batocera — never summed (PLAN §6.4 / §7b v17; ``EffectivePlaytime``).
+    var effectivePlaytimeS: Int? {
+        EffectivePlaytime.seconds(manual: myPlaytimeS, psn: psnPlaytimeS, batocera: batoceraPlaytimeS)
+    }
 
     /// A game that is played but has no tier ("Unranked" — PLAN §8).
     var isUnranked: Bool { played && tierID == nil }

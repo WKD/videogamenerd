@@ -66,13 +66,13 @@ struct PSNCommit: Sendable, Equatable {
     var subscription: String?
     /// Mark the game **played** (+ per-platform played flag) without requiring a copy.
     var markPlayed: Bool
-    /// PSN play time in seconds → `psn_playtime_s` (never overwrites manual `my_playtime_s`).
+    /// Imported play time in seconds → the column named by ``playtimeColumn`` (never
+    /// overwrites the manual `my_playtime_s`).
     var playDurationS: Int?
-    /// **(Batocera, PLAN §15)** Store `playDurationS` only when the game has NO play time at
-    /// all (both `my_playtime_s` and `psn_playtime_s` NULL), so a promoted ROM never clobbers
-    /// a real PSN value. false (default) keeps the PSN path byte-for-byte: PSN writes
-    /// `psn_playtime_s` unconditionally.
-    var playtimeOnlyIfEmpty: Bool
+    /// Where ``playDurationS`` lands (v17). `.psn` (default) keeps the PSN path
+    /// byte-for-byte: `psn_playtime_s`, written unconditionally. `.batocera` (PLAN §15) writes
+    /// `batocera_playtime_s` monotonically and never touches `psn_playtime_s`.
+    var playtimeColumn: ImportedPlaytimeColumn
     /// A completion status to pre-fill **only when the game has none** (100 % title).
     var statusPrefill: PlayStatus?
     /// Earliest / latest known play date (v9, PLAN §13.3). Written monotonically
@@ -84,7 +84,7 @@ struct PSNCommit: Sendable, Equatable {
     init(createProduct: Bool, subscription: String? = nil, markPlayed: Bool = false,
          playDurationS: Int? = nil, statusPrefill: PlayStatus? = nil,
          firstPlayedAt: Date? = nil, lastPlayedAt: Date? = nil,
-         playtimeOnlyIfEmpty: Bool = false) {
+         playtimeColumn: ImportedPlaytimeColumn = .psn) {
         self.createProduct = createProduct
         self.subscription = subscription
         self.markPlayed = markPlayed
@@ -92,8 +92,16 @@ struct PSNCommit: Sendable, Equatable {
         self.statusPrefill = statusPrefill
         self.firstPlayedAt = firstPlayedAt
         self.lastPlayedAt = lastPlayedAt
-        self.playtimeOnlyIfEmpty = playtimeOnlyIfEmpty
+        self.playtimeColumn = playtimeColumn
     }
+}
+
+/// Which `games` column an imported play time is written to (v17, PLAN §7b / §15).
+enum ImportedPlaytimeColumn: Sendable, Equatable {
+    /// `psn_playtime_s` — PSN's own time, written unconditionally.
+    case psn
+    /// `batocera_playtime_s` — the Batocera box's `gametime`, monotonic max.
+    case batocera
 }
 
 /// One PS Plus claim that a committed copy carries but the latest sync no longer lists —
@@ -462,12 +470,13 @@ struct ImportStagingStore: Sendable {
         if psn.markPlayed {
             try LibraryStore.markPlayedWithoutCopy(gameID: gameID, platformID: item.platformID, db: db)
         }
-        // Play time. PSN writes `psn_playtime_s` unconditionally (never over a manual value);
-        // Batocera (`playtimeOnlyIfEmpty`) writes only when the game has no play time at all.
-        if psn.playtimeOnlyIfEmpty {
-            try LibraryStore.setImportedPlaytimeIfEmpty(gameID: gameID, seconds: psn.playDurationS, db: db)
-        } else {
+        // Play time. PSN writes `psn_playtime_s` unconditionally; Batocera writes its own
+        // `batocera_playtime_s` (monotonic max, v17). Neither ever touches the manual value.
+        switch psn.playtimeColumn {
+        case .psn:
             try LibraryStore.setPSNPlaytime(gameID: gameID, seconds: psn.playDurationS, db: db)
+        case .batocera:
+            try LibraryStore.setBatoceraPlaytime(gameID: gameID, seconds: psn.playDurationS, db: db)
         }
         // Earliest / latest known play date (monotonic; nil never overwrites).
         try LibraryStore.setPSNPlayedDates(gameID: gameID, first: psn.firstPlayedAt,

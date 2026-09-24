@@ -59,19 +59,17 @@ extension LibraryStore {
                        arguments: [seconds, Date(), gameID])
     }
 
-    /// Store an **imported** play time (Batocera `gametime`, PLAN §15) **without ever
-    /// clobbering a real value**: it writes `psn_playtime_s` only when BOTH `my_playtime_s`
-    /// (manual) and `psn_playtime_s` are NULL. VGN has no neutral `imported_playtime_s`
-    /// column today (the Batocera lane proposes one — see the hand-off); until then this is
-    /// the safe interim home. A nil `seconds` is a no-op. Idempotent (re-running with the
-    /// same value changes nothing; a later PSN sync still wins because it writes
-    /// unconditionally through ``setPSNPlaytime(gameID:seconds:db:)``).
-    static func setImportedPlaytimeIfEmpty(gameID: Int64, seconds: Int?, db: Database) throws {
-        guard let seconds else { return }
+    /// Set the **Batocera-sourced** play time (the box's `gametime`, PLAN §15 / v17). Only
+    /// ever writes `batocera_playtime_s` — never `psn_playtime_s`, never the manual
+    /// `my_playtime_s` (which wins at read time). **Monotonic**: the stored value only ever
+    /// grows (a re-promotion with a smaller or equal `gametime` changes nothing). A nil or
+    /// negative `seconds` is a no-op. Idempotent.
+    static func setBatoceraPlaytime(gameID: Int64, seconds: Int?, db: Database) throws {
+        guard let seconds, seconds >= 0 else { return }
         try db.execute(sql: """
-            UPDATE games SET psn_playtime_s = ?, updated_at = ?
-            WHERE id = ? AND my_playtime_s IS NULL AND psn_playtime_s IS NULL
-            """, arguments: [seconds, Date(), gameID])
+            UPDATE games SET batocera_playtime_s = ?, updated_at = ?
+            WHERE id = ? AND (batocera_playtime_s IS NULL OR batocera_playtime_s < ?)
+            """, arguments: [seconds, Date(), gameID, seconds])
     }
 
     /// Record the earliest / latest known play date on a game (v9, PLAN §13.3). Filled

@@ -182,6 +182,7 @@ extension LibraryStore {
             platformIDs: platformIDs,
             myPlaytimeS: g["my_playtime_s"],
             psnPlaytimeS: g["psn_playtime_s"],
+            batoceraPlaytimeS: g["batocera_playtime_s"],
             ttbHastilyS: g["ttb_hastily_s"],
             ttbNormallyS: g["ttb_normally_s"],
             ttbCompletelyS: g["ttb_completely_s"],

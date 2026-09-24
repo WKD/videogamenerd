@@ -38,7 +38,9 @@ struct BatoceraPromoteTests {
 
         let (played, playtime, format, source, origin) = try await db.dbWriter.read { db -> (Int64, Int64?, String, String, String?) in
             let played: Int64 = try Int64.fetchOne(db, sql: "SELECT played FROM games WHERE id = ?", arguments: [gameID]) ?? -1
-            let pt: Int64? = try Int64.fetchOne(db, sql: "SELECT psn_playtime_s FROM games WHERE id = ?", arguments: [gameID])
+            let pt: Int64? = try Int64.fetchOne(db, sql: "SELECT batocera_playtime_s FROM games WHERE id = ?", arguments: [gameID])
+            // v17: never written into the PSN column again.
+            #expect(try Int64.fetchOne(db, sql: "SELECT psn_playtime_s FROM games WHERE id = ?", arguments: [gameID]) == nil)
             let fmt: String = try String.fetchOne(db, sql: """
                 SELECT p.format FROM products p JOIN product_games pg ON pg.product_id = p.id
                 WHERE pg.game_id = ?
@@ -48,7 +50,7 @@ struct BatoceraPromoteTests {
             return (played, pt, fmt, src, og)
         }
         #expect(played == 1)                      // > 5 min → played
-        #expect(playtime == 3600)                 // stored (both playtime columns were empty)
+        #expect(playtime == 3600)                 // stored in Batocera's own column (v17)
         #expect(format == "rom")
         #expect(source == "batocera")
         #expect(origin == "batocera")             // GameOrigin tagging
@@ -115,10 +117,40 @@ struct BatoceraPromoteTests {
         let entry = try await seededCandidate(store, name: "X ROM", path: "x.zip", gametime: 999)
         _ = try await promoter.promote([.init(entry: entry, target: .existingGame(gameID: 5), alreadyHasROMCopy: false)])
 
-        let pt = try await db.dbWriter.read { db in
-            try Int64.fetchOne(db, sql: "SELECT psn_playtime_s FROM games WHERE id = 5")
+        let (pt, bato) = try await db.dbWriter.read { db in
+            (try Int64.fetchOne(db, sql: "SELECT psn_playtime_s FROM games WHERE id = 5"),
+             try Int64.fetchOne(db, sql: "SELECT batocera_playtime_s FROM games WHERE id = 5"))
         }
-        #expect(pt == 5000)     // the real value is preserved, not overwritten by 999
+        #expect(pt == 5000)     // PSN's value is never touched by Batocera (v17)
+        #expect(bato == 999)    // Batocera's time lands in its own column
+    }
+
+    /// v17: the Batocera time is monotonic — a re-promotion with a smaller `gametime` never
+    /// lowers it, a larger one raises it; the manual value is never written.
+    @Test(.timeLimit(.minutes(1)))
+    func batoceraPlaytimeIsMonotonicAndNeverTouchesManual() async throws {
+        let db = try await BatoceraTestSupport.makeSeededDB()
+        try await db.dbWriter.write { db in
+            try db.execute(sql: "INSERT INTO games (id, title, played, my_playtime_s) VALUES (7, 'Y', 1, 60)")
+            try LibraryStore.setBatoceraPlaytime(gameID: 7, seconds: 5000, db: db)
+            try LibraryStore.setBatoceraPlaytime(gameID: 7, seconds: 1200, db: db)   // lower: ignored
+            try LibraryStore.setBatoceraPlaytime(gameID: 7, seconds: nil, db: db)    // nil: no-op
+        }
+        let (mine, psn, bato) = try await db.dbWriter.read { db in
+            (try Int64.fetchOne(db, sql: "SELECT my_playtime_s FROM games WHERE id = 7"),
+             try Int64.fetchOne(db, sql: "SELECT psn_playtime_s FROM games WHERE id = 7"),
+             try Int64.fetchOne(db, sql: "SELECT batocera_playtime_s FROM games WHERE id = 7"))
+        }
+        #expect(mine == 60)
+        #expect(psn == nil)
+        #expect(bato == 5000)
+        try await db.dbWriter.write { db in
+            try LibraryStore.setBatoceraPlaytime(gameID: 7, seconds: 9000, db: db)   // higher: raises
+        }
+        let raised = try await db.dbWriter.read { db in
+            try Int64.fetchOne(db, sql: "SELECT batocera_playtime_s FROM games WHERE id = 7")
+        }
+        #expect(raised == 9000)
     }
 
     @Test(.timeLimit(.minutes(1)))

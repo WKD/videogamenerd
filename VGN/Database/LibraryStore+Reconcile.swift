@@ -416,6 +416,7 @@ extension LibraryStore {
         target.status = target.status ?? source.status
         target.myPlaytimeS = target.myPlaytimeS ?? source.myPlaytimeS
         target.psnPlaytimeS = target.psnPlaytimeS ?? source.psnPlaytimeS
+        target.batoceraPlaytimeS = [target.batoceraPlaytimeS, source.batoceraPlaytimeS].compactMap { $0 }.max()
         target.year = target.year ?? source.year
         target.releaseDate = target.releaseDate ?? source.releaseDate
         target.summary = target.summary ?? source.summary

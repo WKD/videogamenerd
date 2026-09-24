@@ -64,10 +64,11 @@ struct LibraryStatsStore: Sendable {
         }
     }
 
-    /// Effective playtime expression (manual over PSN — PLAN §6.4), 0 when neither.
-    private static let effective = "COALESCE(g.my_playtime_s, g.psn_playtime_s, 0)"
-    /// Effective playtime, NULL when neither side is set (for "has a value" tests).
-    private static let effectiveOrNull = "COALESCE(g.my_playtime_s, g.psn_playtime_s)"
+    /// Effective playtime expression (manual, else max(PSN, Batocera) — the shared
+    /// ``LibraryQuery/effectivePlaytimeSQL(alias:)``), 0 when none.
+    private static let effective = "COALESCE(\(LibraryQuery.effectivePlaytimeSQL()), 0)"
+    /// Effective playtime, NULL when none is set (for "has a value" tests).
+    private static let effectiveOrNull = LibraryQuery.effectivePlaytimeSQL()
 
     // MARK: - Report
 

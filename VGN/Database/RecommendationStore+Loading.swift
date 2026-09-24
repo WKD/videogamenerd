@@ -47,7 +47,8 @@ extension RecommendationStore {
     static func loadCandidates(db: Database) throws -> [Candidate] {
         let rows = try Row.fetchAll(db, sql: """
             SELECT g.id, g.igdb_id, g.title, g.year, g.played, g.status, g.revisit,
-                   g.my_playtime_s, g.ttb_hastily_s, g.ttb_normally_s, g.ttb_completely_s,
+                   \(LibraryQuery.effectivePlaytimeSQL()) AS effective_playtime_s,
+                   g.ttb_hastily_s, g.ttb_normally_s, g.ttb_completely_s,
                    g.ttb_source,
                    g.igdb_rating, g.igdb_rating_count, g.cover_file,
                    NOT EXISTS (
@@ -90,7 +91,9 @@ extension RecommendationStore {
                 traits: feature?.traits ?? [],
                 estimateSeconds: length.main,
                 completionistSeconds: length.completionist,
-                myPlaytimeSeconds: row["my_playtime_s"],
+                // Effective play time (manual, else max(PSN, Batocera) — v17), so Play Next's
+                // remaining time for Playing / To Revisit counts imported hours too.
+                myPlaytimeSeconds: row["effective_playtime_s"],
                 status: status,
                 igdbRating: row["igdb_rating"],
                 ratingCount: row["igdb_rating_count"],

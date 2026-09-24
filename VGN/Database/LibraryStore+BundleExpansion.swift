@@ -37,7 +37,7 @@ struct BundlePlaceholderData: Sendable, Equatable {
         hasTier = g.tierID != nil
         hasRank = g.rankKey != nil
         hasStatus = g.status != nil
-        hasPlaytime = g.myPlaytimeS != nil || g.psnPlaytimeS != nil
+        hasPlaytime = g.myPlaytimeS != nil || g.psnPlaytimeS != nil || g.batoceraPlaytimeS != nil
         hasPlayDates = g.firstPlayedAt != nil || g.lastPlayedAt != nil
         userEdited = !UserEditedFields(raw: g.userEdited).isEmpty
     }
@@ -422,6 +422,7 @@ extension LibraryStore {
         target.status = target.status ?? source.status
         target.myPlaytimeS = target.myPlaytimeS ?? source.myPlaytimeS
         target.psnPlaytimeS = target.psnPlaytimeS ?? source.psnPlaytimeS
+        target.batoceraPlaytimeS = [target.batoceraPlaytimeS, source.batoceraPlaytimeS].compactMap { $0 }.max()
         if target.tierID == nil, let tier = source.tierID {
             target.tierID = tier                  // played already 1 above (invariant 2 holds)
             target.rankKey = source.rankKey

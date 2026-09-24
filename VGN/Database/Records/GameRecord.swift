@@ -23,6 +23,8 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
     var rankKey: Int64?
     var myPlaytimeS: Int?
     var psnPlaytimeS: Int?
+    /// Batocera's own play time (v17), written monotonically by the Batocera promotion.
+    var batoceraPlaytimeS: Int?
     var ttbHastilyS: Int?
     var ttbNormallyS: Int?
     var ttbCompletelyS: Int?
@@ -61,6 +63,7 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         case rankKey = "rank_key"
         case myPlaytimeS = "my_playtime_s"
         case psnPlaytimeS = "psn_playtime_s"
+        case batoceraPlaytimeS = "batocera_playtime_s"
         case ttbHastilyS = "ttb_hastily_s"
         case ttbNormallyS = "ttb_normally_s"
         case ttbCompletelyS = "ttb_completely_s"
@@ -100,6 +103,7 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         rankKey: Int64? = nil,
         myPlaytimeS: Int? = nil,
         psnPlaytimeS: Int? = nil,
+        batoceraPlaytimeS: Int? = nil,
         ttbHastilyS: Int? = nil,
         ttbNormallyS: Int? = nil,
         ttbCompletelyS: Int? = nil,
@@ -131,6 +135,7 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         self.rankKey = rankKey
         self.myPlaytimeS = myPlaytimeS
         self.psnPlaytimeS = psnPlaytimeS
+        self.batoceraPlaytimeS = batoceraPlaytimeS
         self.ttbHastilyS = ttbHastilyS
         self.ttbNormallyS = ttbNormallyS
         self.ttbCompletelyS = ttbCompletelyS

@@ -429,7 +429,8 @@ private struct SingleGameInspector: View {
             // A single label-left / value-right table (owner 2026-09-20): PSN/Batocera source
             // rows and the IGDB estimates read as one thing and never wrap mid-value.
             PlaytimeEstimatesTable(
-                psnSeconds: detail.psnPlaytimeS, manualWins: detail.myPlaytimeS != nil,
+                psnSeconds: detail.psnPlaytimeS, batoceraSeconds: detail.batoceraPlaytimeS,
+                manualWins: detail.myPlaytimeS != nil,
                 mainS: detail.ttbNormallyS, completionistS: detail.ttbCompletelyS,
                 rushedS: detail.ttbHastilyS,
                 sourceLabel: Self.sourceLabel(detail.ttbSource), showEstimates: hasAverages)
@@ -773,6 +774,8 @@ private struct PlaytimeEditor: View {
 /// secondary-styled).
 struct PlaytimeEstimatesTable: View {
     var psnSeconds: Int?
+    /// Batocera's own play time (v17) — its own row, never summed with PSN.
+    var batoceraSeconds: Int? = nil
     var manualWins: Bool
     var mainS: Int?
     var completionistS: Int?
@@ -781,6 +784,7 @@ struct PlaytimeEstimatesTable: View {
     var showEstimates: Bool
 
     private var hasPSN: Bool { (psnSeconds ?? 0) > 0 }
+    private var hasBatocera: Bool { (batoceraSeconds ?? 0) > 0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -788,14 +792,19 @@ struct PlaytimeEstimatesTable: View {
                 if let psn = psnSeconds, psn > 0 {
                     row("PSN", PlaytimeParser.format(seconds: psn), secondary: true)
                 }
+                if let batocera = batoceraSeconds, batocera > 0 {
+                    row("Batocera", PlaytimeParser.format(seconds: batocera), secondary: true)
+                }
                 if showEstimates {
                     row("Main", estimate(mainS))
                     row("Completionist", estimate(completionistS))
                     row("Rushed", estimate(rushedS), secondary: true)
                 }
             }
-            if hasPSN, manualWins {
-                Text("Your manual time is used; PSN is kept for reference.")
+            if hasPSN || hasBatocera, manualWins {
+                Text(hasPSN && hasBatocera
+                     ? "Your manual time is used; PSN + Batocera kept for reference."
+                     : "Your manual time is used; \(hasPSN ? "PSN" : "Batocera") is kept for reference.")
                     .font(.caption2).foregroundStyle(.tertiary)
                     .lineLimit(1).minimumScaleFactor(0.85)
             }
