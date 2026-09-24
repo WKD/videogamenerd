@@ -468,8 +468,8 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 
 ## HowLongToBeat — cache, platforms, manual link (wave 20) [owner]
 - **Refresh serves the cache the second time.** Refresh a flagged game from the inspector, then
-  Refresh it again within a few hours → the second is instant / "from cache" (no request); a Refresh a
-  couple of days later goes to the network again (paced). "Ask HowLongToBeat again" forces one request.
+  Refresh it again → the second is instant / "from cache" (no request). *(Wave 21: no 24 h floor any
+  more — any valid cached reply is used; Game ▸ Ask HowLongToBeat Again forces one request.)*
 - **Platforms disambiguate.** For an ambiguous game (e.g. a title with a PS and a PC entry), the picker
   shows "In your library: …" and emphasises the candidate on my platform; where one clearly matches it
   fills without asking, and two same-platform twins still ask.
@@ -479,6 +479,18 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   game asks nothing** (exact by id). **Unlink** clears the link; times stay. ⌘Z undoes each.
 - **Manual search is polite.** Typing does not fire a request per keystroke (waits for Return or a pause,
   ≥ 3 chars); the counter shows the requests spent this session and stops on the cap or a bad reply.
+
+## HowLongToBeat — Main Story, order-free matching, cache (wave 21, lane B) [owner]
+- **Akira (NES) is measured before any refresh.** Its inspector Main row shows **≈ 2 h** (HLTB's 2 h 14; tooltip
+  "HowLongToBeat lists only Main Story for this game."), Rushed shows the same, and it sits in **BY
+  LENGTH ▸ One Evening**, not Unmeasured / No Estimate / Suspicious.
+- **Akira: after Refresh (from cache, 0 requests) Main shows ≈ 2 h (HLTB's 2 h 14) and it sits in One Evening.** The
+  banner says "(from cache, N days old)" and "Main+Extra not on HowLongToBeat — main story used."
+- **The Beast Within: A Gabriel Knight Mystery**: Refresh links **Gabriel Knight II: The Beast Within
+  (1995)** (or, at worst, offers it first in the picker) — from the cache, no request.
+- **Refresh never re-asks for a cached game**; **Game ▸ Ask HowLongToBeat Again** (one selected game)
+  is the only way to force a request. A bulk Refresh summary ends "… · x from cache · y from network"
+  and separates "need your pick" from "no HLTB entry".
 
 ## Filter result count (wave 20) [owner]
 - With a filter or search active, the chips bar's right end reads "N of M games" (e.g. "37 of 443
@@ -496,6 +508,35 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   come back to it", and (if it has playtime) shows the time *left*. "Start playing" it, then Undo — it must
   return to To Revisit, not plain Abandoned.
 - Confirm nothing became To Revisit by itself: only games you flagged carry it.
+
+## "Holds up today?" (wave 21) [owner]
+- Open **Needs a "Holds Up" Rating (N)** in the sidebar (under the review lists). It lists your played games,
+  best-ranked first. Rate a few with the inspector's three buttons or **⌃⌥⌘1 / 2 / 3** — each one leaves the list
+  at once, the count drops, and the selection moves to the next game. **⌃⌥⌘0** (or the ✕) clears; Edit ▸ Undo
+  "Holds Up Today?" reverts. The row disappears when every played game is rated.
+- Right-click a mixed selection ▸ **Holds Up Today?**: ✓ / – reflect the played games; unplayed ones are named in a
+  greyed footer and left alone. In **Triage**, press **1 / 2 / 3** to rate the card without leaving it.
+- Mark an S-tier game you can't play today **Too Archaic**: it disappears from **Play Next** (the exclusions line
+  says "1 too archaic"), comes back with Options ▸ **Include too archaic**, and your Tier Board / The Top / duels are
+  unchanged. A **Holds Up** game reads "You marked it as holding up today".
+- Filter ▸ **Holds Up** ▸ Too Archaic shows exactly those; Stats ▸ Status shows the four counts.
+- With PSN first-played dates imported: a Play Next card reads "First played in 1991"; in the taste-model popover
+  (the ? next to "Taste model"), switch on **Also run without games first played before…**, pick 1995, and read
+  "ρ = 0.52 · without pre-1995 games: 0.41" — how far nostalgia and present taste drift.
+- Confirm nothing was pre-filled: before you rate anything, every played game is Unrated.
+
+## Reset All Duels (wave 21) [owner]
+- **Ranking ▸ Reset All Duels…** (or "Reset Duels…" at the top of the Duel screen) asks "Forget 126 duels and
+  un-place 34 games? Tiers are kept." with your real numbers. After confirming: every game is still in its tier,
+  The Top shows the tier midpoints (~ scores, unnumbered), Duel starts placing again, and
+  `~/Library/Application Support/VGN/backups/before-duel-reset-….sqlite` exists. **Edit ▸ Undo Reset All Duels**
+  puts every placement and duel back.
+- **Ranking ▸ Reset Duels in Tier ▸ A…** does the same for one tier only; the other tiers keep their order.
+
+## PS Plus Only (wave 21) [owner]
+- If you own games only through PS Plus, **PS Plus Only (N)** appears right after Owned with the PS Plus badge;
+  N matches Format ▸ PS Plus. Its header says they leave with the subscription (and when, if you set a date in
+  Settings ▸ PlayStation). Buying one on disc takes it off the list. It is not THE VAULT ▸ PS Plus.
 
 ## Batocera play time column · Ask Claude for the vault · compilation caption (wave 21, W21-C) [owner]
 - **After the v17 upgrade** (a `premigration-*` snapshot is taken first): open a game you only

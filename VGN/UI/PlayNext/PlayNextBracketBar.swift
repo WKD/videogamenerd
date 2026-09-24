@@ -156,6 +156,11 @@ struct PlayNextBracketBar: View {
             Toggle("Include played (no status)", isOn: Binding(
                 get: { model.includePlayedWithoutStatus },
                 set: { model.setIncludePlayedWithoutStatus($0) }))
+            // "Holds up today?" (PLAN §7b): games marked Too Archaic are left out unless asked.
+            Toggle("Include too archaic", isOn: Binding(
+                get: { model.includeArchaic },
+                set: { model.setIncludeArchaic($0) }))
+                .help("Games you marked \u{201C}Too Archaic\u{201D} — no longer playable for you today.")
             Divider()
             Toggle("Prioritise PS Plus games", isOn: Binding(
                 get: { model.preferExpiringSubscription },

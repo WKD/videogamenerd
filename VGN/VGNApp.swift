@@ -54,7 +54,11 @@ struct VGNApp: App {
             PSNImportCommands()
             DeliciousImportCommands()
             BatoceraImportCommands()
-            LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
+            // Grouped: a `commands` builder takes at most ten direct children.
+            Group {
+                LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
+                RankingCommands(presenter: env.ranking?.duelReset)
+            }
         }
 
         // Library Stats — a separate window (PLAN §6.4 / §8) so the dashboard stays

@@ -31,8 +31,9 @@ nothing else is affected.
 3. **Match** (`HLTBMatcher`, pure): `TitleNormalizer` + `FuzzyMatch` over the
    candidate's name + aliases, release year ± 1 as the tie-breaker → confident /
    ambiguous / not-found.
-4. **Fill** (`LibraryStore.applyHLTBTimes`, one transaction): Main → `ttb_hastily_s`,
-   Main+Extra → `ttb_normally_s`, Completionist → `ttb_completely_s`. **Only empty
+4. **Fill** (`LibraryStore.applyHLTBTimes`, one transaction) with the wave-21 mapping
+   (`HLTBCandidate.mappedTimes`, see "Mapping" below): main ← Main+Extra, else Main Story;
+   rushed ← Main Story; completionist ← Completionist. **Only empty
    fields are filled** (an IGDB or hand-typed value is never overwritten). `ttb_source`
    becomes `'hltb'` only when a value was written and the game had no prior source; a
    game that already carried IGDB times keeps its `igdb` label and just gains the
@@ -144,12 +145,9 @@ so later refreshes are exact.
   an error/reject is never cached). Wave 20 adds a **second entry keyed by the HLTB id**
   (`id:<hltbID>` → the chosen candidate's JSON incl. its canonical HLTB name, same 180 d TTL),
   written whenever a candidate is applied / linked / picked. It powers exact refresh-by-id.
-  - **The Refresh rule I settled on.** A normal fill takes any fresh cache. An explicit **Refresh**
-    uses `HLTBFreshnessPolicy.refresh`: if the cached reply is **younger than 24 h**
-    (`ImportPolicy.hltbRefreshFloor`) it is **served from cache** (zero requests) — you just ran it,
-    no point re-asking; **older than 24 h** (but inside the 180 d TTL) a Refresh **goes to the
-    network** (paced). A secondary **"Ask HowLongToBeat again"** (`.bypassOne`) ignores the cache for
-    exactly one entry. `HLTBClient.cacheAge(title:now:)` backs a "from cache, N h old" caption.
+  - ~~**The Refresh rule I settled on.** … a Refresh older than 24 h (`ImportPolicy.hltbRefreshFloor`)
+    goes to the network …~~ **Superseded in wave 21** — there is no refresh floor any more; see
+    "Wave 21" below.
 - **Platforms disambiguate (D2).** `timeToBeatFacts` now returns each game's **effective platforms**
   (`LibraryQuery.effectivePlatformsSQL`) and its stored `hltb_id`. `HLTBPlatformMap` (pure, in
   `VGN/Matching`) maps VGN slugs ↔ HLTB platform names (spelling lint against the fixtures).
@@ -177,6 +175,93 @@ so later refreshes are exact.
   step. Inert (no network) in sample/seeded/test modes. Reachable from the inspector, the grid context
   menu and the Game menu; the bulk sheet's unresolved rows get a per-row **Find…**.
 
+## Wave 21 — Main-Story-only games, order-free matching, Refresh = cache
+
+Three owner reports (checked read-only against the real library + HLTB cache): *Akira* (NES) linked
+to HLTB but shown with **no estimate** (HLTB lists only a Main Story; our mapping put it in the rushed
+slot, and "rushed-only ⇒ unmeasured" hid it); *The Beast Within: A Gabriel Knight Mystery* **not
+found** although the search returned *Gabriel Knight II: The Beast Within* (1995); and **Refresh went
+to the network** for anything older than a day.
+
+### Mapping (the write rule)
+
+`HLTBCandidate.mappedTimes` — the one place HLTB columns become VGN times; used by the fill
+(`applyHLTBTimes`, empty fields only), the replace (`replaceHLTBTimes`: Refresh, bulk Refresh, the
+picker, **Link & Use**):
+
+| VGN column | value |
+|---|---|
+| `ttb_normally_s` (Main) | `comp_plus` if > 0, else `comp_main` if > 0, else `comp_all` if > 0 (only when both main and plus are 0) |
+| `ttb_hastily_s` (Rushed) | `comp_main` if > 0, else nil |
+| `ttb_completely_s` (Completionist) | `comp_100` if > 0, else nil — never fabricated |
+
+`comp_all` (All Styles) is a real average of real runs but mixes play styles, so it is the last
+resort and only ever fills the main slot. `comp_all` and `comp_{main,plus,100}_count` are parsed
+additively (optional `Codable` fields — pre-wave-21 `id:` cache entries still decode). Surfaces: the
+single-game banner and the bulk summary say "Main+Extra not on HowLongToBeat — main story used"; the
+picker / Find rows say "Main Story only (2 reports) — used as main".
+
+### The read rule (rows written before wave 21 — no data change)
+
+PLAN §4 inv. 5 forbids a repair pass, so rows already written as rushed-only are read differently: the
+**effective main** is `ttb_normally_s`, or — only when `ttb_source = 'hltb'` and the main is empty —
+`ttb_hastily_s` (`LibraryQuery.effectiveMainSQL` ≡ `EstimateSanity.effectiveMain`). It replaces the
+raw main everywhere in the ONE length expression (`lengthEstimateExpr` → BY LENGTH shelves, Unmeasured,
+the Playtime filter's No Estimate, the Length sort, Stats backlog) and its Swift mirror
+(`EstimateSanity.lengthInputs` → Play Next). IGDB-sourced rushed-only rows keep "rushed-only ⇒
+unmeasured". The Suspicious-Estimate predicate is unchanged (hltb rows are never flagged). The
+inspector's Main row shows the effective main with the tooltip "HowLongToBeat lists only Main Story
+for this game." and a caption; Rushed shows the same value. A Refresh then rewrites the row with the
+new mapping (from cache, zero requests). The inspector does not show the report count (the counts
+live in the cached reply, not in `games`) — the picker / Find rows do.
+
+### Matching: order-free token set
+
+`TitleTokenSet` (pure, `VGN/Matching`). Significant tokens = `TitleNormalizer` at `.articleless`
+(fold, lowercase, roman → arabic, `&` → and, punctuation, leading article, edition tags) minus
+`a/an/the/of/and`; a **series-tag subtitle** ("A Gabriel Knight Mystery": `a|an` + 1–4 words +
+mystery/adventure/story/tale/saga/novel/thriller/game) contributes only its series name. Score:
+equal sets → 0.95; one set ⊂ the other → `0.90 + 0.05 · |small|/|large|` **only when** `|small| ≥ 3`,
+coverage ≥ 0.75, no extra token is a numeral (unless the smaller title had a series tag — the "A
+<Series> Mystery" form drops the number) and no extra token is a separate-game word (remake,
+remastered, hd, origins, …); otherwise Dice `2|A∩B|/(|A|+|B|)`. `HLTBMatcher` base =
+`max(FuzzyMatch, TitleTokenSet)` against the **library title and the ladder query** (the old matcher
+scored rung 3's candidates against the rung-3 query only — the actual cause of the owner's "not
+found"). Thresholds (0.90 / 0.74, margin 0.05, year ± 0.06) unchanged.
+
+| pair | token set | verdict |
+|---|---|---|
+| The Beast Within: A Gabriel Knight Mystery ↔ Gabriel Knight II: The Beast Within | 0.94 | confident (+0.06 year 1995) |
+| … ↔ Slain 2: The Beast Within (2027) | 0.5 | not plausible |
+| Resident Evil 2 ↔ Resident Evil · Doom 3 ↔ Doom | Dice (0.8 / 0.67) | never confident |
+| Gabriel Knight: Sins of the Fathers ↔ Gabriel Knight II: The Beast Within | 0.44 | not plausible |
+| Tomb Raider ↔ Rise of the Tomb Raider · FF VII ↔ FF VII Remake | Dice | never confident |
+
+### Ladder
+
+Still ≤ 3 queries, full title first. When the subtitle is a series tag, rung 2 is the
+**subtitle-swapped** query ("The Beast Within: A Gabriel Knight Mystery" → "Gabriel Knight Beast
+Within"), otherwise the noise-stripped form; rung 3 drops the subtitle. Candidates from every rung are
+**pooled**: `notFound` only when nothing plausible came back from any rung; otherwise at least
+`ambiguous` (the picker, with my platforms + years). The bulk summary reads "n filled · k need your
+pick · m no HLTB entry" (+ "unchanged", "linked by id", "links lost", "x from cache · y from network").
+
+### Cache rule
+
+The 24 h refresh floor is gone (`ImportPolicy.hltbRefreshFloor` and `HLTBFreshnessPolicy.refresh`
+removed). Refresh — single and bulk — serves any valid cached reply inside its TTL (found 180 d /
+no-result 30 d) exactly like Fetch Missing: a Refresh re-applies *our* mapping + matching, and HLTB's
+numbers move slowly. The fill service first runs a **cache pass** over every rung
+(`HLTBSearching.cachedCandidates`, zero requests) and only asks the network for rungs the cache did not
+answer when nothing cached was confident. **"Ask HowLongToBeat Again"** (Game menu, one selected game;
+`.bypassOne`) is the one explicit bypass — it asks every rung of that one game again and stores the new
+replies; a bulk run never bypasses. The single-game banner says "(from cache, N days old)" or
+"(asked HowLongToBeat)".
+
+Not built: **Source: HowLongToBeat filter** (Playtime ▸ Estimate Source) — it would add a facet to
+`LibraryFilter` / `FilterChip` / the filter menu in the same wave another lane adds the *Holds Up*
+facet there; filed for a later wave.
+
 ## Fixtures / recording
 
 `scripts/record-hltb-fixtures.swift` — bounded (≤ 25 requests, ≥ 2 s apart, serial, stop on the
@@ -192,6 +277,8 @@ Committed fixtures:
 - `hltb-discovery-home.html`, `hltb-discovery-app.js` — **hand-authored minimal excerpts** mirroring
   the real turbopack homepage + the one app chunk's two `/api/` fetches (the init GET and the POST
   search). The recorder never commits whole minified bundles.
+- `hltb-link-{akira,beast-within}.json` — **synthetic** (wave 21), built from the shapes of the
+  owner's cached replies (game ids / names / years / times / counts only, no URLs, no user data).
 - `hltb-init.json` — a **sanitised** `{token, hpKey, hpVal}` (the live token embeds the caller IP +
   UA, so it is never recorded verbatim). The parser reads it defensively, so a placeholder is fine.
 

@@ -31,7 +31,7 @@ import GRDB
             } } }
             return expected
         }
-        let rows = try await db.dbWriter.read { db -> [Row] in
+        let rows = try db.dbWriter.read { db -> [Row] in
             try Row.fetchAll(db, sql: "SELECT g.id, \(LibraryQuery.effectivePlaytimeSQL()) AS e FROM games g")
         }
         #expect(rows.count == values.count * values.count * values.count)
@@ -41,7 +41,7 @@ import GRDB
             #expect(e == expected[id]!, "game \(id)")
         }
         // The bare-column variant (exporter) is the same expression.
-        let bare = try await db.dbWriter.read { db -> [Row] in
+        let bare = try db.dbWriter.read { db -> [Row] in
             try Row.fetchAll(db, sql: "SELECT id, \(LibraryQuery.effectivePlaytimeSQL(alias: nil)) AS e FROM games")
         }
         for r in bare { #expect((r["e"] as Int?) == expected[r["id"] as Int64]!) }
@@ -75,9 +75,17 @@ import GRDB
 
         let csv = try await LibraryExporter(store.database).exportCSV()
         let header = LibraryExporter.csvHeader
+        #expect(Array(header.suffix(2)) == ["holds_up", "batocera_playtime_hours"])   // appended, in order
         let line = try #require(csv.split(separator: "\n").map(String.init).first { $0.hasPrefix("Both Machines") })
         let fields = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         #expect(fields[header.firstIndex(of: "my_playtime_hours")!] == "2.0")
         #expect(fields[header.firstIndex(of: "batocera_playtime_hours")!] == "2.0")
+
+        let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601
+        let doc = try d.decode(LibraryExporter.Document.self, from: try await LibraryExporter(store.database).exportJSON())
+        let game = try #require(doc.games.first { $0.id == id })
+        #expect(game.batoceraPlaytimeS == 7200)
+        #expect(game.psnPlaytimeS == 3600)
+        #expect(game.holdsUp == nil)
     }
 }

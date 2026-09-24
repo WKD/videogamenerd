@@ -32,6 +32,12 @@ enum RecommendationEngine {
                 if !options.includePlayedWithoutStatus { exclusions.byStatus += 1; continue }
             }
 
+            // "Holds up today?" (PLAN §7b): a game the owner finds Too Archaic to play now is
+            // not a regular pick — counted, and back only when "Include archaic" is on.
+            if candidate.holdsUp == .tooArchaic && !options.includeArchaic {
+                exclusions.tooArchaic += 1; continue
+            }
+
             // Feedback (PLAN §7b rotation).
             if input.feedback.never.contains(candidate.id) { exclusions.byFeedback += 1; continue }
             if let until = input.feedback.snoozedUntil[candidate.id], options.now < until {
@@ -144,7 +150,11 @@ enum RecommendationEngine {
         // reorders near-ties — and, being applied only here, is backtest-neutral.
         let favBonus = (candidate.isBatoceraFavourite && candidate.status == .backlog)
             ? weights.batoceraFavouriteBonus : 0
-        let finalScore = clamp(blended + timeTerm + jitter - pickedPenalty + subBonus + favBonus)
+        // "Holds up today?" (PLAN §7b) — adjusts the CANDIDATE only; the taste profile, trait
+        // affinities and direct links above never see the mark (a nostalgic S still says "I
+        // love what this game does"). Applied here only, never in the backtest ⇒ neutral.
+        let holdsUpTerm = holdsUpAdjustment(candidate.holdsUp, weights: weights)
+        let finalScore = clamp(blended + timeTerm + jitter - pickedPenalty + subBonus + favBonus + holdsUpTerm)
 
         let evidenceMass = affinity.evidence + linkResult.links.map { abs($0.contribution) }.reduce(0, +)
         let strength = matchStrength(evidenceMass: evidenceMass, rankedCount: rankedCount,
@@ -172,9 +182,21 @@ enum RecommendationEngine {
             matchStrength: strength,
             reasons: reasons,
             hasMetadata: candidate.hasMetadata,
-            igdbID: candidate.igdbID
+            igdbID: candidate.igdbID,
+            holdsUp: candidate.holdsUp,
+            firstPlayedAt: candidate.firstPlayedAt
         )
         return Scored(id: candidate.id, finalScore: finalScore, suggestion: suggestion)
+    }
+
+    /// The "Holds up today?" score term: +bonus (Holds Up), −penalty (Of Its Time, and Too
+    /// Archaic when it is included at all), 0 when unrated.
+    static func holdsUpAdjustment(_ mark: HoldsUp?, weights: RecommendationWeights) -> Double {
+        switch mark {
+        case .holdsUp: return weights.holdsUpBonus
+        case .ofItsTime, .tooArchaic: return -weights.ofItsTimePenalty
+        case nil: return 0
+        }
     }
 
     // MARK: - Match strength
@@ -249,6 +271,14 @@ enum RecommendationEngine {
         // changes the score (no boost), it explains the pick.
         if candidate.status == .toRevisit {
             reasons.append(.wantedToRevisit)
+        }
+
+        // "Holds up today?" (PLAN §7b): say so when the owner's mark moved this pick.
+        switch candidate.holdsUp {
+        case .holdsUp: reasons.append(.markedHoldsUp)
+        case .ofItsTime: reasons.append(.markedOfItsTime)
+        case .tooArchaic: reasons.append(.markedTooArchaic)
+        case nil: break
         }
 
         // A game that leaves with PS Plus is worth flagging (PLAN §13.3/§16) — an informative

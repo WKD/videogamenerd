@@ -24,7 +24,6 @@ actor HLTBClient: HLTBSearching {
     private let wallClock: @Sendable () -> Date
     private let hitTTL: TimeInterval
     private let missTTL: TimeInterval
-    private let refreshFloor: TimeInterval
     /// A pre-resolved endpoint (tests inject a fixed one; live discovery finds it).
     private let injectedDiscovery: HLTBEndpoint.Discovery?
     /// Pre-resolved per-session auth (tests inject it to skip the `/init` round-trip).
@@ -50,7 +49,6 @@ actor HLTBClient: HLTBSearching {
          wallClock: @Sendable @escaping () -> Date = { Date() },
          hitTTL: TimeInterval = ImportPolicy.hltbHitTTL,
          missTTL: TimeInterval = ImportPolicy.hltbMissTTL,
-         refreshFloor: TimeInterval = ImportPolicy.hltbRefreshFloor,
          discovery: HLTBEndpoint.Discovery? = nil,
          auth: HLTBEndpoint.Auth? = nil,
          maxDiscoveryScripts: Int = 12,
@@ -64,7 +62,6 @@ actor HLTBClient: HLTBSearching {
         self.wallClock = wallClock
         self.hitTTL = hitTTL
         self.missTTL = missTTL
-        self.refreshFloor = refreshFloor
         self.injectedDiscovery = discovery
         self.injectedAuth = auth
         self.maxDiscoveryScripts = maxDiscoveryScripts
@@ -80,27 +77,32 @@ actor HLTBClient: HLTBSearching {
         try await search(title: title, policy: .cacheFirst)
     }
 
-    /// Search with an explicit freshness policy (PLAN §5.3, D1). `.cacheFirst` serves any
-    /// entry inside its TTL; `.refresh` serves the cache only when it is younger than the
-    /// refresh floor (24 h) and otherwise re-fetches (paced); `.bypassOne` ignores the
-    /// cache for this one lookup. A served cache hit costs **zero** requests in every mode.
+    /// Search with an explicit freshness policy (PLAN §5.3). `.cacheFirst` — every Fetch
+    /// **and every Refresh** (wave 21, D3) — serves any entry inside its TTL (found 180 d /
+    /// no-result 30 d) at **zero** requests; `.bypassOne` ("Ask HowLongToBeat Again")
+    /// ignores the cache for this one lookup and stores the new reply.
     func search(title: String, policy: HLTBFreshnessPolicy) async throws -> [HLTBCandidate] {
         let key = Self.cacheKey(title: title)
-        if policy != .bypassOne,
+        if policy == .cacheFirst,
            let fresh = try await cache.freshEntry(source: HLTBSource.id, key: key, now: wallClock()) {
-            let servable: Bool = {
-                switch policy {
-                case .cacheFirst: return true
-                case .refresh: return wallClock().timeIntervalSince(fresh.fetchedAt) < refreshFloor
-                case .bypassOne: return false
-                }
-            }()
-            if servable {
-                fromCache += 1
-                return (try? HLTBEndpoint.parseCandidates(fresh.body)) ?? []
-            }
+            fromCache += 1
+            return (try? HLTBEndpoint.parseCandidates(fresh.body)) ?? []
         }
         return try await fetchAndStore(title: title, key: key)
+    }
+
+    /// A valid cached reply for `title`, or nil — zero requests (the fill service's cache
+    /// pass, wave 21 D3). A served entry counts as "from cache".
+    func cachedCandidates(title: String) async -> [HLTBCandidate]? {
+        guard let fresh = try? await cache.freshEntry(
+            source: HLTBSource.id, key: Self.cacheKey(title: title), now: wallClock()) else { return nil }
+        fromCache += 1
+        return (try? HLTBEndpoint.parseCandidates(fresh.body)) ?? []
+    }
+
+    /// This run's "from cache · from network" tallies (bulk summary / single caption).
+    func requestTally() async -> HLTBRequestTally {
+        HLTBRequestTally(fromCache: fromCache, fromNetwork: fromNetwork)
     }
 
     /// The one network path: session setup, allow-list, budget, pacing, validation, and —

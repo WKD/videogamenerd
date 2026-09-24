@@ -4,8 +4,8 @@ import GRDB
 @testable import VGN
 
 /// The HLTB client's caching surface added in wave 20 (PLAN §5.3, D1): the id-keyed
-/// entry (`id:<hltbID>`), the freshness policies (cacheFirst / refresh 24 h floor /
-/// bypassOne), and `cacheAge` for the "from cache, N h old" caption — all offline through
+/// entry (`id:<hltbID>`), the freshness policies (cacheFirst — also every Refresh since wave 21 —
+/// / bypassOne), and `cacheAge` for the "from cache, N h old" caption — all offline through
 /// the stub transport + an injected wall clock.
 @Suite struct HLTBClientCacheTests {
 
@@ -84,26 +84,45 @@ import GRDB
         #expect(await c2.fromCache == 1)
     }
 
-    @Test func refreshServesCacheWithin24hButRefetchesBeyondIt() async throws {
+    /// Wave 21 (D3): there is no 24 h "refresh floor" any more — a Refresh uses `.cacheFirst`
+    /// and serves any valid cached reply inside its TTL (here 100 days old, found → 180 d) at
+    /// zero requests; only past the TTL does it go to the network.
+    @Test func refreshServesAnyValidCachedReplyWithinItsTTL() async throws {
         let t = try transport(searchFixture: "hltb-search-bloodborne.json")
         let cache = try cacheStore()
         let base = Date(timeIntervalSince1970: 5_000_000)
         _ = try await client(t, cache, wall: { base }).search(title: "Bloodborne")
         let afterFirst = t.requestCount
 
-        // 3 h later, a Refresh is served from cache (younger than the 24 h floor).
-        let soon = base.addingTimeInterval(3 * 3600)
-        let c2 = client(t, cache, wall: { soon })
-        _ = try await c2.search(title: "Bloodborne", policy: .refresh)
+        // 100 days later (inside the 180 d hit TTL), a Refresh is served from cache.
+        let later = base.addingTimeInterval(100 * 24 * 3600)
+        let c2 = client(t, cache, wall: { later })
+        _ = try await c2.search(title: "Bloodborne", policy: .cacheFirst)
         #expect(t.requestCount == afterFirst)
         #expect(await c2.fromCache == 1)
+        #expect(await c2.requestTally() == HLTBRequestTally(fromCache: 1, fromNetwork: 0))
 
-        // 2 days later (still inside the 180 d hit TTL), a Refresh goes to the network.
-        let later = base.addingTimeInterval(2 * 24 * 3600)
-        let c3 = client(t, cache, wall: { later })
-        _ = try await c3.search(title: "Bloodborne", policy: .refresh)
+        // Past the 180 d TTL the entry is stale → the network (paced).
+        let expired = base.addingTimeInterval(181 * 24 * 3600)
+        let c3 = client(t, cache, wall: { expired })
+        _ = try await c3.search(title: "Bloodborne", policy: .cacheFirst)
         #expect(t.requestCount > afterFirst)
         #expect(await c3.fromNetwork == 1)
+    }
+
+    /// The fill service's cache pass reads a valid entry without a request, and says nil
+    /// for an uncached title (wave 21 D3).
+    @Test func cachedCandidatesNeverRequests() async throws {
+        let t = try transport(searchFixture: "hltb-search-bloodborne.json")
+        let cache = try cacheStore()
+        let base = Date(timeIntervalSince1970: 5_500_000)
+        _ = try await client(t, cache, wall: { base }).search(title: "Bloodborne")
+        let afterFirst = t.requestCount
+        let c2 = client(t, cache, wall: { base.addingTimeInterval(90 * 24 * 3600) })
+        let hit = await c2.cachedCandidates(title: "Bloodborne")
+        #expect(hit?.isEmpty == false)
+        #expect(await c2.cachedCandidates(title: "Never Searched") == nil)
+        #expect(t.requestCount == afterFirst)
     }
 
     @Test func bypassOneIgnoresAFreshEntry() async throws {

@@ -104,6 +104,7 @@ enum LibraryQuery {
             g.played                                         AS played,
             g.status                                         AS status,
             g.revisit                                        AS revisit,
+            g.holds_up                                       AS holds_up,
             COALESCE(own.owned, 0)                           AS owned,
             COALESCE(own.is_comp, 0)                         AS is_comp,
             COALESCE(own.has_rom, 0)                         AS has_rom,
@@ -205,6 +206,12 @@ enum LibraryQuery {
             wheres.append(dlcAndExpansionsPredicate())
         case .sameGameTwoEntries:
             wheres.append(sameGameTwoEntriesPredicate())
+        case .psPlusOnly:
+            // Owned only through PS Plus — the ONE predicate Format ▸ PS Plus uses too.
+            wheres.append(subscriptionOnlyPredicate)
+        case .needsHoldsUpRating:
+            // The rating pass (PLAN §7b): played, not yet judged "Holds up today?".
+            wheres.append(needsHoldsUpRatingPredicate)
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
@@ -298,6 +305,17 @@ enum LibraryQuery {
         if filter.includeNoStatus { statusOrs.append("(g.played = 1 AND g.status IS NULL)") }
         appendOR(statusOrs, into: &wheres)
 
+        // "Holds up today?" facet (PLAN §7b, OR within kind): any selected mark OR "Unrated"
+        // (played, no mark — the same predicate as the "Needs a 'Holds Up' Rating" list).
+        var holdsUpOrs: [String] = []
+        if !filter.holdsUp.isEmpty {
+            let values = HoldsUp.allCases.filter(filter.holdsUp.contains).map(\.dbValue)
+            holdsUpOrs.append("g.holds_up IN (\(placeholders(values.count)))")
+            args.append(contentsOf: values.map { $0 as DatabaseValueConvertible })
+        }
+        if filter.includeHoldsUpUnrated { holdsUpOrs.append(needsHoldsUpRatingPredicate) }
+        appendOR(holdsUpOrs, into: &wheres)
+
         // Format / ownership facet (OR within kind): a game matches if it has ≥ 1
         // owned product in one of the formats (PLAN §4), OR "Not Owned" (no owned
         // product/copy at all — the sidebar "Owned" definition, so compilation-owned
@@ -336,11 +354,7 @@ enum LibraryQuery {
         // must be owned AND have no owned copy that is really owned (subscription IS NULL).
         // With Status ▸ Not Played this is the "finish before unsubscribing" list.
         if filter.includeSubscriptionOnly {
-            wheres.append("""
-                (EXISTS(SELECT 1 FROM product_games pg6 WHERE pg6.game_id = g.id)
-                 AND NOT EXISTS(SELECT 1 FROM product_games pg7 JOIN products p7 ON p7.id = pg7.product_id
-                                WHERE pg7.game_id = g.id AND p7.subscription IS NULL))
-                """)
+            wheres.append(subscriptionOnlyPredicate)
         }
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
@@ -380,10 +394,17 @@ enum LibraryQuery {
     /// style's `t` and the ratio `r` are inlined as decimal literals (app constants,
     /// never user input); `ROUND` + `CAST … AS INTEGER` makes the value match the Swift
     /// path to the second (no SQLite math-extension functions used).
+    ///
+    /// **HLTB Main-Story-only read rule** (wave 21 D1, PLAN §4 inv. 5 — a *read* rule, no
+    /// data change): the "main" operand is ``effectiveMainSQL`` — `ttb_normally_s`, or, for
+    /// an `ttb_source = 'hltb'` row whose main is empty, its `ttb_hastily_s` (HLTB's Main
+    /// Story, written there by the pre-wave-21 mapping). IGDB-sourced rows keep
+    /// "rushed-only ⇒ unmeasured". Swift mirror: ``EstimateSanity/effectiveMain``.
     static func lengthEstimateExpr(style: PlayStyle, r: Double = PlayStyle.sidesRatio) -> String {
         let t = sqlLiteral(style.t)
         let rl = sqlLiteral(r)
         let ratio = sqlLiteral(EstimateSanity.completionistRatio)
+        let m = effectiveMainSQL
         // A flagged (suspicious & not hltb-sourced & not dismissed) game with a
         // completionist ≥ 4× main has its completionist ignored for planning (PLAN §5.3,
         // D5 — the SQL mirror of ``EstimateSanity/lengthInputs``): it falls back to
@@ -394,18 +415,27 @@ enum LibraryQuery {
         // the guard entirely.
         let guardSQL = suspiciousLengthGuardSQL()
         return "CAST(ROUND(CASE"
-            + " WHEN \(guardSQL) AND g.ttb_normally_s IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
-            + " AND g.ttb_completely_s >= \(ratio) * g.ttb_normally_s"
-            + " THEN g.ttb_normally_s + \(t) * (ROUND(g.ttb_normally_s * \(rl)) - g.ttb_normally_s)"
-            + " WHEN g.ttb_normally_s IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
-            + " THEN g.ttb_normally_s + \(t) * (CASE WHEN g.ttb_completely_s < g.ttb_normally_s"
-            + " THEN 0 ELSE g.ttb_completely_s - g.ttb_normally_s END)"
-            + " WHEN g.ttb_normally_s IS NOT NULL"
-            + " THEN g.ttb_normally_s * (1 + \(t) * (\(rl) - 1))"
+            + " WHEN \(guardSQL) AND \(m) IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
+            + " AND g.ttb_completely_s >= \(ratio) * \(m)"
+            + " THEN \(m) + \(t) * (ROUND(\(m) * \(rl)) - \(m))"
+            + " WHEN \(m) IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
+            + " THEN \(m) + \(t) * (CASE WHEN g.ttb_completely_s < \(m)"
+            + " THEN 0 ELSE g.ttb_completely_s - \(m) END)"
+            + " WHEN \(m) IS NOT NULL"
+            + " THEN \(m) * (1 + \(t) * (\(rl) - 1))"
             + " WHEN g.ttb_completely_s IS NOT NULL"
             + " THEN g.ttb_completely_s * (1 + \(t) * (\(rl) - 1)) / \(rl)"
             + " ELSE NULL END) AS INTEGER)"
     }
+
+    /// A game's **effective main-story time** in SQL (wave 21 D1 read rule): the stored
+    /// `ttb_normally_s`, or — only for an HLTB-sourced row with no main — its
+    /// `ttb_hastily_s`, which is HLTB's *Main Story* under the pre-wave-21 mapping (Akira:
+    /// `comp_plus = 0` left main empty). An IGDB-sourced rushed-only row stays NULL
+    /// ("rushed-only ⇒ unmeasured"). Pure read — no row is rewritten. Swift mirror:
+    /// ``EstimateSanity/effectiveMain(rushed:main:sourceIsHLTB:)``.
+    static let effectiveMainSQL =
+        "COALESCE(g.ttb_normally_s, CASE WHEN g.ttb_source = 'hltb' THEN g.ttb_hastily_s END)"
 
     // MARK: - Suspicious estimates (PLAN §5.3)
 
@@ -430,7 +460,10 @@ enum LibraryQuery {
     /// stored times are suspicious *and* that is neither hltb-sourced nor dismissed. Built
     /// from the same thresholds as the Swift rule, and proven to agree with it
     /// (`EstimateSanityTests`). A comparison against a NULL time is never true, exactly as
-    /// the Swift rule only compares present values.
+    /// the Swift rule only compares present values. It reads the raw `ttb_normally_s`: the
+    /// wave-21 Main-Story read rule (``effectiveMainSQL``) only ever changes an
+    /// `hltb`-sourced row, and those are excluded by the guard — so an Akira-shaped row
+    /// (hltb, rushed only) is never flagged either way.
     static func suspiciousEstimatePredicate() -> String {
         let ratio = sqlLiteral(EstimateSanity.completionistRatio)
         let frac = sqlLiteral(EstimateSanity.rushedFraction)
@@ -454,8 +487,9 @@ enum LibraryQuery {
     /// ``lengthEstimateExpr(style:r:)``) for a game they have not played, so an unplayed
     /// game is banded by how long it is *for them* rather than dropped (PLAN §6.4/§8).
     /// The filter always prefers the owner's own playtime first. "No Estimate" (this
-    /// expression `IS NULL`) means exactly "no time info to fetch" (a rushed-only game
-    /// counts as No Estimate, since rushed is never used for length).
+    /// expression `IS NULL`) means exactly "no time info to fetch" (an IGDB rushed-only game
+    /// counts as No Estimate, since rushed is never used for length — but an HLTB row whose
+    /// only time is the Main Story in the rushed slot is measured, wave 21 D1).
     static func playtimeBucketExpr(style: PlayStyle) -> String {
         "COALESCE(\(effectivePlaytimeSQL()), \(lengthEstimateExpr(style: style)))"
     }
@@ -534,6 +568,31 @@ enum LibraryQuery {
                     OR json_extract(cc.json, '$.version_parent')
                         IN (SELECT igdb_id FROM games WHERE igdb_id IS NOT NULL AND igdb_id <> g.igdb_id)))
         """
+    }
+
+    /// **Owned only through a subscription** (PLAN §13.3): owned, and no owned copy is really
+    /// owned (`subscription IS NULL`). The ONE SQL definition shared by the Format ▸ PS Plus
+    /// facet, the "PS Plus Only" sidebar scope and its count (mirrors the grid row's `sub_only`
+    /// / ``GameSummary/ownedOnlyViaSubscription``).
+    static let subscriptionOnlyPredicate = """
+        (EXISTS(SELECT 1 FROM product_games pg6 WHERE pg6.game_id = g.id)
+         AND NOT EXISTS(SELECT 1 FROM product_games pg7 JOIN products p7 ON p7.id = pg7.product_id
+                        WHERE pg7.game_id = g.id AND p7.subscription IS NULL))
+        """
+
+    /// Sidebar count for the "PS Plus Only" row (single counts observation).
+    static func fetchPSPlusOnlyCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(subscriptionOnlyPredicate)") ?? 0
+    }
+
+    /// PLAN §7b "Needs a 'Holds Up' Rating": played games with no "Holds up today?" mark. The
+    /// ONE predicate shared by the grid scope and the sidebar count (list ≡ count).
+    static let needsHoldsUpRatingPredicate = "(g.played = 1 AND g.holds_up IS NULL)"
+
+    /// Sidebar count for the "Needs a 'Holds Up' Rating" row (composed into the single counts
+    /// observation, so rating a game re-runs it — no timer, no second observation).
+    static func fetchNeedsHoldsUpRatingCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(needsHoldsUpRatingPredicate)") ?? 0
     }
 
     /// Sidebar count for the "DLC & Expansions" row (composed into the single counts observation).
@@ -667,6 +726,7 @@ enum LibraryQuery {
             compilationProductID: row["comp_id"],
             platformIDs: platformIDs,
             status: PlayStatus.from(dbStatus: statusRaw, revisit: revisit),
+            holdsUp: HoldsUp(dbValue: row["holds_up"]),
             hasROM: row["has_rom"],
             ownedOnlyViaSubscription: row["sub_only"],
             physicalPlatformIDs: dedupedList(row["physical_plats"]),

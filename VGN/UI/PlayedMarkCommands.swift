@@ -36,6 +36,16 @@ struct PlayedMarkCommands: Commands {
             }
             .disabled(!enabled)
 
+            // Holds Up Today? ▸ Holds Up / Of Its Time / Too Archaic / Clear (PLAN §7b). Acts on
+            // the selection's played games; unplayed ones are ignored (disabled footer).
+            let canHoldsUp = library?.canSetSelectionHoldsUp ?? false
+            Menu(HoldsUpMenuItems.title) {
+                HoldsUpMenuItems(targets: selection, isEnabled: canHoldsUp, registersShortcuts: true) { value in
+                    library?.setHoldsUp(value)
+                }
+            }
+            .disabled(!canHoldsUp)
+
             // Change Copy Format ▸ Physical / Digital / ROM (PLAN §13.3). Acts on the
             // selection's single-copy games; several-copy games are skipped (banner + footer).
             let canFormat = library?.canChangeSelectionCopyFormat ?? false
@@ -73,6 +83,11 @@ struct PlayedMarkCommands: Commands {
             Button("Find on HowLongToBeat…") { hltb?.findSelected() }
                 .disabled(!(hltb?.canFindSelected ?? false))
                 .help("Search HowLongToBeat by title and link the selected game to its entry.")
+            // The one explicit cache bypass (PLAN §5.3, wave 21): a Refresh serves the cached
+            // reply; this asks HowLongToBeat again for the one selected game.
+            Button("Ask HowLongToBeat Again") { hltb?.askAgainSelected() }
+                .disabled(!(hltb?.canAskAgainSelected ?? false))
+                .help("Ignore the cached HowLongToBeat reply for the selected game, ask the site again and replace its times.")
         }
     }
 }

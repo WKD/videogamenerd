@@ -20,6 +20,8 @@ struct GameDetail: Sendable, Hashable, Identifiable {
     var played: Bool
     var owned: Bool
     var status: PlayStatus?
+    /// "Holds up today?" (PLAN §7b, v16) — `nil` = Unrated. Only a played game carries one.
+    var holdsUp: HoldsUp? = nil
 
     var tierID: Int64?
     var tierLetter: String?

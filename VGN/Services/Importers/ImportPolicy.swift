@@ -48,9 +48,9 @@ enum ImportPolicy {
     static let hltbHitTTL: TimeInterval = 180 * 24 * 60 * 60
     static let hltbMissTTL: TimeInterval = 30 * 24 * 60 * 60
 
-    /// An explicit owner **Refresh** (PLAN §5.3, D1) serves the cache without a request
-    /// when the cached reply is younger than this floor (a Refresh you just ran, or ran a
-    /// few hours ago, costs nothing); older than it, a Refresh goes to the network (paced).
-    /// "Ask HowLongToBeat again" bypasses even a fresher entry, for one request.
-    static let hltbRefreshFloor: TimeInterval = 24 * 60 * 60
+    /// There is deliberately **no** "refresh floor" (wave 21, D3): an explicit Refresh
+    /// serves any valid cached reply inside these TTLs, exactly like Fetch Missing — a
+    /// Refresh re-applies VGN's mapping + matching, and HLTB's community numbers move
+    /// slowly. "Ask HowLongToBeat Again" (`HLTBFreshnessPolicy.bypassOne`) is the one
+    /// explicit per-game bypass.
 }

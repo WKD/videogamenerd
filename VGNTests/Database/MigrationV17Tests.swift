@@ -22,13 +22,15 @@ import GRDB
         }
     }
 
-    private static func upToV15() -> DatabaseMigrator {
+    /// The real chain up to v16 (W21-A's `games.holds_up`), i.e. the DB v17 upgrades in the field.
+    private static func upToV16() -> DatabaseMigrator {
         var m = DatabaseMigrator()
         Migrations.registerV1(in: &m); Migrations.registerV2(in: &m); Migrations.registerV3(in: &m)
         Migrations.registerV4(in: &m); Migrations.registerV5(in: &m); Migrations.registerV6(in: &m)
         Migrations.registerV7(in: &m); Migrations.registerV8(in: &m); Migrations.registerV9(in: &m)
         Migrations.registerV10(in: &m); Migrations.registerV11(in: &m); Migrations.registerV12(in: &m)
         Migrations.registerV13(in: &m); Migrations.registerV14(in: &m); Migrations.registerV15(in: &m)
+        Migrations.registerV16(in: &m)
         return m
     }
 
@@ -44,12 +46,12 @@ import GRDB
         return out
     }
 
-    /// Seeds a v15-shaped library covering every tie combination, upgrades, and checks the move.
-    @Test func upgradeMovesOnlyBatoceraOnlyTimesAndFillsFromCatalogue() async throws {
+    /// Seeds a v16-shaped library (the real chain) covering every tie combination, upgrades, and checks the move.
+    @Test func upgradeFromV16MovesOnlyBatoceraOnlyTimesAndFillsFromCatalogue() async throws {
         var config = Configuration()
         config.foreignKeysEnabled = true
         let queue = try DatabaseQueue(configuration: config)
-        var migrator = Self.upToV15()
+        var migrator = Self.upToV16()
         try migrator.migrate(queue)
 
         try await queue.write { db in
@@ -91,8 +93,9 @@ import GRDB
             try game(5, mine: 100, psn: 200); try copy(5, source: "batocera", platform: "snes", format: "rom")
             // 6 Catalogue with 0 s, no time at all — stays NULL.
             try game(6); try catalogue(6, path: "six.zip", time: 0)
-            // 7 Unrelated game with a PSN time and no ties — unchanged.
+            // 7 Unrelated game with a PSN time and no ties — unchanged; its v16 mark survives.
             try game(7, psn: 900)
+            try db.execute(sql: "UPDATE games SET holds_up = 'holds_up' WHERE id = 7")
             // 8 Both via copies (ROM + PSN) — PSN kept, nothing to fill.
             try game(8, psn: 4200); try copy(8, source: "batocera", platform: "snes", format: "rom")
             try copy(8, source: "psn", platform: "ps4", format: "digital")
@@ -137,5 +140,13 @@ import GRDB
         #expect(fkViolations == 0)
         #expect(integrity == "ok")
         #expect(hasColumn)
+        let holdsUp = try await queue.read { db in
+            try String.fetchOne(db, sql: "SELECT holds_up FROM games WHERE id = 7")
+        }
+        #expect(holdsUp == "holds_up")
+        // The app's migrator registers v16 before v17.
+        let order = AppDatabase.migrator.migrations
+        #expect(order.firstIndex(of: "v16")! < order.firstIndex(of: "v17")!)
+        #expect(order.last == "v17")
     }
 }

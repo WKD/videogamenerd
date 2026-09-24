@@ -228,6 +228,7 @@ struct PlayNextBody: View {
         if e.byTime > 0 { parts.append("\(e.byTime) too long for this bracket") }
         if e.byStatus > 0 { parts.append("\(e.byStatus) filtered by status") }
         if e.byFeedback > 0 { parts.append("\(e.byFeedback) snoozed") }
+        if e.tooArchaic > 0 { parts.append("\(e.tooArchaic) too archaic") }
         return parts
     }
 
@@ -236,7 +237,9 @@ struct PlayNextBody: View {
     @ViewBuilder
     private var tasteModelLine: some View {
         if let backtest = model.backtest {
-            TasteModelLine(backtest: backtest)
+            TasteModelLine(backtest: backtest, cutoffYear: model.backtestCutoffYear) { year in
+                Task { await model.setBacktestCutoffYear(year) }
+            }
         }
     }
 
@@ -393,6 +396,10 @@ struct SmallLibraryBanner: View {
 /// The "Taste model: good · based on 47 ranked games" line + honest popover.
 struct TasteModelLine: View {
     let backtest: TasteBacktestResult
+    /// The backtest cutoff year (PLAN §7b drift line), nil = off.
+    var cutoffYear: Int? = nil
+    /// Change the cutoff (nil turns it off). nil closure ⇒ no control (previews).
+    var onCutoffChange: ((Int?) -> Void)? = nil
     @State private var showInfo = false
 
     var body: some View {
@@ -401,6 +408,14 @@ struct TasteModelLine: View {
             Text("Taste model: \(backtest.verdict.label)").fontWeight(.medium)
             if backtest.sampleCount > 0 {
                 Text("· based on \(backtest.sampleCount) ranked games").foregroundStyle(.secondary)
+            }
+            // The nostalgia drift line (PLAN §7b): "ρ = 0.52 · without pre-1995 games: 0.41".
+            if backtest.cutoff != nil {
+                Text("· \(backtest.driftLine)")
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .accessibilityIdentifier("playnext.tasteDrift")
             }
             Button {
                 showInfo.toggle()
@@ -434,9 +449,45 @@ struct TasteModelLine: View {
                 Text("Under 15 ranked games there isn't enough to judge — picks lean on general acclaim.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            if let onCutoffChange {
+                Divider()
+                cutoffControl(onCutoffChange)
+            }
         }
         .padding()
         .frame(width: 320)
+    }
+}
+
+extension TasteModelLine {
+    /// The "exclude games first played before [year]" control (PLAN §7b "Helping me judge"):
+    /// a toggle + a year stepper. Only games with a known first-played date are affected.
+    @ViewBuilder
+    fileprivate func cutoffControl(_ onChange: @escaping (Int?) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Also run without games first played before…", isOn: Binding(
+                get: { cutoffYear != nil },
+                set: { onChange($0 ? (cutoffYear ?? PlayNextModel.defaultBacktestCutoffYear) : nil) }))
+                .font(.callout)
+            if let year = cutoffYear {
+                Stepper(value: Binding(get: { year }, set: { onChange($0) }), in: 1970...2100) {
+                    Text(verbatim: "Before \(year)").monospacedDigit()
+                }
+                .font(.callout)
+                Text(backtest.driftLine)
+                    .font(.callout.weight(.medium))
+                    .monospacedDigit()
+                if let c = backtest.cutoff {
+                    Text("\(c.excludedCount) ranked games left out · only games with a known first-played date (from an import) are affected.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+            } else {
+                Text("Shows how far nostalgia and present taste have drifted: \(backtest.rhoText) with every ranked game.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
     }
 }
 

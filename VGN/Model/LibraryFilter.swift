@@ -64,6 +64,13 @@ struct LibraryFilter: Hashable, Sendable {
     /// (`played = 1 AND status IS NULL`) — a played game need not carry a status.
     /// OR-combines within the completion facet.
     var includeNoStatus: Bool
+    /// "Holds up today?" facet (PLAN §7b/§8): games carrying one of these marks. OR-combines
+    /// with ``includeHoldsUpUnrated`` within the kind; ANDs across kinds. Empty = no constraint.
+    var holdsUp: Set<HoldsUp>
+    /// Also match **Unrated** games for the Holds Up facet — *played* with no mark yet
+    /// (`played = 1 AND holds_up IS NULL`, exactly the "Needs a 'Holds Up' Rating" list; an
+    /// unplayed game is not "unrated", it cannot be rated at all — mirrors Tier ▸ Unrated).
+    var includeHoldsUpUnrated: Bool
     /// Ownership-format facet (physical / digital / rom). Empty = no constraint;
     /// a game matches if it has ≥ 1 owned product in one of these formats.
     var formats: Set<ProductFormat>
@@ -156,6 +163,8 @@ struct LibraryFilter: Hashable, Sendable {
         statuses: Set<PlayStatus> = [],
         includeNotPlayed: Bool = false,
         includeNoStatus: Bool = false,
+        holdsUp: Set<HoldsUp> = [],
+        includeHoldsUpUnrated: Bool = false,
         formats: Set<ProductFormat> = [],
         includeNotOwned: Bool = false,
         multipleCopies: Bool = false,
@@ -180,6 +189,8 @@ struct LibraryFilter: Hashable, Sendable {
         self.statuses = statuses
         self.includeNotPlayed = includeNotPlayed
         self.includeNoStatus = includeNoStatus
+        self.holdsUp = holdsUp
+        self.includeHoldsUpUnrated = includeHoldsUpUnrated
         self.formats = formats
         self.includeNotOwned = includeNotOwned
         self.multipleCopies = multipleCopies
@@ -203,6 +214,7 @@ struct LibraryFilter: Hashable, Sendable {
         !searchText.isEmpty || !genres.isEmpty || !decades.isEmpty
             || !tierIDs.isEmpty || includeUnrated
             || !statuses.isEmpty || includeNotPlayed || includeNoStatus
+            || !holdsUp.isEmpty || includeHoldsUpUnrated
             || !formats.isEmpty || includeNotOwned || multipleCopies || duplicateCopies || includeSubscriptionOnly
             || !playtimes.isEmpty || includeNoTimeEstimate || includeSuspiciousEstimate
             || platform != nil || !platforms.isEmpty

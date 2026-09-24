@@ -12,7 +12,11 @@ enum HLTBMatchOutcome: Sendable, Equatable {
 
 /// Pure title matching for the HLTB fallback (PLAN §5.3): ``TitleNormalizer`` +
 /// ``FuzzyMatch`` over each candidate's name and aliases, with the game's release
-/// year (± 1) as the tie-breaker. Foundation-only, so every threshold is unit-tested
+/// year (± 1) as the tie-breaker. Wave 21 (D2): the text score is the **max** of the
+/// order-sensitive ``FuzzyMatch`` and the order-free ``TitleTokenSet`` (same words in
+/// another order / segmentation — "The Beast Within: A Gabriel Knight Mystery" vs
+/// "Gabriel Knight II: The Beast Within"), taken against the library title **and** the
+/// ladder query that produced the candidates. Thresholds unchanged. Foundation-only, so every threshold is unit-tested
 /// on tricky pairs (numbered sequels, "Remastered", subtitle-only differences, and
 /// the same name at two different years).
 enum HLTBMatcher {
@@ -53,9 +57,9 @@ enum HLTBMatcher {
     /// closeness, then id for determinism. `librarySlugs` are the game's *effective*
     /// platforms (`LibraryQuery.effectivePlatformsSQL`); empty ⇒ platform plays no part.
     static func scored(title: String, year: Int?, candidates: [HLTBCandidate],
-                       librarySlugs: Set<String> = []) -> [Scored] {
+                       librarySlugs: Set<String> = [], query: String? = nil) -> [Scored] {
         candidates.map { candidate -> Scored in
-            let base = FuzzyMatch.bestScore(query: title, names: candidate.allNames)
+            let base = textScore(title: title, query: query, names: candidate.allNames)
             var adjusted = base
             if let year, let cy = candidate.releaseYear {
                 let diff = abs(cy - year)
@@ -78,6 +82,21 @@ enum HLTBMatcher {
         }
     }
 
+    /// The text score of one candidate (wave 21 D2): `max(FuzzyMatch, TitleTokenSet)`
+    /// against the library `title`, and — when the ladder searched a different, cleaned
+    /// `query` — against that query too (so an edition-stripped rung can still match the
+    /// base entry exactly, as before).
+    static func textScore(title: String, query: String?, names: [String]) -> Double {
+        var texts = [title]
+        if let query, query.caseInsensitiveCompare(title) != .orderedSame { texts.append(query) }
+        var best = 0.0
+        for text in texts {
+            best = max(best, FuzzyMatch.bestScore(query: text, names: names),
+                       TitleTokenSet.bestScore(query: text, names: names))
+        }
+        return best
+    }
+
     // MARK: - Match
 
     /// Decide the outcome for one game. `librarySlugs` are the game's effective platforms
@@ -86,8 +105,9 @@ enum HLTBMatcher {
     /// a worse title match over a better one, and never auto-picks when two candidates stay
     /// tied after platform + year (→ still ambiguous).
     static func match(title: String, year: Int?, candidates: [HLTBCandidate],
-                      librarySlugs: Set<String> = []) -> HLTBMatchOutcome {
-        let ranked = scored(title: title, year: year, candidates: candidates, librarySlugs: librarySlugs)
+                      librarySlugs: Set<String> = [], query: String? = nil) -> HLTBMatchOutcome {
+        let ranked = scored(title: title, year: year, candidates: candidates,
+                            librarySlugs: librarySlugs, query: query)
         let viable = ranked.filter { $0.base >= plausibleThreshold }
         guard let best = viable.first else { return .notFound }
 

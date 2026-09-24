@@ -67,6 +67,15 @@ struct InspectorView: View {
                     Task { await vm.actions?.setStatus(ids: ids, status: status) }
                 }
 
+                // "Holds up today?" (PLAN §7b) — acts on the played games of the selection.
+                if games.contains(where: \.played) {
+                    Divider()
+                    let marks = Set(games.filter(\.played).map(\.holdsUp))
+                    HoldsUpInspectorRow(current: marks.count == 1 ? marks.first ?? nil : nil) { value in
+                        vm.setHoldsUp(value, for: ids)
+                    }
+                }
+
                 if games.count > 1 {
                     Divider()
                     Button {
@@ -267,6 +276,13 @@ private struct SingleGameInspector: View {
             .accessibilityIdentifier(A11yID.inspectorTierChip)
             .accessibilityValue(detail.tierLetter ?? "Unranked")
             scoreLineView
+            // "Holds up today?" (PLAN §7b) — under the tier, played games only.
+            if detail.played {
+                HoldsUpInspectorRow(current: detail.holdsUp, firstPlayedAt: detail.firstPlayedAt) { value in
+                    vm.setHoldsUp(value, for: ids)
+                }
+                .padding(.top, 6)
+            }
         }
     }
 
@@ -433,7 +449,8 @@ private struct SingleGameInspector: View {
                 manualWins: detail.myPlaytimeS != nil,
                 mainS: detail.ttbNormallyS, completionistS: detail.ttbCompletelyS,
                 rushedS: detail.ttbHastilyS,
-                sourceLabel: Self.sourceLabel(detail.ttbSource), showEstimates: hasAverages)
+                sourceLabel: Self.sourceLabel(detail.ttbSource), showEstimates: hasAverages,
+                sourceIsHLTB: detail.ttbSource == HLTBSource.id)
             estimateWarning
             if hasAverages {
                 MeVsAverageBar(bar: bar)
@@ -782,9 +799,21 @@ struct PlaytimeEstimatesTable: View {
     var rushedS: Int?
     var sourceLabel: String?
     var showEstimates: Bool
+    /// The times come from HowLongToBeat (`ttb_source = 'hltb'`) — enables the wave-21
+    /// Main-Story-only read rule for the Main row (``EstimateSanity/effectiveMain``).
+    var sourceIsHLTB: Bool = false
 
     private var hasPSN: Bool { (psnSeconds ?? 0) > 0 }
     private var hasBatocera: Bool { (batoceraSeconds ?? 0) > 0 }
+
+    /// HLTB lists only a Main Story for this game (wave 21 D1): the Main row shows it (read
+    /// from the rushed slot for rows written before the new mapping), with a tooltip; Rushed
+    /// keeps showing the same value honestly.
+    private var mainStoryOnly: Bool {
+        EstimateSanity.isHLTBMainStoryOnly(rushed: rushedS, main: mainS, sourceIsHLTB: sourceIsHLTB)
+    }
+    static let mainStoryOnlyTooltip = "HowLongToBeat lists only Main Story for this game."
+    static let mainStoryOnlyCaption = "Main+Extra not on HowLongToBeat — main story used."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -796,7 +825,9 @@ struct PlaytimeEstimatesTable: View {
                     row("Batocera", PlaytimeParser.format(seconds: batocera), secondary: true)
                 }
                 if showEstimates {
-                    row("Main", estimate(mainS))
+                    row("Main", estimate(EstimateSanity.effectiveMain(
+                            rushed: rushedS, main: mainS, sourceIsHLTB: sourceIsHLTB)),
+                        tooltip: mainStoryOnly ? Self.mainStoryOnlyTooltip : nil)
                     row("Completionist", estimate(completionistS))
                     row("Rushed", estimate(rushedS), secondary: true)
                 }
@@ -811,6 +842,12 @@ struct PlaytimeEstimatesTable: View {
             if showEstimates, let sourceLabel {
                 Text("Source: \(sourceLabel)").font(.caption2).foregroundStyle(.tertiary)
             }
+            if showEstimates, mainStoryOnly {
+                Text(Self.mainStoryOnlyCaption)
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .lineLimit(2)
+                    .accessibilityIdentifier("inspector.hltb.mainStoryOnly")
+            }
         }
     }
 
@@ -819,7 +856,8 @@ struct PlaytimeEstimatesTable: View {
     }
 
     @ViewBuilder
-    private func row(_ label: String, _ value: String, secondary: Bool = false) -> some View {
+    private func row(_ label: String, _ value: String, secondary: Bool = false,
+                     tooltip: String? = nil) -> some View {
         GridRow {
             Text(label)
                 .foregroundStyle(.secondary)
@@ -828,6 +866,7 @@ struct PlaytimeEstimatesTable: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .foregroundStyle(secondary ? Color.secondary : Color.primary)
+                .appKitTooltip(tooltip ?? "")
         }
         .font(.caption)
         .opacity(secondary ? 0.85 : 1)

@@ -26,6 +26,8 @@ final class ScriptedPlayNextBackend: PlayNextBackend, @unchecked Sendable {
     private(set) var startedPlaying: [Int64] = []
     private(set) var undone: [StartPlayingUndo] = []
     private(set) var backtestCalls = 0
+    /// The cutoff year each backtest call asked for (PLAN §7b drift line).
+    private(set) var backtestCutoffs: [Int?] = []
     /// The outcome `undoStartPlaying` reports (default: a clean restore).
     var undoOutcome: StartPlayingUndoOutcome = .restored
     private var nextFeedbackID: Int64 = 1
@@ -37,7 +39,16 @@ final class ScriptedPlayNextBackend: PlayNextBackend, @unchecked Sendable {
         recommendCalls.append((bracket, options))
         return recommendHandler?(bracket, options) ?? result
     }
-    func backtest() async throws -> TasteBacktestResult { backtestCalls += 1; return backtestResult }
+    func backtest(firstPlayedCutoff: Int?) async throws -> TasteBacktestResult {
+        backtestCalls += 1
+        backtestCutoffs.append(firstPlayedCutoff)
+        var r = backtestResult
+        if let year = firstPlayedCutoff, r.cutoff == nil {
+            r.cutoff = .init(year: year, spearman: (r.spearman ?? 0) - 0.1, sampleCount: max(0, r.sampleCount - 5),
+                             excludedCount: 5)
+        }
+        return r
+    }
     func snooze(gameID: Int64) async throws { snoozed.append(gameID) }
     func never(gameID: Int64) async throws { nevered.append(gameID) }
     func startPlaying(gameID: Int64) async throws -> StartPlayingUndo {

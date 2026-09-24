@@ -14,6 +14,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         case search, genre, decade
         case tier, unrated
         case status, notPlayed, noStatus
+        case holdsUp
         case format, notOwned, multipleCopies, duplicateCopies, subscriptionOnly
         case playtime, noEstimate, suspiciousEstimate, platform
 
@@ -27,6 +28,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .status: return "Status"
             case .notPlayed: return "Not Played"
             case .noStatus: return "Played, No Status"
+            case .holdsUp: return "Holds Up"
             case .format: return "Format"
             case .notOwned: return "Not Owned"
             case .multipleCopies: return "Multiple Copies"
@@ -111,6 +113,13 @@ enum LibraryFilterChips {
         if filter.includeNotPlayed { add(.notPlayed, [("true", "Not Played")]) }
         if filter.includeNoStatus { add(.noStatus, [("true", "No Status")]) }
 
+        // "Holds up today?" — the marks in canonical order, then Unrated, as one OR group.
+        var holdsUpPairs: [(value: String, label: String)] = HoldsUp.allCases
+            .filter { filter.holdsUp.contains($0) }
+            .map { ($0.rawValue, $0.label) }
+        if filter.includeHoldsUpUnrated { holdsUpPairs.append((holdsUpUnratedChipValue, HoldsUp.unratedLabel)) }
+        add(.holdsUp, holdsUpPairs)
+
         let formatPairs = ProductFormat.allCases
             .filter { filter.formats.contains($0) }
             .map { ($0.rawValue, $0.label) }
@@ -132,6 +141,9 @@ enum LibraryFilterChips {
         return out
     }
 
+    /// The chip value standing for the Holds Up facet's "Unrated" option.
+    static let holdsUpUnratedChipValue = "unrated"
+
     /// A copy of `filter` with `chip`'s value removed (re-runs the query one facet
     /// lighter).
     static func removing(_ chip: FilterChip, from filter: LibraryFilter) -> LibraryFilter {
@@ -145,6 +157,9 @@ enum LibraryFilterChips {
         case .status: if let s = PlayStatus(rawValue: chip.value) { f.statuses.remove(s) }
         case .notPlayed: f.includeNotPlayed = false
         case .noStatus: f.includeNoStatus = false
+        case .holdsUp:
+            if chip.value == holdsUpUnratedChipValue { f.includeHoldsUpUnrated = false }
+            else if let v = HoldsUp(rawValue: chip.value) { f.holdsUp.remove(v) }
         case .format: if let fmt = ProductFormat(rawValue: chip.value) { f.formats.remove(fmt) }
         case .notOwned: f.includeNotOwned = false
         case .multipleCopies: f.multipleCopies = false

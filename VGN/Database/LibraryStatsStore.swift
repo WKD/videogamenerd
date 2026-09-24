@@ -225,12 +225,20 @@ struct LibraryStatsStore: Sendable {
                    COALESCE(SUM(g.status = 'abandoned' AND g.revisit = 0), 0) AS abandoned,
                    COALESCE(SUM(g.status = 'abandoned' AND g.revisit = 1), 0) AS toRevisit,
                    COALESCE(SUM(g.status IS NULL), 0)                         AS noStatus,
+                   COALESCE(SUM(g.holds_up = 'holds_up'), 0)                  AS huHoldsUp,
+                   COALESCE(SUM(g.holds_up = 'of_its_time'), 0)               AS huOfItsTime,
+                   COALESCE(SUM(g.holds_up = 'too_archaic'), 0)               AS huTooArchaic,
+                   COALESCE(SUM(g.holds_up IS NULL), 0)                       AS huUnrated,
                    COUNT(*) AS played
             FROM games g WHERE g.played = 1 AND \(s)
             """)!
         let statusCounts = LibraryStatsReport.StatusCounts(
             playing: st["playing"], finished: st["finished"], completed: st["completed"],
             abandoned: st["abandoned"], toRevisit: st["toRevisit"], noStatus: st["noStatus"])
+        // "Holds up today?" slice (PLAN §7b) — same pass over played games.
+        let holdsUpCounts = LibraryStatsReport.HoldsUpCounts(
+            holdsUp: st["huHoldsUp"], ofItsTime: st["huOfItsTime"],
+            tooArchaic: st["huTooArchaic"], unrated: st["huUnrated"])
         let playedForStatus: Int = st["played"]
         let completionRate: Double? = playedForStatus > 0
             ? Double(statusCounts.finished + statusCounts.completed) / Double(playedForStatus)
@@ -268,6 +276,7 @@ struct LibraryStatsStore: Sendable {
             bestGameByPlatform: bestGameByPlatform,
             gamesByGenre: gamesByGenre, averageScoreByGenre: averageScoreByGenre,
             statusCounts: statusCounts, completionRate: completionRate,
+            holdsUpCounts: holdsUpCounts,
             addedByMonth: addedByMonth)
     }
 

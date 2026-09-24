@@ -105,6 +105,7 @@ extension LibraryStatsReport {
                                   .init(genre: "Platform", average: 7.9, n: 22)],
             statusCounts: .init(playing: 12, finished: 300, completed: 90, abandoned: 45, toRevisit: 8, noStatus: 208),
             completionRate: Double(300 + 90) / 655,
+            holdsUpCounts: .init(holdsUp: 140, ofItsTime: 95, tooArchaic: 30, unrated: 390),
             addedByMonth: (1...12).map { .init(year: 2024, month: $0, count: 4 + ($0 % 5) * 6) })
     }
 }

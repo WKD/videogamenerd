@@ -132,6 +132,11 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   flag so a dropped-but-want-to-come-back game is `status='abandoned' AND revisit=1`; the v1 `status`
   CHECK and its four legacy strings are untouched (no `games` rebuild), no backfill; mapped in one place
   by `PlayStatus.from(dbStatus:revisit:)` / `dbStatus` / `dbRevisit`);
+  v16 `games.holds_up` (PLAN §4/§7b, **"Holds up today?"**) — nullable TEXT, CHECK in
+  `('holds_up','of_its_time','too_archaic')`, NULL = unrated; purely additive, **no backfill, nothing
+  inferred** from year/platform/tier; only a played game carries one (`LibraryStore.setHoldsUp` refuses
+  unplayed games, every un-play path clears it); mapped once by `HoldsUp(dbValue:)` / `dbValue`; it
+  changes **Play Next only** (bonus / penalty / exclusion), never the ranking, taste profile or backtest);
   v17 `games.batocera_playtime_s` (PLAN §7b / §15) — Batocera's own play-time column (nullable, ≥ 0,
   written monotonically by the Batocera promotion via `LibraryStore.setBatoceraPlaytime`, never into
   `psn_playtime_s` again) + the **owner-requested one-shot move**: Batocera-tied, not-PSN-tied games'

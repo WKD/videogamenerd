@@ -59,7 +59,8 @@ extension LibraryStore {
     /// **Replace** a game's time-to-beat estimates from a HowLongToBeat candidate
     /// (PLAN §5.3 — the bulk "Refresh Time Estimates from HowLongToBeat…"): unlike the
     /// gap-filling ``applyHLTBTimes(gameID:candidate:)``, this overwrites all three
-    /// `ttb_*_s` columns with HLTB's values, stamps `ttb_source = 'hltb'` and stores the
+    /// `ttb_*_s` columns with HLTB's values (``HLTBCandidate/mappedTimes`` — a
+    /// Main-Story-only entry fills main *and* rushed, completionist stays empty), stamps `ttb_source = 'hltb'` and stores the
     /// HLTB id — so the game becomes the reference and leaves the Suspicious filter. When
     /// HLTB has **no** usable time for the game (`hasAnyTime == false`) nothing is written
     /// (the game stays flagged; the owner can dismiss it). The owner's own **playtime**
@@ -80,15 +81,16 @@ extension LibraryStore {
             var result = HLTBFillResult(gameID: gameID, previous: prev)
 
             // HLTB doesn't really know this game → leave it untouched (and flagged).
-            guard candidate.hasAnyTime else { return result }
+            let mapped = candidate.mappedTimes   // the one write rule (wave 21 D1)
+            guard mapped.hasAnyTime else { return result }
 
             try db.execute(sql: """
                 UPDATE games
                    SET ttb_hastily_s = ?, ttb_normally_s = ?, ttb_completely_s = ?,
                        ttb_source = ?, hltb_id = ?, updated_at = ?
                  WHERE id = ?
-                """, arguments: [candidate.mainSeconds, candidate.mainExtraSeconds,
-                                 candidate.completionistSeconds, HLTBSource.id,
+                """, arguments: [mapped.hastily, mapped.normally,
+                                 mapped.completely, HLTBSource.id,
                                  candidate.id, Date(), gameID])
             result.wroteHastily = true
             result.wroteNormally = true

@@ -1,0 +1,20 @@
+{
+  "count": 1,
+  "data": [
+    {
+      "game_id": 29582,
+      "game_name": "Akira",
+      "game_alias": "",
+      "release_world": 1988,
+      "comp_main": 8070,
+      "comp_plus": 0,
+      "comp_100": 0,
+      "comp_all": 8070,
+      "comp_main_count": 2,
+      "comp_plus_count": 0,
+      "comp_100_count": 0,
+      "comp_all_count": 2,
+      "profile_platform": "NES"
+    }
+  ]
+}

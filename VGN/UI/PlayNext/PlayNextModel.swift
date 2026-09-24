@@ -62,6 +62,11 @@ final class PlayNextModel {
     private(set) var includePlayedWithoutStatus: Bool
     /// Prefer games owned only via PS Plus (PLAN §13.3), a small backtest-neutral nudge.
     private(set) var preferExpiringSubscription: Bool
+    /// Include games marked **Too Archaic** ("Holds up today?", PLAN §7b). Off by default.
+    private(set) var includeArchaic: Bool
+    /// The backtest's optional cutoff (PLAN §7b "Helping me judge"): also run it without the
+    /// games first played before this year. nil = off. Persisted.
+    private(set) var backtestCutoffYear: Int?
 
     // MARK: - Presented state
 
@@ -153,6 +158,8 @@ final class PlayNextModel {
         self.includeAbandoned = store.includeAbandoned
         self.includePlayedWithoutStatus = store.includePlayedWithoutStatus
         self.preferExpiringSubscription = store.preferExpiringSubscription
+        self.includeArchaic = store.includeArchaic
+        self.backtestCutoffYear = store.backtestCutoffYear
         self.hasShownAskDisclosure = store.hasShownAskDisclosure
     }
 
@@ -178,6 +185,7 @@ final class PlayNextModel {
         RecommendationOptions(
             includeAbandoned: includeAbandoned,
             includePlayedWithoutStatus: includePlayedWithoutStatus,
+            includeArchaic: includeArchaic,
             seed: seed,
             maxAlternatives: 4,
             preferExpiringSubscription: preferExpiringSubscription,
@@ -243,7 +251,18 @@ final class PlayNextModel {
     }
 
     private func loadBacktest() async {
-        backtest = try? await backend.backtest()
+        backtest = try? await backend.backtest(firstPlayedCutoff: backtestCutoffYear)
+    }
+
+    /// The default year the cutoff control starts at when first switched on.
+    static let defaultBacktestCutoffYear = 1995
+
+    /// Set (or clear, with nil) the backtest cutoff year and re-run the backtest (PLAN §7b).
+    func setBacktestCutoffYear(_ year: Int?) async {
+        guard year != backtestCutoffYear else { return }
+        backtestCutoffYear = year
+        persist()
+        await loadBacktest()
     }
 
     // MARK: - Bracket / option changes
@@ -306,6 +325,13 @@ final class PlayNextModel {
 
     func setIncludePlayedWithoutStatus(_ on: Bool) {
         includePlayedWithoutStatus = on
+        persist()
+        recompute(debounce: false)
+    }
+
+    /// "Include too archaic" (PLAN §7b): bring back the games marked Too Archaic.
+    func setIncludeArchaic(_ on: Bool) {
+        includeArchaic = on
         persist()
         recompute(debounce: false)
     }
@@ -565,6 +591,8 @@ final class PlayNextModel {
         store.includeAbandoned = includeAbandoned
         store.includePlayedWithoutStatus = includePlayedWithoutStatus
         store.preferExpiringSubscription = preferExpiringSubscription
+        store.includeArchaic = includeArchaic
+        store.backtestCutoffYear = backtestCutoffYear
         store.hasShownAskDisclosure = hasShownAskDisclosure
     }
 }
@@ -605,6 +633,8 @@ private struct Prefs {
         static let includePlayedWithoutStatus = "playNext.includePlayedWithoutStatus"
         static let preferExpiringSubscription = "playNext.preferExpiringSubscription"
         static let hasShownAskDisclosure = "playNext.hasShownAskDisclosure"
+        static let includeArchaic = "playNext.includeArchaic"
+        static let backtestCutoffYear = "playNext.backtestCutoffYear"
     }
 
     /// The remembered bracket, as a ``LengthShelf``. Old four-preset raw values are
@@ -663,6 +693,18 @@ private struct Prefs {
     var preferExpiringSubscription: Bool {
         get { defaults.object(forKey: Key.preferExpiringSubscription) as? Bool ?? true }
         nonmutating set { defaults.set(newValue, forKey: Key.preferExpiringSubscription) }
+    }
+    var includeArchaic: Bool {
+        get { defaults.bool(forKey: Key.includeArchaic) }
+        nonmutating set { defaults.set(newValue, forKey: Key.includeArchaic) }
+    }
+    /// nil (absent) = no cutoff.
+    var backtestCutoffYear: Int? {
+        get { defaults.object(forKey: Key.backtestCutoffYear) as? Int }
+        nonmutating set {
+            if let newValue { defaults.set(newValue, forKey: Key.backtestCutoffYear) }
+            else { defaults.removeObject(forKey: Key.backtestCutoffYear) }
+        }
     }
     var hasShownAskDisclosure: Bool {
         get { defaults.bool(forKey: Key.hasShownAskDisclosure) }

@@ -82,7 +82,7 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
   - The missing-side inflation ratio **R = 1.5** is a **named constant** (`PlayStyle.sidesRatio`), not measured per library (owner's library median completely ÷ normally = 1.54, so 1.5 is close). Could later be measured per library, per genre, or merged with the filed "personal pace factor" idea (§7b — inflating advertised times by my own ratio). [later]
   - `LibraryFilter.playStyle` **defaults to `.storyFirst`** (raw main-story length) so a bare/legacy filter bands by the plain `normally` estimate; the app always injects the owner's real style (`PlayStyle.default` = lots of side quests) through `LibraryViewModel`, and "Clear all" preserves it. The mismatch between that default and `PlayStyle.default` is deliberate (keeps neutral filters showing the plain advertised time). [by design]
   - ~~**Stats window** ("backlog in hours", `LibraryStatsStore`) still sums the raw `ttb_normally_s`, not the personal length.~~ **Fixed (wave 17, lane A):** "Backlog to beat" now sums the owner's **personal length** at their play style (the same source of truth the BY LENGTH shelves use; a rushed-only game counts as *without an estimate*), and the card labels the basis ("≈ … at your play style · N games, M without an estimate"). The Stats window re-queries on a play-style change (via `vgnPlayStyleDidChange`), like the shelves. "Me vs. average" deliberately still uses the raw advertised `ttb_normally_s` — that is what the comparison is against. [done]
-  - The rushed-only → *Unmeasured* rule is a **behaviour change** from the old `COALESCE(normally, hastily, completely)`: a game whose only time is rushed now shows in Unmeasured / "No Estimate" (so the HLTB fetch can fill main/completionist), instead of being banded by the rushed time. [by design]
+  - The rushed-only → *Unmeasured* rule is a **behaviour change** from the old `COALESCE(normally, hastily, completely)`: a game whose only time is rushed now shows in Unmeasured / "No Estimate" (so the HLTB fetch can fill main/completionist), instead of being banded by the rushed time. [by design] *(Wave 21: except an `hltb`-sourced row — there the rushed slot is HLTB's Main Story and is read as the main; see `docs/hltb.md` "Wave 21".)*
 
 ### Library Stats window (wave 7, lane D)
 - **Clicking a chart bar does nothing** in v1. Possible follow-up: click-through from a bar (platform / decade / tier / genre) to the main grid pre-filtered to that slice. [later]
@@ -314,6 +314,15 @@ main, or a lone completionist) so the owner can refresh them from HowLongToBeat.
   flagged. One Undo step restores the whole batch's previous times + source.
 - **Not retuned.** The recommendation weights and the taste backtest were not re-tuned for the
   fallback length (per brief).
+- **Wave 21 (lane B) edges.** The Main-Story-only tooltip in the inspector has no report count (the
+  `comp_*_count` values live in the cached reply, not in `games`; the picker / Find rows show them).
+  The "HLTB main story only" state is inferred as `ttb_source='hltb' AND rushed IS NOT NULL AND
+  (main IS NULL OR main = rushed)` — an HLTB entry whose Main and Main+Extra are genuinely equal also
+  reads so (harmless: the text is still true to the numbers). The order-free subset bonus is guarded
+  (≥ 3 words, ≥ 75 % coverage, no extra numeral unless a series tag, no remake/remaster-type word) but
+  is a heuristic; a wrong confident match is fixable with Find on HowLongToBeat… / Undo. **Estimate
+  Source filter (D4) not built** — it would have edited the filter facets in the same wave as the
+  *Holds Up* facet. [later]
 
 ## 5. Out of scope for now [later]
 Filed ideas (PLAN §7b "Ideas filed for later", owner 2026-09-19): a **personal pace factor** that inflates advertised completion times from my own finished games (median of mine ÷ advertised), applied to Play Next, the BY LENGTH shelves and the backlog-hours stat; and **"finish what you started"** pools in Play Next (*almost there* — most of the estimate already played; *worth another try* — abandoned early but a strong taste match). Both wait for per-game playtime, i.e. the PSN import. Also filed (PLAN §15): a **Batocera / ROM collection** importer — played or favourite ROMs become library games, the thousands of others stay in a separate catalogue that feeds a Play Next "Discover" row instead of flooding the grid. Also filed: **"Play it again"** replay suggestions for finished games — needs an inferred replay-value score (no online source has one) and a machine-known last-played date (PSN provides it); to be built only if enough finished games get that date from imports, never if it would rely on hand-entered dates.
@@ -623,6 +632,42 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
 - **Minor / by design:** there is no per-status icon or grid badge anywhere in the app today, so none was
   added for To Revisit (the brief: "no new grid badge unless statuses already have one"). Quick Add has no
   status control, so nothing was added there. PSN's `statusPrefill` only ever emits 100 %, never To Revisit.
+
+## "Holds up today?" (owner, 2026-09-25) — built (wave 21, lane A)
+- Migration **v16** `games.holds_up` (TEXT, CHECK `holds_up|of_its_time|too_archaic`, NULL = unrated), purely
+  additive, **no backfill** — every existing game starts Unrated; nothing is inferred from year / platform / tier.
+  Only a played game carries one (`LibraryStore.setHoldsUp` refuses unplayed games with an outcome; setPlayed(false),
+  Triage's un-play and the Start-playing undo that restores played = 0 all clear it). A merge keeps the target's
+  mark, else the source's.
+- **Keys, by design:** the ⌃⌥⌘1/2/3/0 key equivalents live on the menu-bar Game ▸ Holds Up Today? items (so they
+  act on the grid selection with or without the inspector); the inspector segments only *name* them in tooltips —
+  registering them twice would make SwiftUI pick one arbitrarily. They are therefore disabled outside a library
+  grid destination (Tier Board / The Top / Duel), where Triage's own 1/2/3 apply.
+- **Unrated means "played, no mark"** in the filter and the smart list (mirrors Tier ▸ Unrated); an unplayed game
+  is not "unrated" — it cannot be rated at all.
+- **Play Next numbers:** Holds Up +0.04, Of Its Time −0.04 (the size of the PS Plus / Batocera nudges — they only
+  reorder near-ties), Too Archaic excluded unless "Include too archaic" (then −0.04). The backtest never sees the
+  mark. The **first-played cutoff** only affects games with an importer-filled `first_played_at` (PSN today); with
+  no such dates it reports the same ρ as the headline. No grid badge for the mark (statuses have none either).
+- The sidebar row's full name, **Needs a "Holds Up" Rating**, truncates at the default sidebar width
+  ("Needs a "Holds Up" R…"); the tooltip and the grid header carry the full wording. Widen the sidebar to read it.
+- The **sample library** carries four marks (Bloodborne, Chrono Trigger: Holds Up; Broken Sword, MGS3: Of Its Time)
+  so every state shows in `-VGNSampleData` mode.
+
+## Reset All Duels (owner, 2026-09-25) — built (wave 21, lane A)
+- **Ranking ▸ Reset All Duels… / Reset Duels in Tier ▸ S…F** and a Duel-header button. The only duel-related
+  `app_state` key is `ranking.duel` (session + per-answer log + one-step undo history + dismissed borders +
+  enqueued pairs); "all" deletes it, a tier reset trims it (and clears the whole one-step history, whose entries
+  could reference deleted rows). The pre-reset snapshot is written **only in a live launch**
+  (`backups/before-duel-reset-<stamp>.sqlite`, outside the `vgn-*` rotation — these accumulate until deleted by
+  hand); sample / seeded runs skip it.
+- The undo restores keys only onto games still in the same tier, still unplaced, and whose key no game has taken
+  since; a game moved after the reset keeps its new place. Redo re-runs the reset (with a new snapshot).
+- A tier reset deletes every comparison touching one of the tier's games — including cross-tier border duels.
+
+## "PS Plus Only" smart list (owner, 2026-09-25) — built (wave 21, lane A)
+- Same set as Format ▸ PS Plus (one predicate). Shown right after Owned only while N > 0. The header's leave date
+  comes from Settings ▸ PlayStation's "I plan to leave PS Plus around…" and is read when the header appears.
 
 ## 5j. Batocera play time column · Ask Claude for the vault · compilation caption (wave 21, W21-C) — as built
 - **v17 moved data once, on the owner's request [expected].** The only data change: Batocera-tied,

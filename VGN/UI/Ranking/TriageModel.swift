@@ -3,6 +3,8 @@ import SwiftUI
 
 /// All Triage logic (PLAN §7 — bulk-tier played games that have no tier yet:
 /// one big cover, press `S A B C D F` to tier, `0`/`space` to skip, `←` back).
+/// `1`/`2`/`3` rate the current game **Holds Up / Of Its Time / Too Archaic** (PLAN §7b) —
+/// a separate mark, so it does not advance: rate, then tier.
 /// The view is a thin shell. Unit-tested against a fake ``RankingBackend``.
 ///
 /// Note: Triage tiers through `RankingStore.setTier`, which is a plain write and
@@ -105,6 +107,23 @@ final class TriageModel {
         cursor = insertAt
     }
 
+    // MARK: "Holds up today?" (`1`/`2`/`3` — PLAN §7b)
+
+    /// The Triage key for each value (`1` Holds Up, `2` Of Its Time, `3` Too Archaic). Free
+    /// keys: letters tier, `0`/space skip, `U` un-plays.
+    static let holdsUpKeys: [Character: HoldsUp] = ["1": .holdsUp, "2": .ofItsTime, "3": .tooArchaic]
+
+    /// Rate the current game (pressing its current value again clears it back to Unrated).
+    /// Does NOT advance — the game still needs its tier; the card shows the mark at once.
+    func rateCurrent(_ value: HoldsUp) async {
+        guard let game = current else { return }
+        let newValue: HoldsUp? = game.holdsUp == value ? nil : value
+        guard (try? await backend.setHoldsUp(newValue, for: [game.id])) != nil else { return }
+        if let index = pending.firstIndex(where: { $0.id == game.id }) {
+            pending[index].holdsUp = newValue
+        }
+    }
+
     // MARK: Safe un-play (`U`)
 
     /// `U` — "not actually played" (PLAN §7 follow-up). Owned → the game becomes
@@ -149,6 +168,7 @@ final class TriageModel {
         let c = Character(character.lowercased())
         if c == "0" || character == " " { skip(); return true }
         if c == "u" { await unplayCurrent(); return true }
+        if let value = Self.holdsUpKeys[c] { await rateCurrent(value); return true }
         return await tierCurrent(letter: String(character))
     }
 

@@ -241,6 +241,10 @@ enum HLTBEndpoint {
             var comp_main: Int?
             var comp_plus: Int?
             var comp_100: Int?
+            var comp_all: Int?
+            var comp_main_count: Int?
+            var comp_plus_count: Int?
+            var comp_100_count: Int?
             var profile_platform: String?
         }
     }
@@ -259,7 +263,11 @@ enum HLTBEndpoint {
                 mainSeconds: positive(g.comp_main),
                 mainExtraSeconds: positive(g.comp_plus),
                 completionistSeconds: positive(g.comp_100),
-                platforms: splitList(g.profile_platform))
+                platforms: splitList(g.profile_platform),
+                allStylesSeconds: positive(g.comp_all),
+                mainCount: positive(g.comp_main_count),
+                mainExtraCount: positive(g.comp_plus_count),
+                completionistCount: positive(g.comp_100_count))
         }
     }
 

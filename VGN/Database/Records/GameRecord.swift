@@ -19,6 +19,9 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
     /// The "To Revisit" flag (v15): `1` with `status = 'abandoned'` means the owner wants
     /// to come back to a dropped game. Always `0` for any other status — see ``PlayStatus``.
     var revisit: Bool
+    /// "Holds up today?" (v16): `'holds_up'` / `'of_its_time'` / `'too_archaic'`, or NULL =
+    /// unrated. Only a played game carries one — see ``HoldsUp`` and ``LibraryStore/setHoldsUp(_:for:)``.
+    var holdsUp: String?
     var tierID: Int64?
     var rankKey: Int64?
     var myPlaytimeS: Int?
@@ -59,6 +62,7 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         case played
         case status
         case revisit
+        case holdsUp = "holds_up"
         case tierID = "tier_id"
         case rankKey = "rank_key"
         case myPlaytimeS = "my_playtime_s"
@@ -99,6 +103,7 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         played: Bool = false,
         status: String? = nil,
         revisit: Bool = false,
+        holdsUp: String? = nil,
         tierID: Int64? = nil,
         rankKey: Int64? = nil,
         myPlaytimeS: Int? = nil,
@@ -131,6 +136,7 @@ struct GameRecord: Codable, FetchableRecord, MutablePersistableRecord, Sendable,
         self.played = played
         self.status = status
         self.revisit = revisit
+        self.holdsUp = holdsUp
         self.tierID = tierID
         self.rankKey = rankKey
         self.myPlaytimeS = myPlaytimeS

@@ -445,6 +445,17 @@ private struct StatsStatusCard: View {
                 StatsMetricRow(label: "Completion rate",
                                value: report.completionRate.map(StatsFormat.percent) ?? "—",
                                emphasised: true)
+                // "Holds up today?" (PLAN §7b) — how the played games play now.
+                Divider().padding(.vertical, 2)
+                Text(HoldsUpMenuItems.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                let h = report.holdsUpCounts
+                ForEach(HoldsUp.allCases) { value in
+                    StatsMetricRow(label: value.label, value: StatsFormat.count(h.count(value)))
+                }
+                StatsMetricRow(label: HoldsUp.unratedLabel, value: StatsFormat.count(h.unrated))
             }
         }
     }
