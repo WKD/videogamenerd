@@ -142,6 +142,35 @@ struct LibrarySnapshotTests {
         }
     }
 
+    // MARK: Feedback banner over a busy grid
+
+    /// The bottom banner over saturated, high-contrast "covers": its surface must stay
+    /// readable (opaque, primary text, bordered actions) in light and dark.
+    @Test func bannerOverBusyCovers() async {
+        let colors: [Color] = [.yellow, .blue, .red, .green, .white, .purple, .orange, .black, .cyan, .pink]
+        await SnapshotHarness.capture(group: group, "library-banner-busy",
+                                      size: SnapSize(width: 560, height: 150), settle: 4) {
+            ZStack(alignment: .bottom) {
+                HStack(spacing: 0) {
+                    ForEach(colors.indices, id: \.self) { i in
+                        colors[i].overlay(Text("COVER").font(.title.bold()).rotationEffect(.degrees(-60))
+                            .foregroundStyle(colors[(i + 3) % colors.count]))
+                    }
+                }
+                VStack(spacing: 8) {
+                    BannerView(banner: LibraryBanner(message: "4 favourites added from Batocera · 2 need your review",
+                                                     kind: .info, actionTitle: "Review…",
+                                                     secondaryActionTitle: "Undo"),
+                               onAction: {}, onSecondaryAction: {}, onDismiss: {})
+                    BannerView(banner: LibraryBanner(message: "Couldn't reach IGDB", kind: .warning),
+                               onDismiss: {})
+                }
+                .padding(12)
+            }
+            .frame(width: 560, height: 150)
+        }
+    }
+
     // MARK: Seeded sidebar (THE VAULT · Unlinked · Bundles to Expand · BY LENGTH pace-only)
 
     /// A forwarding data source that carries the sidebar/vault counts a plain

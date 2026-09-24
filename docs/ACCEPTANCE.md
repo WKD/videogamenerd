@@ -502,6 +502,11 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   search field. Type only a search (no filter): the bar appears with the search chip and the count.
   Shrink the window: the chips wrap first; only then does the count shorten to "37 games".
 
+## Bottom banner legibility (wave 21) [owner]
+- Trigger a Batocera review banner (or any banner, e.g. an Undo toast) over a grid full of bright covers:
+  the banner is a solid card (no covers showing through), the message is full-contrast text, Undo /
+  Review… / ✕ are clearly buttons, in light and dark appearance. Size, position and slide-in unchanged.
+
 ## "To Revisit" play status (wave 20) [owner]
 - In the inspector, a played game's Status menu now lists **To Revisit** right after Abandoned (⌃⌘5);
   pick it, and the inspector/grid shows "To Revisit". Setting any other status — or un-playing the game —

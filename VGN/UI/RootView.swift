@@ -483,16 +483,27 @@ struct RootView: View {
 }
 
 /// A transient banner pinned to the bottom of the content (PLAN §8 feedback).
-private struct BannerView: View {
+///
+/// It floats over the grid's covers, so its surface is OPAQUE (the window background) with
+/// the kind's tint only as an accent — a leading stripe and a faint wash — plus a stroke and
+/// a soft shadow to lift it off the grid. A translucent tint let busy covers show through and
+/// the message was hard to read (owner 2026-09-25). Text is primary, actions are bordered.
+struct BannerView: View {
     let banner: LibraryBanner
     var onAction: (() -> Void)? = nil
     var onSecondaryAction: (() -> Void)? = nil
     let onDismiss: () -> Void
 
+    private static let corner: CGFloat = 10
+
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-            Text(banner.message).font(.callout)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(tint)
+            Text(banner.message)
+                .font(.callout)
+                .foregroundStyle(.primary)
             Spacer(minLength: 8)
             if let title = banner.secondaryActionTitle, let onSecondaryAction {
                 Button(title) { onSecondaryAction() }
@@ -510,21 +521,36 @@ private struct BannerView: View {
                 onDismiss()
             } label: {
                 Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.circle)
+            .controlSize(.small)
+            .help("Dismiss")
+            .accessibilityLabel("Dismiss")
         }
-        .padding(.horizontal, 14)
+        .padding(.leading, 18)
+        .padding(.trailing, 12)
         .padding(.vertical, 10)
-        .background(tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.4)))
+        .background {
+            let shape = RoundedRectangle(cornerRadius: Self.corner)
+            ZStack(alignment: .leading) {
+                shape.fill(Color(nsColor: .windowBackgroundColor))
+                shape.fill(tint.opacity(0.10))
+                Rectangle().fill(tint).frame(width: 4)
+            }
+            .clipShape(shape)
+            .shadow(color: .black.opacity(0.28), radius: 10, y: 3)
+        }
+        .overlay(RoundedRectangle(cornerRadius: Self.corner).strokeBorder(tint.opacity(0.45)))
         .frame(maxWidth: 460)
     }
 
     private var icon: String {
         switch banner.kind {
-        case .info: return "info.circle"
-        case .warning: return "exclamationmark.triangle"
-        case .error: return "xmark.octagon"
+        case .info: return "info.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error: return "xmark.octagon.fill"
         }
     }
 
