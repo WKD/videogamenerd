@@ -20,6 +20,15 @@ import Testing
         #expect(FilterCountSummary.text(shown: 0, total: nil, selected: 0, loaded: true) == "No games")
     }
 
+    @Test func compactFormDropsTheOfPart() {
+        #expect(FilterCountSummary.text(shown: 37, total: 443, selected: 0, loaded: true, compact: true) == "37 games")
+        #expect(FilterCountSummary.text(shown: 1, total: 443, selected: 0, loaded: true, compact: true) == "1 game")
+        #expect(FilterCountSummary.text(shown: 0, total: 443, selected: 0, loaded: true, compact: true) == "No games")
+        #expect(FilterCountSummary.text(shown: 37, total: 443, selected: 5, loaded: true, compact: true)
+                == "37 games · 5 selected")
+        #expect(FilterCountSummary.text(shown: 0, total: 443, selected: 0, loaded: false, compact: true) == nil)
+    }
+
     @Test func withoutTotalDropsTheOfPart() {
         #expect(FilterCountSummary.text(shown: 37, total: nil, selected: 0, loaded: true) == "37 games")
     }

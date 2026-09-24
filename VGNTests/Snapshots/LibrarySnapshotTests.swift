@@ -115,6 +115,7 @@ struct LibrarySnapshotTests {
 
     // MARK: Filter chips bar
 
+    /// Three wrapped chip rows; the "N of M games" count pinned trailing on the FIRST row.
     @Test func filterChips() async {
         var f = LibraryFilter(scope: .all)
         f.searchText = "souls"
@@ -124,7 +125,19 @@ struct LibrarySnapshotTests {
         f.platforms = ["ps4", "snes"]
         let vm = await SnapSupport.libraryVM(.sampled, filter: f)
         await SnapshotHarness.capture(group: group, "library-filter-chips",
-                                      size: SnapSize(width: 660, height: 120), settle: 4) {
+                                      size: SnapSize(width: 500, height: 120), settle: 4) {
+            FilterChipsBar(vm: vm).frame(width: 480).padding(8)
+        }
+    }
+
+    /// One chip row; the count at the trailing edge, on the chips' baseline.
+    @Test func filterChipsOneRow() async {
+        var f = LibraryFilter(scope: .all)
+        f.genres = ["RPG"]
+        f.tierIDs = [1]
+        let vm = await SnapSupport.libraryVM(.sampled, filter: f)
+        await SnapshotHarness.capture(group: group, "library-filter-chips-one-row",
+                                      size: SnapSize(width: 660, height: 60), settle: 4) {
             FilterChipsBar(vm: vm).frame(width: 640).padding(8)
         }
     }
