@@ -496,6 +496,16 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 - With a filter or search active, the chips bar's right end reads "N of M games" (e.g. "37 of 443
   games"); it says "No games" at 0 and appends "· 5 selected" when several are selected; it never
   pushes the chips off-screen.
+- *(wave 21)* The count sits at the **far right** of the bar, its right edge above the right edge of
+  the grid's last column (same 16 pt inset as the grid), on the **same line and baseline** as the first
+  row of chips — also when the chips wrap to 2–3 rows (narrow window) — and reads level with the toolbar
+  search field. Type only a search (no filter): the bar appears with the search chip and the count.
+  Shrink the window: the chips wrap first; only then does the count shorten to "37 games".
+
+## Bottom banner legibility (wave 21) [owner]
+- Trigger a Batocera review banner (or any banner, e.g. an Undo toast) over a grid full of bright covers:
+  the banner is a solid card (no covers showing through), the message is full-contrast text, Undo /
+  Review… / ✕ are clearly buttons, in light and dark appearance. Size, position and slide-in unchanged.
 
 ## "To Revisit" play status (wave 20) [owner]
 - In the inspector, a played game's Status menu now lists **To Revisit** right after Abandoned (⌃⌘5);

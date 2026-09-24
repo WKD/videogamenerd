@@ -115,6 +115,7 @@ struct LibrarySnapshotTests {
 
     // MARK: Filter chips bar
 
+    /// Three wrapped chip rows; the "N of M games" count pinned trailing on the FIRST row.
     @Test func filterChips() async {
         var f = LibraryFilter(scope: .all)
         f.searchText = "souls"
@@ -124,8 +125,49 @@ struct LibrarySnapshotTests {
         f.platforms = ["ps4", "snes"]
         let vm = await SnapSupport.libraryVM(.sampled, filter: f)
         await SnapshotHarness.capture(group: group, "library-filter-chips",
-                                      size: SnapSize(width: 660, height: 120), settle: 4) {
+                                      size: SnapSize(width: 500, height: 120), settle: 4) {
+            FilterChipsBar(vm: vm).frame(width: 480).padding(8)
+        }
+    }
+
+    /// One chip row; the count at the trailing edge, on the chips' baseline.
+    @Test func filterChipsOneRow() async {
+        var f = LibraryFilter(scope: .all)
+        f.genres = ["RPG"]
+        f.tierIDs = [1]
+        let vm = await SnapSupport.libraryVM(.sampled, filter: f)
+        await SnapshotHarness.capture(group: group, "library-filter-chips-one-row",
+                                      size: SnapSize(width: 660, height: 60), settle: 4) {
             FilterChipsBar(vm: vm).frame(width: 640).padding(8)
+        }
+    }
+
+    // MARK: Feedback banner over a busy grid
+
+    /// The bottom banner over saturated, high-contrast "covers": its surface must stay
+    /// readable (opaque, primary text, bordered actions) in light and dark.
+    @Test func bannerOverBusyCovers() async {
+        let colors: [Color] = [.yellow, .blue, .red, .green, .white, .purple, .orange, .black, .cyan, .pink]
+        await SnapshotHarness.capture(group: group, "library-banner-busy",
+                                      size: SnapSize(width: 560, height: 150), settle: 4) {
+            ZStack(alignment: .bottom) {
+                HStack(spacing: 0) {
+                    ForEach(colors.indices, id: \.self) { i in
+                        colors[i].overlay(Text("COVER").font(.title.bold()).rotationEffect(.degrees(-60))
+                            .foregroundStyle(colors[(i + 3) % colors.count]))
+                    }
+                }
+                VStack(spacing: 8) {
+                    BannerView(banner: LibraryBanner(message: "4 favourites added from Batocera · 2 need your review",
+                                                     kind: .info, actionTitle: "Review…",
+                                                     secondaryActionTitle: "Undo"),
+                               onAction: {}, onSecondaryAction: {}, onDismiss: {})
+                    BannerView(banner: LibraryBanner(message: "Couldn't reach IGDB", kind: .warning),
+                               onDismiss: {})
+                }
+                .padding(12)
+            }
+            .frame(width: 560, height: 150)
         }
     }
 

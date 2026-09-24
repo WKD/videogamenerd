@@ -12,10 +12,13 @@ import Foundation
 /// - `loaded` — false while the scope's first rows are still loading → show nothing.
 enum FilterCountSummary {
 
-    /// The visible count line, or nil while still loading.
-    static func text(shown: Int, total: Int?, selected: Int, loaded: Bool) -> String? {
+    /// The visible count line, or nil while still loading. `compact` drops the "of 443"
+    /// part ("37 games") — the bar falls back to it (`ViewThatFits`) when the chips have
+    /// already wrapped as far as they can and the full line still does not fit.
+    static func text(shown: Int, total: Int?, selected: Int, loaded: Bool,
+                     compact: Bool = false) -> String? {
         guard loaded else { return nil }
-        var line = countPhrase(shown: shown, total: total)
+        var line = countPhrase(shown: shown, total: compact ? nil : total)
         if selected > 1 { line += " · \(selected) selected" }
         return line
     }

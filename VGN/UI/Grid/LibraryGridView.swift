@@ -12,7 +12,11 @@ struct LibraryGridView: View {
     @Environment(\.hltbFetchPresenter) private var hltbPresenter
 
     private let spacing: CGFloat = 14
-    private let outerPadding: CGFloat = 16
+    private let outerPadding: CGFloat = LibraryGridView.contentInset
+    /// The grid's horizontal (and vertical) content inset. The filter-chips bar above the
+    /// grid reuses it so its chips start over the first column and its count ends over the
+    /// last one (PLAN §8).
+    static let contentInset: CGFloat = 16
 
     private var columnCount: Int {
         let available = containerWidth - outerPadding * 2
