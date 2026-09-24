@@ -228,13 +228,20 @@ final class AppEnvironment {
             // importer cache (source = "hltb").
             let hltb = HLTBFetchBuilder.build(mode: mode, database: database, library: vm)
 
+            // The pre-reset snapshot (Ranking ▸ Reset All Duels) goes to the real backups folder
+            // ONLY in a live launch; throwaway runs never write there.
+            let resetSnapshots: (@Sendable () throws -> URL)? =
+                mode == .live ? { @Sendable in try AppPaths.backupsDirectory() } : nil
+            let rankingEnvironment = RankingEnvironment(
+                ranking: rankingStore, library: store, coverLoader: coverLoader,
+                resetSnapshotDirectory: resetSnapshots)
+            rankingEnvironment.duelReset.library = vm
+
             return AppEnvironment(
                 settings: settings, library: vm, actions: actions, failure: nil,
                 services: built?.graph, quickAdd: wiring.quickAdd,
                 quickAddController: wiring.controller, enrichment: wiring.enrichment,
-                ranking: RankingEnvironment(
-                    ranking: rankingStore, library: store, coverLoader: coverLoader
-                ),
+                ranking: rankingEnvironment,
                 photoScan: built.map {
                     PhotoScanPresenter(services: $0.graph, platformCatalog: $0.platformCatalog,
                                        store: store, library: vm)

@@ -20,11 +20,17 @@ final class RankingEnvironment {
     let ranking: RankingStore
     let library: LibraryStore
     let coverLoader: any CoverLoading
+    /// Ranking ▸ Reset All Duels / Reset Duels in Tier (PLAN §7) — one per environment.
+    let duelReset: DuelResetPresenter
 
-    init(ranking: RankingStore, library: LibraryStore, coverLoader: any CoverLoading) {
+    /// `resetSnapshotDirectory` is where the pre-reset snapshot goes — the live backups folder
+    /// in a live launch, nil (no snapshot) for sample / seeded / preview / test runs.
+    init(ranking: RankingStore, library: LibraryStore, coverLoader: any CoverLoading,
+         resetSnapshotDirectory: (@Sendable () throws -> URL)? = nil) {
         self.ranking = ranking
         self.library = library
         self.coverLoader = coverLoader
+        self.duelReset = DuelResetPresenter(ranking: ranking, snapshotDirectory: resetSnapshotDirectory)
     }
 
     /// The seam the models read/write through.
