@@ -497,6 +497,21 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   return to To Revisit, not plain Abandoned.
 - Confirm nothing became To Revisit by itself: only games you flagged carry it.
 
+## Batocera play time column · Ask Claude for the vault · compilation caption (wave 21, W21-C) [owner]
+- **After the v17 upgrade** (a `premigration-*` snapshot is taken first): open a game you only
+  played on Batocera — the inspector's Playtime section shows its time on a **"Batocera"** row (and
+  no "PSN" row). Open a PSN game — its **"PSN"** row is unchanged. A game played on both (one of the
+  3) shows both rows; the grid's playtime sort / Stats use the larger of the two, never the sum.
+  A game with a typed time still shows "Your manual time is used…".
+- Re-sync Batocera and promote a played ROM: the time lands on the "Batocera" row, never "PSN".
+- **Play Next ▸ From the vault ▸ Ask Claude**: a panel opens under the cards with the engine's order
+  on the left and Claude's (reason + optional caveat) on the right; the shared #1 is highlighted.
+  Cancel works; asking again for the same bracket answers instantly (session cache); changing the
+  bracket drops the answer. With the CLI missing / logged out the panel says why and offers
+  Settings… — the cards stay. Check an unmatched ROM's reason: Claude should say when it doesn't know it.
+- **Compilation editor** of a PSN collection whose time was not given to one member: the header shows
+  "75 h on the whole collection (PSN)" under the member count (nothing for a hand-made compilation).
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
