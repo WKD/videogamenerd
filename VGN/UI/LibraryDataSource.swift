@@ -108,6 +108,7 @@ enum LibraryFilterEvaluator {
             // sample mode the count stays 0 so the row is hidden — documented, not a bug.
             break
         case .needsHoldsUpRating: if !game.needsHoldsUpRating { return false }
+        case .psPlusOnly: if !(game.owned && game.ownedOnlyViaSubscription) { return false }
         case .dlcAndExpansions, .sameGameTwoEntries:
             // Cached IGDB-type review lists (PLAN §5.1): a GameSummary carries no game_type or
             // parent link, so the preview/in-memory evaluator can't reproduce them — "no
@@ -233,7 +234,8 @@ extension SidebarCounts {
             perPlatform: perPlatform,
             lengthShelves: [:],
             unmeasured: 0,
-            needsHoldsUpRating: games.filter(\.needsHoldsUpRating).count
+            needsHoldsUpRating: games.filter(\.needsHoldsUpRating).count,
+            psPlusOnly: games.filter { $0.owned && $0.ownedOnlyViaSubscription }.count
         )
     }
 }

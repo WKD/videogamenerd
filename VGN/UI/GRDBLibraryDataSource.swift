@@ -46,6 +46,8 @@ struct GRDBLibraryDataSource: LibraryDataSource {
                 // "Needs a 'Holds Up' Rating" (PLAN §7b) — same single observation, so rating a
                 // game (a `games` write) re-runs it and the row hides itself at 0.
                 counts.needsHoldsUpRating = try LibraryQuery.fetchNeedsHoldsUpRatingCount(db)
+                // "PS Plus Only" (PLAN §8/§13.3) — same observation, same predicate as the facet.
+                counts.psPlusOnly = try LibraryQuery.fetchPSPlusOnlyCount(db)
                 return counts
             }
             .values(in: store.dbReader)

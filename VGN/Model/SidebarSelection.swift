@@ -18,6 +18,12 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     // Play Next recommendation (PLAN §7b) — LIBRARY section, after Unranked.
     case playNext
 
+    /// Games I own **only** through a PS Plus claim (every copy has `subscription IS NOT
+    /// NULL`) — they leave with the subscription (PLAN §8/§13.3). A LIBRARY row right after
+    /// Owned, shown **only when its count > 0**. The same fact as the Format ▸ PS Plus facet
+    /// (one SQL predicate). Distinct from THE VAULT ▸ PS Plus (claims NOT in the library).
+    case psPlusOnly
+
     /// Games not linked to an IGDB entry (`igdb_id IS NULL`): they get no metadata,
     /// cover, time-to-beat or traits, and are invisible to the `igdb_id` dedupe, so a
     /// later import can duplicate them (PLAN §5.1 "Reconciling unlinked games"). A
@@ -78,6 +84,7 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
         case .backlog: return "backlog"
         case .unranked: return "unranked"
         case .playNext: return "playNext"
+        case .psPlusOnly: return "psPlusOnly"
         case .unlinked: return "unlinked"
         case .bundlesToExpand: return "bundlesToExpand"
         case .dlcAndExpansions: return "dlcAndExpansions"

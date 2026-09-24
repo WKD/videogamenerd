@@ -206,6 +206,9 @@ enum LibraryQuery {
             wheres.append(dlcAndExpansionsPredicate())
         case .sameGameTwoEntries:
             wheres.append(sameGameTwoEntriesPredicate())
+        case .psPlusOnly:
+            // Owned only through PS Plus — the ONE predicate Format ▸ PS Plus uses too.
+            wheres.append(subscriptionOnlyPredicate)
         case .needsHoldsUpRating:
             // The rating pass (PLAN §7b): played, not yet judged "Holds up today?".
             wheres.append(needsHoldsUpRatingPredicate)
@@ -351,11 +354,7 @@ enum LibraryQuery {
         // must be owned AND have no owned copy that is really owned (subscription IS NULL).
         // With Status ▸ Not Played this is the "finish before unsubscribing" list.
         if filter.includeSubscriptionOnly {
-            wheres.append("""
-                (EXISTS(SELECT 1 FROM product_games pg6 WHERE pg6.game_id = g.id)
-                 AND NOT EXISTS(SELECT 1 FROM product_games pg7 JOIN products p7 ON p7.id = pg7.product_id
-                                WHERE pg7.game_id = g.id AND p7.subscription IS NULL))
-                """)
+            wheres.append(subscriptionOnlyPredicate)
         }
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
@@ -549,6 +548,21 @@ enum LibraryQuery {
                     OR json_extract(cc.json, '$.version_parent')
                         IN (SELECT igdb_id FROM games WHERE igdb_id IS NOT NULL AND igdb_id <> g.igdb_id)))
         """
+    }
+
+    /// **Owned only through a subscription** (PLAN §13.3): owned, and no owned copy is really
+    /// owned (`subscription IS NULL`). The ONE SQL definition shared by the Format ▸ PS Plus
+    /// facet, the "PS Plus Only" sidebar scope and its count (mirrors the grid row's `sub_only`
+    /// / ``GameSummary/ownedOnlyViaSubscription``).
+    static let subscriptionOnlyPredicate = """
+        (EXISTS(SELECT 1 FROM product_games pg6 WHERE pg6.game_id = g.id)
+         AND NOT EXISTS(SELECT 1 FROM product_games pg7 JOIN products p7 ON p7.id = pg7.product_id
+                        WHERE pg7.game_id = g.id AND p7.subscription IS NULL))
+        """
+
+    /// Sidebar count for the "PS Plus Only" row (single counts observation).
+    static func fetchPSPlusOnlyCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(subscriptionOnlyPredicate)") ?? 0
     }
 
     /// PLAN §7b "Needs a 'Holds Up' Rating": played games with no "Holds up today?" mark. The

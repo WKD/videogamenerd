@@ -30,6 +30,19 @@ struct SidebarView: View {
                         Label(Self.title(for: sel), systemImage: Self.icon(for: sel))
                             .badge(badge(for: sel))
                     }
+                    // "PS Plus Only" — right after Owned (the ownership lists), shown ONLY when
+                    // > 0 (PLAN §8/§13.3). Not THE VAULT ▸ PS Plus: these ARE in the library.
+                    if sel == .owned, (vm.counts.count(for: .psPlusOnly) ?? 0) > 0 {
+                        taggedRow(.psPlusOnly) {
+                            Label {
+                                Text(Self.title(for: .psPlusOnly))
+                            } icon: {
+                                PSPlusBadgeView(size: 14, shadow: false)
+                            }
+                            .badge(badge(for: .psPlusOnly))
+                        }
+                        .appKitTooltip(Self.psPlusOnlyTooltip)
+                    }
                 }
                 // "Unlinked" — games with no IGDB link (PLAN §5.1). Shown ONLY when it
                 // has games (like "Unmeasured"), so a fully-linked library never sees it.
@@ -234,6 +247,10 @@ struct SidebarView: View {
 
     // MARK: Labels & icons
 
+    /// The "PS Plus Only" row tooltip — says how it differs from THE VAULT ▸ PS Plus.
+    nonisolated static let psPlusOnlyTooltip = "Games you only have through PS Plus — they leave with "
+        + "the subscription. (THE VAULT \u{25B8} PS Plus lists the claims you did NOT add to your library.)"
+
     nonisolated static func title(for selection: SidebarSelection) -> String {
         switch selection {
         case .all: return "All"
@@ -247,6 +264,7 @@ struct SidebarView: View {
         case .dlcAndExpansions: return "DLC & Expansions"
         case .sameGameTwoEntries: return "Same Game, Two Entries"
         case .needsHoldsUpRating: return "Needs a \u{201C}Holds Up\u{201D} Rating"
+        case .psPlusOnly: return "PS Plus Only"
         case .tierBoard: return "Tier Board"
         case .theTop: return "The Top"
         case .duel: return "Duel"
@@ -270,6 +288,7 @@ struct SidebarView: View {
         case .dlcAndExpansions: return "puzzlepiece.extension"
         case .sameGameTwoEntries: return "arrow.triangle.merge"
         case .needsHoldsUpRating: return "clock.badge.questionmark"
+        case .psPlusOnly: return "plus.circle"   // the row itself draws PSPlusBadgeView
         case .tierBoard: return "square.stack.3d.up"
         case .theTop: return "trophy"
         case .duel: return "flag.2.crossed"

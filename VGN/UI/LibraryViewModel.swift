@@ -539,6 +539,9 @@ final class LibraryViewModel {
     /// explanatory header above it (PLAN §7b/§8).
     var isNeedsHoldsUpRatingSelection: Bool { selection == .needsHoldsUpRating }
 
+    /// True when the sidebar has "PS Plus Only" selected — a slim header explains it (PLAN §8).
+    var isPSPlusOnlySelection: Bool { selection == .psPlusOnly }
+
     /// The selected Vault source, or nil when the selection is not a Vault row.
     var selectedVaultSource: VaultSource? {
         if case .vault(let source) = selection { return source }

@@ -109,6 +109,9 @@ struct RootView: View {
             if vm.isNeedsHoldsUpRatingSelection {
                 HoldsUpRatingHeader()
             }
+            if vm.isPSPlusOnlySelection {
+                PSPlusOnlyHeader(count: vm.counts.psPlusOnly)
+            }
             // STRUCTURAL GUARD (wave 19): the destination area lives inside a `GeometryReader`
             // so the DETAIL column can never leak an unbounded ideal height into the
             // `NavigationSplitView` — which would size BOTH columns to it and push the sidebar
