@@ -33,6 +33,9 @@ struct GameSummary: Hashable, Sendable, Identifiable {
 
     var status: PlayStatus?
 
+    /// "Holds up today?" (PLAN §7b, v16) — `nil` = Unrated. Only a played game carries one.
+    var holdsUp: HoldsUp?
+
     /// True when this game is owned as a ROM on ≥ 1 platform (PLAN §4 — ROM badge).
     var hasROM: Bool
 
@@ -88,6 +91,7 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         compilationProductID: Int64? = nil,
         platformIDs: [String] = [],
         status: PlayStatus? = nil,
+        holdsUp: HoldsUp? = nil,
         hasROM: Bool = false,
         ownedOnlyViaSubscription: Bool = false,
         physicalPlatformIDs: [String] = [],
@@ -112,6 +116,7 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         self.compilationProductID = compilationProductID
         self.platformIDs = platformIDs
         self.status = status
+        self.holdsUp = holdsUp
         self.hasROM = hasROM
         self.ownedOnlyViaSubscription = ownedOnlyViaSubscription
         self.physicalPlatformIDs = physicalPlatformIDs
@@ -127,6 +132,10 @@ struct GameSummary: Hashable, Sendable, Identifiable {
 
     /// A played game that has no tier yet ("Unranked" smart list).
     var isUnranked: Bool { played && tierID == nil }
+
+    /// A played game with no "Holds up today?" mark yet — the "Needs a 'Holds Up' Rating"
+    /// smart list (PLAN §7b/§8).
+    var needsHoldsUpRating: Bool { played && holdsUp == nil }
 }
 
 #if DEBUG

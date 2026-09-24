@@ -254,8 +254,8 @@ struct LibraryStore: Sendable {
 
     // MARK: - Played / tier / status
 
-    /// Toggle played for a set of games. Un-playing clears tier + rank + status
-    /// (invariant 2) and, for a game that is not owned, would orphan it.
+    /// Toggle played for a set of games. Un-playing clears tier + rank + status + the
+    /// "Holds up today?" mark (invariant 2) and, for a game that is not owned, would orphan it.
     @discardableResult
     func setPlayed(_ gameIDs: [Int64], _ played: Bool, confirmOrphanDelete: Bool = false) async throws -> WriteOutcome {
         try await writeCatchingOrphan { db in
@@ -274,7 +274,7 @@ struct LibraryStore: Sendable {
             for id in gameIDs {
                 try db.execute(sql: """
                     UPDATE games SET played = 0, tier_id = NULL, rank_key = NULL,
-                                     status = NULL, revisit = 0, updated_at = ? WHERE id = ?
+                                     status = NULL, revisit = 0, holds_up = NULL, updated_at = ? WHERE id = ?
                     """, arguments: [Date(), id])
             }
             for id in orphans where confirmOrphanDelete {
@@ -303,7 +303,7 @@ struct LibraryStore: Sendable {
             guard try Self.isOwned(gameID, db) else { return .notOwned }
             try db.execute(sql: """
                 UPDATE games SET played = 0, tier_id = NULL, rank_key = NULL,
-                                 status = NULL, revisit = 0, updated_at = ? WHERE id = ?
+                                 status = NULL, revisit = 0, holds_up = NULL, updated_at = ? WHERE id = ?
                 """, arguments: [Date(), gameID])
             return .becameBacklog
         }

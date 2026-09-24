@@ -657,6 +657,31 @@ enum Migrations {
         }
     }
 
+    // MARK: - v16 — "Holds up today?" (PLAN §4 / §7b, owner request 2026-09-25)
+
+    /// v16 adds **`games.holds_up`** — the owner's optional, hand-set verdict on how a
+    /// *played* game plays **today** ("Holds up today?", PLAN §7b), separate from the tier
+    /// (a favourites ranking where nostalgia counts). Three values, NULL = unrated:
+    ///
+    ///  - `'holds_up'` — still a great play today;
+    ///  - `'of_its_time'` — great then, dated now;
+    ///  - `'too_archaic'` — no longer playable, gameplay-wise, for the gamer I am today.
+    ///
+    /// Pure additive `ALTER TABLE ADD COLUMN` (the v8/v9/v14/v15 pattern): no table rebuild,
+    /// FTS untouched. **No backfill, nothing inferred** from year / platform / tier — every
+    /// existing game is unrated (PLAN §4 inv. 5: nothing modifies library data on its own).
+    /// The "played games only, un-playing clears it" rule is held by ``LibraryStore`` (like
+    /// the tier, invariant 2); the CHECK only guards the vocabulary. Mapped to the model
+    /// ``HoldsUp`` in one place (``HoldsUp/init(dbValue:)`` / ``HoldsUp/dbValue``).
+    static func registerV16(in migrator: inout DatabaseMigrator) {
+        migrator.registerMigration("v16") { db in
+            try db.execute(sql: """
+                ALTER TABLE games ADD COLUMN holds_up TEXT
+                    CHECK (holds_up IN ('holds_up','of_its_time','too_archaic'));
+                """)
+        }
+    }
+
     // MARK: - Reference / lookup tables
 
     private static func createPlatforms(_ db: Database) throws {

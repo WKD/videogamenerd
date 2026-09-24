@@ -122,9 +122,15 @@ struct RecommendationStore: Sendable {
                 if owned == 0 { return .refusedWouldOrphan }
             }
 
-            try db.execute(sql: "UPDATE games SET status = ?, played = ?, revisit = ?, updated_at = ? WHERE id = ?",
+            // Restoring `played = 0` also clears any "Holds up today?" mark set since (only a
+            // played game carries one — v16, invariant 2 pattern).
+            try db.execute(sql: """
+                UPDATE games SET status = ?, played = ?, revisit = ?,
+                                 holds_up = CASE WHEN ? = 1 THEN holds_up ELSE NULL END,
+                                 updated_at = ? WHERE id = ?
+                """,
                            arguments: [undo.previousStatus, undo.previousPlayed ? 1 : 0,
-                                       undo.previousRevisit ? 1 : 0,
+                                       undo.previousRevisit ? 1 : 0, undo.previousPlayed ? 1 : 0,
                                        undo.previousUpdatedAt, undo.gameID])
             try db.execute(sql: "DELETE FROM rec_feedback WHERE id = ?", arguments: [undo.pickedFeedbackID])
             return .restored
