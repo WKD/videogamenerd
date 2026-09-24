@@ -37,10 +37,15 @@ struct RecommendationStore: Sendable {
         try await dbReader.read { db in try Self.loadRankedGames(db: db) }
     }
 
-    /// The leave-one-out taste backtest over the ranked games (PLAN §7b).
-    func backtest(weights: RecommendationWeights = RecommendationWeights()) async throws -> TasteBacktestResult {
+    /// The leave-one-out taste backtest over the ranked games (PLAN §7b), optionally also
+    /// run without the games first played before `firstPlayedCutoff` (the drift line). It
+    /// never sees the "Holds up today?" mark — the mark is not a ranking signal.
+    func backtest(
+        weights: RecommendationWeights = RecommendationWeights(),
+        firstPlayedCutoff: Int? = nil
+    ) async throws -> TasteBacktestResult {
         let ranked = try await dbReader.read { db in try Self.loadRankedGames(db: db) }
-        return TasteBacktest.run(ranked: ranked, weights: weights)
+        return TasteBacktest.run(ranked: ranked, weights: weights, excludingFirstPlayedBefore: firstPlayedCutoff)
     }
 
     // MARK: - Feedback (rec_feedback)

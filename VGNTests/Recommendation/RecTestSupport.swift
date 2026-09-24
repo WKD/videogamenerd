@@ -29,7 +29,8 @@ enum Rec {
         title: String = "Candidate",
         playStatus: PlayStatus? = nil,
         ownedOnlyViaSubscription: Bool = false,
-        isBatoceraFavourite: Bool = false
+        isBatoceraFavourite: Bool = false,
+        holdsUp: HoldsUp? = nil
     ) -> Candidate {
         Candidate(
             id: id,
@@ -45,7 +46,8 @@ enum Rec {
             title: title,
             playStatus: playStatus,
             ownedOnlyViaSubscription: ownedOnlyViaSubscription,
-            isBatoceraFavourite: isBatoceraFavourite)
+            isBatoceraFavourite: isBatoceraFavourite,
+            holdsUp: holdsUp)
     }
 
     // "By Length" brackets at the default pace (8 h/week ⇒ edges 4 / 10 / 40 / 80).

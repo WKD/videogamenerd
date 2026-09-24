@@ -14,6 +14,27 @@ enum TasteBacktest {
     /// negative correlation is still "rough", not a hard fail).
     static let roughFloor = -1.0
 
+    /// Run the backtest, plus — when `excludingFirstPlayedBefore` is set — the same backtest
+    /// over the ranked games **minus** those first played before that year (PLAN §7b: "run
+    /// excluding games first played before a chosen year, to show how far nostalgia and
+    /// present taste have drifted"). Only games with a known first-played year are removed.
+    static func run(
+        ranked: [RankedGame], weights: RecommendationWeights = RecommendationWeights(),
+        excludingFirstPlayedBefore year: Int?
+    ) -> TasteBacktestResult {
+        var result = run(ranked: ranked, weights: weights)
+        guard let year else { return result }
+        let kept = ranked.filter { game in
+            guard let first = game.firstPlayedYear else { return true }
+            return first >= year
+        }
+        let filtered = run(ranked: kept, weights: weights)
+        result.cutoff = TasteBacktestResult.Cutoff(
+            year: year, spearman: filtered.spearman, sampleCount: kept.count,
+            excludedCount: ranked.count - kept.count)
+        return result
+    }
+
     /// Run the backtest over the ranked games.
     static func run(ranked: [RankedGame], weights: RecommendationWeights = RecommendationWeights()) -> TasteBacktestResult {
         guard ranked.count >= minSamples else {

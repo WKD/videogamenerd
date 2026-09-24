@@ -108,7 +108,9 @@ extension EnvironmentValues {
 /// is unit-tested against a fake with no database. A `Sendable` value.
 protocol PlayNextBackend: Sendable {
     func recommend(bracket: TimeBracket, options: RecommendationOptions) async throws -> PlayNextResult
-    func backtest() async throws -> TasteBacktestResult
+    /// The taste backtest; with a cutoff year it also reports ρ without the games first
+    /// played before that year (PLAN §7b).
+    func backtest(firstPlayedCutoff: Int?) async throws -> TasteBacktestResult
     func snooze(gameID: Int64) async throws
     func never(gameID: Int64) async throws
     /// Marks the game playing and returns a token to undo exactly that (PLAN §7b).
@@ -133,7 +135,9 @@ struct LivePlayNextBackend: PlayNextBackend {
     func recommend(bracket: TimeBracket, options: RecommendationOptions) async throws -> PlayNextResult {
         try await recommendation.recommend(bracket: bracket, options: options)
     }
-    func backtest() async throws -> TasteBacktestResult { try await recommendation.backtest() }
+    func backtest(firstPlayedCutoff: Int?) async throws -> TasteBacktestResult {
+        try await recommendation.backtest(firstPlayedCutoff: firstPlayedCutoff)
+    }
     func snooze(gameID: Int64) async throws { try await recommendation.snooze(gameID: gameID) }
     func never(gameID: Int64) async throws { try await recommendation.never(gameID: gameID) }
     func startPlaying(gameID: Int64) async throws -> StartPlayingUndo {

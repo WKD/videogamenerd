@@ -72,6 +72,12 @@ enum PlayNextReasonFormatter {
             return "about \(approxLeft(remainingSeconds)) left"
         case .wantedToRevisit:
             return "You wanted to come back to it"
+        case .markedHoldsUp:
+            return "You marked it as holding up today"
+        case .markedOfItsTime:
+            return "You marked it as of its time"
+        case .markedTooArchaic:
+            return "You marked it as too archaic — shown because archaic games are included"
         case let .crowdRated(rating, _):
             return "Well regarded (IGDB \(Int(rating.rounded())))"
         case .noMetadata:

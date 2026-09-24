@@ -187,6 +187,10 @@ struct PlayNextHeroCard: View {
                 }
                 PlatformFormatLine(platformIDs: suggestion.platformIDs,
                                    formats: suggestion.formats, status: suggestion.status)
+                // "first played in 1991" (PLAN §7b) — quiet, only when an import supplied it.
+                if let caption = FirstPlayedCaption.text(suggestion.firstPlayedAt) {
+                    Text(caption).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                }
 
                 EstimateBracketBar(estimateSeconds: suggestion.estimateSeconds,
                                    fullEstimateSeconds: suggestion.fullEstimateSeconds,
@@ -268,6 +272,9 @@ struct PlayNextAlternativeCard: View {
             }
             PlatformFormatLine(platformIDs: suggestion.platformIDs,
                                formats: suggestion.formats, status: suggestion.status)
+            if let caption = FirstPlayedCaption.text(suggestion.firstPlayedAt) {
+                Text(caption).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+            }
             if let estimate = suggestion.estimateSeconds {
                 Text(suggestion.status == .playing
                      ? "\(PlaytimeParser.formatApprox(seconds: estimate)) left"
