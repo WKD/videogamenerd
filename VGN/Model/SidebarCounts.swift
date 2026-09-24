@@ -33,6 +33,9 @@ struct SidebarCounts: Hashable, Sendable {
     /// Library games that are an IGDB port whose parent is also in the library — the
     /// "Same Game, Two Entries" row, shown only when > 0 (PLAN §5.1). Same counts observation.
     var sameGameTwoEntries: Int
+    /// Played games with no "Holds up today?" mark (`played = 1 AND holds_up IS NULL`) — the
+    /// "Needs a 'Holds Up' Rating" row, shown only when > 0 (PLAN §7b/§8). Same counts observation.
+    var needsHoldsUpRating: Int
 
     init(
         all: Int = 0,
@@ -47,7 +50,8 @@ struct SidebarCounts: Hashable, Sendable {
         unlinked: Int = 0,
         bundlesToExpand: Int = 0,
         dlcAndExpansions: Int = 0,
-        sameGameTwoEntries: Int = 0
+        sameGameTwoEntries: Int = 0,
+        needsHoldsUpRating: Int = 0
     ) {
         self.all = all
         self.owned = owned
@@ -62,6 +66,7 @@ struct SidebarCounts: Hashable, Sendable {
         self.bundlesToExpand = bundlesToExpand
         self.dlcAndExpansions = dlcAndExpansions
         self.sameGameTwoEntries = sameGameTwoEntries
+        self.needsHoldsUpRating = needsHoldsUpRating
     }
 
     static let empty = SidebarCounts()
@@ -81,6 +86,7 @@ struct SidebarCounts: Hashable, Sendable {
         case .bundlesToExpand: return bundlesToExpand
         case .dlcAndExpansions: return dlcAndExpansions
         case .sameGameTwoEntries: return sameGameTwoEntries
+        case .needsHoldsUpRating: return needsHoldsUpRating
         case .length(let shelf): return lengthShelves[shelf] ?? 0
         case .unmeasured: return unmeasured
         // The ROM catalogue is a separate shelf — its count never rides the library counts

@@ -31,6 +31,14 @@ enum SampleLibrarySeeder {
         ]
     }
 
+    /// The sample "Holds up today?" marks, by title (played games only).
+    static let sampleHoldsUp: [(String, HoldsUp)] = [
+        ("Bloodborne", .holdsUp),
+        ("Chrono Trigger", .holdsUp),
+        ("Broken Sword", .ofItsTime),
+        ("Metal Gear Solid 3: Snake Eater", .ofItsTime),
+    ]
+
     /// The compilation used to demonstrate all-or-nothing ownership (PLAN §8).
     static var compilation: (product: ProductDraft, members: [CompilationMemberDraft]) {
         (
@@ -46,7 +54,14 @@ enum SampleLibrarySeeder {
 
     static func seed(into store: LibraryStore) async {
         do {
-            _ = try await store.addGames(drafts)
+            let outcomes = try await store.addGames(drafts)
+            // A few "Holds up today?" marks (PLAN §7b) so the demo shows every state; the
+            // other played games stay Unrated and fill the "Needs a 'Holds Up' Rating" list.
+            let ids = Dictionary(zip(drafts.map(\.title), outcomes.map(\.gameID)),
+                                 uniquingKeysWith: { a, _ in a })
+            for (title, mark) in sampleHoldsUp {
+                if let id = ids[title] { try await store.setHoldsUp(mark, for: [id]) }
+            }
             let comp = compilation
             _ = try await store.addCompilation(product: comp.product, members: comp.members)
         } catch {

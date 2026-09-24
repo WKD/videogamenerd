@@ -107,6 +107,7 @@ enum LibraryFilterEvaluator {
             // "no constraint" (like .unlinked). The live path scopes it via the id set, and in
             // sample mode the count stays 0 so the row is hidden — documented, not a bug.
             break
+        case .needsHoldsUpRating: if !game.needsHoldsUpRating { return false }
         case .dlcAndExpansions, .sameGameTwoEntries:
             // Cached IGDB-type review lists (PLAN §5.1): a GameSummary carries no game_type or
             // parent link, so the preview/in-memory evaluator can't reproduce them — "no
@@ -148,6 +149,12 @@ enum LibraryFilterEvaluator {
             let isNotPlayed = filter.includeNotPlayed && !game.played
             let isNoStatus = filter.includeNoStatus && game.played && game.status == nil
             if !(inSet || isNotPlayed || isNoStatus) { return false }
+        }
+        // Holds up today? (OR within kind: any selected mark, plus "Unrated" = played, no mark).
+        if !filter.holdsUp.isEmpty || filter.includeHoldsUpUnrated {
+            let inSet = game.holdsUp.map(filter.holdsUp.contains) ?? false
+            let isUnrated = filter.includeHoldsUpUnrated && game.needsHoldsUpRating
+            if !(inSet || isUnrated) { return false }
         }
         // Ownership: "Not Owned" is evaluable via GameSummary.owned; specific format
         // values are not carried on the summary and stay SQL-only, so a selected
@@ -225,7 +232,8 @@ extension SidebarCounts {
             duelQueue: games.filter { $0.played && $0.rankKey == nil }.count,
             perPlatform: perPlatform,
             lengthShelves: [:],
-            unmeasured: 0
+            unmeasured: 0,
+            needsHoldsUpRating: games.filter(\.needsHoldsUpRating).count
         )
     }
 }

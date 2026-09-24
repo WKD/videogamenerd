@@ -67,6 +67,15 @@ struct InspectorView: View {
                     Task { await vm.actions?.setStatus(ids: ids, status: status) }
                 }
 
+                // "Holds up today?" (PLAN §7b) — acts on the played games of the selection.
+                if games.contains(where: \.played) {
+                    Divider()
+                    let marks = Set(games.filter(\.played).map(\.holdsUp))
+                    HoldsUpInspectorRow(current: marks.count == 1 ? marks.first ?? nil : nil) { value in
+                        vm.setHoldsUp(value, for: ids)
+                    }
+                }
+
                 if games.count > 1 {
                     Divider()
                     Button {
@@ -267,6 +276,13 @@ private struct SingleGameInspector: View {
             .accessibilityIdentifier(A11yID.inspectorTierChip)
             .accessibilityValue(detail.tierLetter ?? "Unranked")
             scoreLineView
+            // "Holds up today?" (PLAN §7b) — under the tier, played games only.
+            if detail.played {
+                HoldsUpInspectorRow(current: detail.holdsUp, firstPlayedAt: detail.firstPlayedAt) { value in
+                    vm.setHoldsUp(value, for: ids)
+                }
+                .padding(.top, 6)
+            }
         }
     }
 

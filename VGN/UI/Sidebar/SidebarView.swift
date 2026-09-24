@@ -72,6 +72,17 @@ struct SidebarView: View {
                     .appKitTooltip("A port catalogued separately from the original you also own — "
                                    + "merge it into the original to keep one entry.")
                 }
+                // "Needs a 'Holds Up' Rating" — played games not yet judged "Holds up today?"
+                // (PLAN §7b/§8). Shown ONLY when > 0; a game leaves it as soon as it is rated.
+                if (vm.counts.count(for: .needsHoldsUpRating) ?? 0) > 0 {
+                    taggedRow(.needsHoldsUpRating) {
+                        Label(Self.title(for: .needsHoldsUpRating), systemImage: Self.icon(for: .needsHoldsUpRating))
+                            .badge(badge(for: .needsHoldsUpRating))
+                    }
+                    .appKitTooltip("Played games you haven't judged yet: do they hold up today, are "
+                                   + "they of their time, or too archaic to play now? Only Play Next "
+                                   + "uses it — never your ranking.")
+                }
             }
 
             Section("Rankings") {
@@ -235,6 +246,7 @@ struct SidebarView: View {
         case .bundlesToExpand: return "Bundles to Expand"
         case .dlcAndExpansions: return "DLC & Expansions"
         case .sameGameTwoEntries: return "Same Game, Two Entries"
+        case .needsHoldsUpRating: return "Needs a \u{201C}Holds Up\u{201D} Rating"
         case .tierBoard: return "Tier Board"
         case .theTop: return "The Top"
         case .duel: return "Duel"
@@ -257,6 +269,7 @@ struct SidebarView: View {
         case .bundlesToExpand: return "square.stack.3d.up.fill"
         case .dlcAndExpansions: return "puzzlepiece.extension"
         case .sameGameTwoEntries: return "arrow.triangle.merge"
+        case .needsHoldsUpRating: return "clock.badge.questionmark"
         case .tierBoard: return "square.stack.3d.up"
         case .theTop: return "trophy"
         case .duel: return "flag.2.crossed"

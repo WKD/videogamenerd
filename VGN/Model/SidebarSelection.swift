@@ -43,6 +43,12 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
     /// action runs the existing reconcile merge with the parent as target.
     case sameGameTwoEntries
 
+    /// Played games with no **"Holds up today?"** mark yet (`played = 1 AND holds_up IS NULL`)
+    /// — the rating pass (PLAN §7b/§8), so the owner can rate them all in one sitting. A
+    /// LIBRARY row under the other review lists, shown **only when its count > 0**; a game
+    /// leaves it as soon as it is rated (live observation).
+    case needsHoldsUpRating
+
     // Ranking views (PLAN §7)
     case tierBoard
     case theTop
@@ -76,6 +82,7 @@ enum SidebarSelection: Hashable, Sendable, Identifiable {
         case .bundlesToExpand: return "bundlesToExpand"
         case .dlcAndExpansions: return "dlcAndExpansions"
         case .sameGameTwoEntries: return "sameGameTwoEntries"
+        case .needsHoldsUpRating: return "needsHoldsUpRating"
         case .tierBoard: return "tierBoard"
         case .theTop: return "theTop"
         case .duel: return "duel"

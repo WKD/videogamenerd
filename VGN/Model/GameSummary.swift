@@ -145,7 +145,7 @@ extension GameSummary {
         GameSummary(
             id: 1, title: "Bloodborne", year: 2015, coverFile: nil,
             tierID: 1, tierLetter: "S", tierColorHex: "#FF3B30", rankKey: 1000,
-            played: true, owned: true, platformIDs: ["ps4"], status: .completed,
+            played: true, owned: true, platformIDs: ["ps4"], status: .completed, holdsUp: .holdsUp,
             physicalPlatformIDs: ["ps4"], singleCopyFormat: .physical
         ),
         GameSummary(
@@ -159,7 +159,7 @@ extension GameSummary {
             id: 3, title: "Metal Gear Solid 3: Snake Eater", year: 2004,
             tierID: 2, tierLetter: "A", tierColorHex: "#FF9500", rankKey: 1500,
             played: true, owned: true, isCompilationMember: true,
-            platformIDs: ["ps2"], status: .finished, hasROM: true,
+            platformIDs: ["ps2"], status: .finished, holdsUp: .ofItsTime, hasROM: true,
             physicalPlatformIDs: ["ps2"], romPlatformIDs: ["ps2"],
             hasSeveralChangeableCopies: true
         ),

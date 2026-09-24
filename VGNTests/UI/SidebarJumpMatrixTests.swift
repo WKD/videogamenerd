@@ -137,7 +137,7 @@ struct SidebarJumpMatrixTests {
 
         // Every grid scope the sidebar can produce.
         var gridScopes: [SidebarSelection] = [
-            .all, .owned, .played, .backlog, .unranked, .unlinked, .bundlesToExpand, .unmeasured,
+            .all, .owned, .played, .backlog, .unranked, .unlinked, .bundlesToExpand, .needsHoldsUpRating, .unmeasured,
             .platform("ps5"), .platform("snes"),
         ]
         gridScopes += SidebarSelection.lengthShelves

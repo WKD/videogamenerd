@@ -87,6 +87,9 @@ struct LiveRankingBackend: RankingBackend {
         try await library.markNotPlayed(gameID)
     }
     func deleteGame(_ gameID: Int64) async throws { try await library.deleteGame(gameID) }
+    func setHoldsUp(_ value: HoldsUp?, for gameIDs: [Int64]) async throws -> SetHoldsUpOutcome {
+        try await library.setHoldsUp(value, for: gameIDs)
+    }
 
     // Drag / drop overrides
     func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws {

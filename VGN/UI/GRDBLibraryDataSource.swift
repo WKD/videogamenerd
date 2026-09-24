@@ -43,6 +43,9 @@ struct GRDBLibraryDataSource: LibraryDataSource {
                 // same single observation so a link/merge/dismissal re-runs them with everything else.
                 counts.dlcAndExpansions = try LibraryQuery.fetchDLCAndExpansionsCount(db)
                 counts.sameGameTwoEntries = try LibraryQuery.fetchSameGameTwoEntriesCount(db)
+                // "Needs a 'Holds Up' Rating" (PLAN §7b) — same single observation, so rating a
+                // game (a `games` write) re-runs it and the row hides itself at 0.
+                counts.needsHoldsUpRating = try LibraryQuery.fetchNeedsHoldsUpRatingCount(db)
                 return counts
             }
             .values(in: store.dbReader)

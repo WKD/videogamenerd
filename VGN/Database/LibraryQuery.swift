@@ -206,6 +206,9 @@ enum LibraryQuery {
             wheres.append(dlcAndExpansionsPredicate())
         case .sameGameTwoEntries:
             wheres.append(sameGameTwoEntriesPredicate())
+        case .needsHoldsUpRating:
+            // The rating pass (PLAN §7b): played, not yet judged "Holds up today?".
+            wheres.append(needsHoldsUpRatingPredicate)
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
@@ -298,6 +301,17 @@ enum LibraryQuery {
         if filter.includeNotPlayed { statusOrs.append("g.played = 0") }
         if filter.includeNoStatus { statusOrs.append("(g.played = 1 AND g.status IS NULL)") }
         appendOR(statusOrs, into: &wheres)
+
+        // "Holds up today?" facet (PLAN §7b, OR within kind): any selected mark OR "Unrated"
+        // (played, no mark — the same predicate as the "Needs a 'Holds Up' Rating" list).
+        var holdsUpOrs: [String] = []
+        if !filter.holdsUp.isEmpty {
+            let values = HoldsUp.allCases.filter(filter.holdsUp.contains).map(\.dbValue)
+            holdsUpOrs.append("g.holds_up IN (\(placeholders(values.count)))")
+            args.append(contentsOf: values.map { $0 as DatabaseValueConvertible })
+        }
+        if filter.includeHoldsUpUnrated { holdsUpOrs.append(needsHoldsUpRatingPredicate) }
+        appendOR(holdsUpOrs, into: &wheres)
 
         // Format / ownership facet (OR within kind): a game matches if it has ≥ 1
         // owned product in one of the formats (PLAN §4), OR "Not Owned" (no owned
@@ -535,6 +549,16 @@ enum LibraryQuery {
                     OR json_extract(cc.json, '$.version_parent')
                         IN (SELECT igdb_id FROM games WHERE igdb_id IS NOT NULL AND igdb_id <> g.igdb_id)))
         """
+    }
+
+    /// PLAN §7b "Needs a 'Holds Up' Rating": played games with no "Holds up today?" mark. The
+    /// ONE predicate shared by the grid scope and the sidebar count (list ≡ count).
+    static let needsHoldsUpRatingPredicate = "(g.played = 1 AND g.holds_up IS NULL)"
+
+    /// Sidebar count for the "Needs a 'Holds Up' Rating" row (composed into the single counts
+    /// observation, so rating a game re-runs it — no timer, no second observation).
+    static func fetchNeedsHoldsUpRatingCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(needsHoldsUpRatingPredicate)") ?? 0
     }
 
     /// Sidebar count for the "DLC & Expansions" row (composed into the single counts observation).

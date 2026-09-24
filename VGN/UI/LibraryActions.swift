@@ -182,6 +182,52 @@ final class LibraryActions {
         registerStatusUndo(redo)
     }
 
+    // MARK: - "Holds up today?" (undoable; PLAN §7b, v16)
+
+    /// Set (or clear) the "Holds up today?" mark on a set of games — one transaction, one
+    /// "Holds Up Today?" undo step. Unplayed games are refused by the store and named in a
+    /// warning banner (only a played game can be judged today).
+    func setHoldsUp(ids: Set<Int64>, value: HoldsUp?) async {
+        guard !ids.isEmpty else { return }
+        do {
+            let outcome = try await store.setHoldsUp(value, for: Array(ids).sorted())
+            if !outcome.skippedUnplayed.isEmpty {
+                vm?.showBanner(Self.holdsUpSkippedBanner(outcome.skippedUnplayed.count), kind: .warning)
+            }
+            let changed = outcome.previous.filter { $0.value != value }
+            registerHoldsUpUndo(changed)
+        } catch {
+            vm?.showBanner("Couldn't save the \"Holds up today?\" mark.", kind: .error)
+        }
+    }
+
+    nonisolated static func holdsUpSkippedBanner(_ n: Int) -> String {
+        "^[\(n) unplayed game](inflect: true) skipped — only a played game can be rated."
+    }
+
+    private func registerHoldsUpUndo(_ previous: [Int64: HoldsUp?]) {
+        guard let undo = vm?.undoManager, !previous.isEmpty else { return }
+        undo.registerUndo(withTarget: self) { target in
+            Task { await target.restoreHoldsUp(previous) }
+        }
+        undo.setActionName(Self.holdsUpUndoName)
+    }
+
+    /// The undo step's name (menu: "Undo Holds Up Today?").
+    nonisolated static let holdsUpUndoName = "Holds Up Today?"
+
+    /// Apply a captured `[gameID: mark]` map (the inverse of ``setHoldsUp(ids:value:)``) and
+    /// register the swapped step so undo ↔ redo alternate. `internal` so a test drives the
+    /// inverse directly (`UndoManager.undo()` hangs headless).
+    func restoreHoldsUp(_ previous: [Int64: HoldsUp?]) async {
+        do {
+            let redo = try await store.restoreHoldsUp(previous)
+            registerHoldsUpUndo(redo)
+        } catch {
+            vm?.showBanner("Couldn't undo.", kind: .error)
+        }
+    }
+
     // MARK: - Mark Played As (undoable; PLAN §8, owner request 2026-09-19)
 
     /// Mark a set of games played (optionally with a completion status) in one

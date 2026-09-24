@@ -270,6 +270,9 @@ final class LibraryViewModel {
     static func defaultSort(for selection: SidebarSelection) -> LibrarySort {
         switch selection {
         case .length, .unmeasured: return .length
+        // The rating pass starts with the best-loved games — the nostalgic S tier is where
+        // "does it hold up today?" matters most (PLAN §7b).
+        case .needsHoldsUpRating: return .tierRank
         default: return .title
         }
     }
@@ -531,6 +534,10 @@ final class LibraryViewModel {
     /// True when the sidebar has "Bundles to Expand" selected — the grid shows a slim
     /// explanatory header above it (PLAN §5.1).
     var isBundlesToExpandSelection: Bool { selection == .bundlesToExpand }
+
+    /// True when the sidebar has "Needs a 'Holds Up' Rating" selected — the grid shows a slim
+    /// explanatory header above it (PLAN §7b/§8).
+    var isNeedsHoldsUpRatingSelection: Bool { selection == .needsHoldsUpRating }
 
     /// The selected Vault source, or nil when the selection is not a Vault row.
     var selectedVaultSource: VaultSource? {
@@ -871,6 +878,23 @@ final class LibraryViewModel {
         let targets = ids ?? selectedGameIDs
         guard !targets.isEmpty else { return }
         Task { await actions?.changeCopyFormat(ids: targets, to: format) }
+    }
+
+    /// "Holds up today?" (PLAN §7b): set / clear the mark on a set of games (default: the
+    /// selection). Unplayed games are refused (banner). In the "Needs a 'Holds Up' Rating"
+    /// list a rated game leaves the list, so the selection moves on to the next one — rating
+    /// the whole list is one key per game. One undo step. Never a menu *builder*.
+    func setHoldsUp(_ value: HoldsUp?, for ids: Set<Int64>? = nil) {
+        let targets = ids ?? selectedGameIDs
+        guard !targets.isEmpty else { return }
+        if selection == .needsHoldsUpRating, value != nil { planReselection(removing: targets) }
+        Task { await actions?.setHoldsUp(ids: targets, value: value) }
+    }
+
+    /// Whether the "Holds Up Today?" commands should be enabled: a non-empty selection in a
+    /// library grid destination with at least one played game (unplayed ones are ignored).
+    var canSetSelectionHoldsUp: Bool {
+        isLibraryGridDestination && selectedGames.contains(where: \.played)
     }
 
     /// Whether the "Change Copy Format" commands should be enabled: a non-empty selection
