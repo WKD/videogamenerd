@@ -52,6 +52,8 @@ final class CompilationEditorModel {
     var editionText: String = ""
     var regionText: String = ""
     private(set) var igdbID: Int64?
+    /// "75 h on the whole collection (PSN)" for the header — nil when none (PLAN §7b).
+    private(set) var collectionPlaytimeS: Int?
 
     // MARK: Member picker (same quick-search as Quick Add)
     var query: String = "" {
@@ -128,12 +130,14 @@ final class CompilationEditorModel {
         editionText = product.edition ?? ""
         regionText = product.region ?? ""
         igdbID = product.igdbID
+        collectionPlaytimeS = product.collectionPlaytimeS
     }
 
     private func reload() async {
         if let product = try? await writer.compilationProduct(id: productID) {
             members = product.members
             igdbID = product.igdbID
+            collectionPlaytimeS = product.collectionPlaytimeS
         }
         rebuildResults()   // refresh "already a member" flags
     }
