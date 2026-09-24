@@ -497,6 +497,35 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   return to To Revisit, not plain Abandoned.
 - Confirm nothing became To Revisit by itself: only games you flagged carry it.
 
+## "Holds up today?" (wave 21) [owner]
+- Open **Needs a "Holds Up" Rating (N)** in the sidebar (under the review lists). It lists your played games,
+  best-ranked first. Rate a few with the inspector's three buttons or **⌃⌥⌘1 / 2 / 3** — each one leaves the list
+  at once, the count drops, and the selection moves to the next game. **⌃⌥⌘0** (or the ✕) clears; Edit ▸ Undo
+  "Holds Up Today?" reverts. The row disappears when every played game is rated.
+- Right-click a mixed selection ▸ **Holds Up Today?**: ✓ / – reflect the played games; unplayed ones are named in a
+  greyed footer and left alone. In **Triage**, press **1 / 2 / 3** to rate the card without leaving it.
+- Mark an S-tier game you can't play today **Too Archaic**: it disappears from **Play Next** (the exclusions line
+  says "1 too archaic"), comes back with Options ▸ **Include too archaic**, and your Tier Board / The Top / duels are
+  unchanged. A **Holds Up** game reads "You marked it as holding up today".
+- Filter ▸ **Holds Up** ▸ Too Archaic shows exactly those; Stats ▸ Status shows the four counts.
+- With PSN first-played dates imported: a Play Next card reads "First played in 1991"; in the taste-model popover
+  (the ? next to "Taste model"), switch on **Also run without games first played before…**, pick 1995, and read
+  "ρ = 0.52 · without pre-1995 games: 0.41" — how far nostalgia and present taste drift.
+- Confirm nothing was pre-filled: before you rate anything, every played game is Unrated.
+
+## Reset All Duels (wave 21) [owner]
+- **Ranking ▸ Reset All Duels…** (or "Reset Duels…" at the top of the Duel screen) asks "Forget 126 duels and
+  un-place 34 games? Tiers are kept." with your real numbers. After confirming: every game is still in its tier,
+  The Top shows the tier midpoints (~ scores, unnumbered), Duel starts placing again, and
+  `~/Library/Application Support/VGN/backups/before-duel-reset-….sqlite` exists. **Edit ▸ Undo Reset All Duels**
+  puts every placement and duel back.
+- **Ranking ▸ Reset Duels in Tier ▸ A…** does the same for one tier only; the other tiers keep their order.
+
+## PS Plus Only (wave 21) [owner]
+- If you own games only through PS Plus, **PS Plus Only (N)** appears right after Owned with the PS Plus badge;
+  N matches Format ▸ PS Plus. Its header says they leave with the subscription (and when, if you set a date in
+  Settings ▸ PlayStation). Buying one on disc takes it off the list. It is not THE VAULT ▸ PS Plus.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

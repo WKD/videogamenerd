@@ -72,7 +72,7 @@ import GRDB
         Migrations.registerV16(in: &full)
         try full.migrate(queue)
 
-        let rows = try await queue.read { db -> [Row] in
+        let rows = try queue.read { db -> [Row] in
             try Row.fetchAll(db, sql: "SELECT id, holds_up, status, revisit, tier_id, year FROM games ORDER BY id")
         }
         #expect(rows.count == 3)
