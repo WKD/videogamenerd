@@ -123,6 +123,8 @@ struct AppDatabase: Sendable {
         Migrations.registerV13(in: &migrator)
         Migrations.registerV14(in: &migrator)
         Migrations.registerV15(in: &migrator)
+        // v16 (W21-A) registers above this line; v17 must come after it.
+        Migrations.registerV17(in: &migrator)
         return migrator
     }
 }

@@ -131,7 +131,14 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   v15 `games.revisit` (PLAN §4/§7b, the **"To Revisit"** play status) — a purely additive `ADD COLUMN`
   flag so a dropped-but-want-to-come-back game is `status='abandoned' AND revisit=1`; the v1 `status`
   CHECK and its four legacy strings are untouched (no `games` rebuild), no backfill; mapped in one place
-  by `PlayStatus.from(dbStatus:revisit:)` / `dbStatus` / `dbRevisit`)). `LibraryStore`
+  by `PlayStatus.from(dbStatus:revisit:)` / `dbStatus` / `dbRevisit`);
+  v17 `games.batocera_playtime_s` (PLAN §7b / §15) — Batocera's own play-time column (nullable, ≥ 0,
+  written monotonically by the Batocera promotion via `LibraryStore.setBatoceraPlaytime`, never into
+  `psn_playtime_s` again) + the **owner-requested one-shot move**: Batocera-tied, not-PSN-tied games'
+  interim `psn_playtime_s` → `batocera_playtime_s`, then promoted games get the largest catalogue
+  `game_time_s` > 0 when still unset (`Migrations+V17.swift`). Read side: effective play time =
+  manual, else MAX(PSN, Batocera), never summed — ONE fragment `LibraryQuery.effectivePlaytimeSQL`
+  + its Swift mirror `EffectivePlaytime`)). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`
