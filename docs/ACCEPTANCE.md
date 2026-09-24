@@ -468,8 +468,8 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 
 ## HowLongToBeat — cache, platforms, manual link (wave 20) [owner]
 - **Refresh serves the cache the second time.** Refresh a flagged game from the inspector, then
-  Refresh it again within a few hours → the second is instant / "from cache" (no request); a Refresh a
-  couple of days later goes to the network again (paced). "Ask HowLongToBeat again" forces one request.
+  Refresh it again → the second is instant / "from cache" (no request). *(Wave 21: no 24 h floor any
+  more — any valid cached reply is used; Game ▸ Ask HowLongToBeat Again forces one request.)*
 - **Platforms disambiguate.** For an ambiguous game (e.g. a title with a PS and a PC entry), the picker
   shows "In your library: …" and emphasises the candidate on my platform; where one clearly matches it
   fills without asking, and two same-platform twins still ask.
@@ -479,6 +479,18 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   game asks nothing** (exact by id). **Unlink** clears the link; times stay. ⌘Z undoes each.
 - **Manual search is polite.** Typing does not fire a request per keystroke (waits for Return or a pause,
   ≥ 3 chars); the counter shows the requests spent this session and stops on the cap or a bad reply.
+
+## HowLongToBeat — Main Story, order-free matching, cache (wave 21, lane B) [owner]
+- **Akira (NES) is measured before any refresh.** Its inspector Main row shows **≈ 2 h** (HLTB's 2 h 14; tooltip
+  "HowLongToBeat lists only Main Story for this game."), Rushed shows the same, and it sits in **BY
+  LENGTH ▸ One Evening**, not Unmeasured / No Estimate / Suspicious.
+- **Akira: after Refresh (from cache, 0 requests) Main shows ≈ 2 h (HLTB's 2 h 14) and it sits in One Evening.** The
+  banner says "(from cache, N days old)" and "Main+Extra not on HowLongToBeat — main story used."
+- **The Beast Within: A Gabriel Knight Mystery**: Refresh links **Gabriel Knight II: The Beast Within
+  (1995)** (or, at worst, offers it first in the picker) — from the cache, no request.
+- **Refresh never re-asks for a cached game**; **Game ▸ Ask HowLongToBeat Again** (one selected game)
+  is the only way to force a request. A bulk Refresh summary ends "… · x from cache · y from network"
+  and separates "need your pick" from "no HLTB entry".
 
 ## Filter result count (wave 20) [owner]
 - With a filter or search active, the chips bar's right end reads "N of M games" (e.g. "37 of 443

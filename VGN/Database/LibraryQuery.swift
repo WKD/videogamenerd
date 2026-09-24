@@ -380,10 +380,17 @@ enum LibraryQuery {
     /// style's `t` and the ratio `r` are inlined as decimal literals (app constants,
     /// never user input); `ROUND` + `CAST … AS INTEGER` makes the value match the Swift
     /// path to the second (no SQLite math-extension functions used).
+    ///
+    /// **HLTB Main-Story-only read rule** (wave 21 D1, PLAN §4 inv. 5 — a *read* rule, no
+    /// data change): the "main" operand is ``effectiveMainSQL`` — `ttb_normally_s`, or, for
+    /// an `ttb_source = 'hltb'` row whose main is empty, its `ttb_hastily_s` (HLTB's Main
+    /// Story, written there by the pre-wave-21 mapping). IGDB-sourced rows keep
+    /// "rushed-only ⇒ unmeasured". Swift mirror: ``EstimateSanity/effectiveMain``.
     static func lengthEstimateExpr(style: PlayStyle, r: Double = PlayStyle.sidesRatio) -> String {
         let t = sqlLiteral(style.t)
         let rl = sqlLiteral(r)
         let ratio = sqlLiteral(EstimateSanity.completionistRatio)
+        let m = effectiveMainSQL
         // A flagged (suspicious & not hltb-sourced & not dismissed) game with a
         // completionist ≥ 4× main has its completionist ignored for planning (PLAN §5.3,
         // D5 — the SQL mirror of ``EstimateSanity/lengthInputs``): it falls back to
@@ -394,18 +401,27 @@ enum LibraryQuery {
         // the guard entirely.
         let guardSQL = suspiciousLengthGuardSQL()
         return "CAST(ROUND(CASE"
-            + " WHEN \(guardSQL) AND g.ttb_normally_s IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
-            + " AND g.ttb_completely_s >= \(ratio) * g.ttb_normally_s"
-            + " THEN g.ttb_normally_s + \(t) * (ROUND(g.ttb_normally_s * \(rl)) - g.ttb_normally_s)"
-            + " WHEN g.ttb_normally_s IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
-            + " THEN g.ttb_normally_s + \(t) * (CASE WHEN g.ttb_completely_s < g.ttb_normally_s"
-            + " THEN 0 ELSE g.ttb_completely_s - g.ttb_normally_s END)"
-            + " WHEN g.ttb_normally_s IS NOT NULL"
-            + " THEN g.ttb_normally_s * (1 + \(t) * (\(rl) - 1))"
+            + " WHEN \(guardSQL) AND \(m) IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
+            + " AND g.ttb_completely_s >= \(ratio) * \(m)"
+            + " THEN \(m) + \(t) * (ROUND(\(m) * \(rl)) - \(m))"
+            + " WHEN \(m) IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
+            + " THEN \(m) + \(t) * (CASE WHEN g.ttb_completely_s < \(m)"
+            + " THEN 0 ELSE g.ttb_completely_s - \(m) END)"
+            + " WHEN \(m) IS NOT NULL"
+            + " THEN \(m) * (1 + \(t) * (\(rl) - 1))"
             + " WHEN g.ttb_completely_s IS NOT NULL"
             + " THEN g.ttb_completely_s * (1 + \(t) * (\(rl) - 1)) / \(rl)"
             + " ELSE NULL END) AS INTEGER)"
     }
+
+    /// A game's **effective main-story time** in SQL (wave 21 D1 read rule): the stored
+    /// `ttb_normally_s`, or — only for an HLTB-sourced row with no main — its
+    /// `ttb_hastily_s`, which is HLTB's *Main Story* under the pre-wave-21 mapping (Akira:
+    /// `comp_plus = 0` left main empty). An IGDB-sourced rushed-only row stays NULL
+    /// ("rushed-only ⇒ unmeasured"). Pure read — no row is rewritten. Swift mirror:
+    /// ``EstimateSanity/effectiveMain(rushed:main:sourceIsHLTB:)``.
+    static let effectiveMainSQL =
+        "COALESCE(g.ttb_normally_s, CASE WHEN g.ttb_source = 'hltb' THEN g.ttb_hastily_s END)"
 
     // MARK: - Suspicious estimates (PLAN §5.3)
 
@@ -430,7 +446,10 @@ enum LibraryQuery {
     /// stored times are suspicious *and* that is neither hltb-sourced nor dismissed. Built
     /// from the same thresholds as the Swift rule, and proven to agree with it
     /// (`EstimateSanityTests`). A comparison against a NULL time is never true, exactly as
-    /// the Swift rule only compares present values.
+    /// the Swift rule only compares present values. It reads the raw `ttb_normally_s`: the
+    /// wave-21 Main-Story read rule (``effectiveMainSQL``) only ever changes an
+    /// `hltb`-sourced row, and those are excluded by the guard — so an Akira-shaped row
+    /// (hltb, rushed only) is never flagged either way.
     static func suspiciousEstimatePredicate() -> String {
         let ratio = sqlLiteral(EstimateSanity.completionistRatio)
         let frac = sqlLiteral(EstimateSanity.rushedFraction)
@@ -454,8 +473,9 @@ enum LibraryQuery {
     /// ``lengthEstimateExpr(style:r:)``) for a game they have not played, so an unplayed
     /// game is banded by how long it is *for them* rather than dropped (PLAN §6.4/§8).
     /// The filter always prefers the owner's own playtime first. "No Estimate" (this
-    /// expression `IS NULL`) means exactly "no time info to fetch" (a rushed-only game
-    /// counts as No Estimate, since rushed is never used for length).
+    /// expression `IS NULL`) means exactly "no time info to fetch" (an IGDB rushed-only game
+    /// counts as No Estimate, since rushed is never used for length — but an HLTB row whose
+    /// only time is the Main Story in the rushed slot is measured, wave 21 D1).
     static func playtimeBucketExpr(style: PlayStyle) -> String {
         "COALESCE(g.my_playtime_s, g.psn_playtime_s, \(lengthEstimateExpr(style: style)))"
     }

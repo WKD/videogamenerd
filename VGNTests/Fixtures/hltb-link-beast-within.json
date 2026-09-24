@@ -1,0 +1,33 @@
+{
+  "count": 2,
+  "data": [
+    {
+      "game_id": 3811,
+      "game_name": "Gabriel Knight II: The Beast Within",
+      "game_alias": "",
+      "release_world": 1995,
+      "comp_main": 57600,
+      "comp_plus": 68400,
+      "comp_100": 79200,
+      "comp_all": 64800,
+      "comp_main_count": 41,
+      "comp_plus_count": 17,
+      "comp_100_count": 9,
+      "profile_platform": "PC, Mac"
+    },
+    {
+      "game_id": 150001,
+      "game_name": "Slain 2: The Beast Within",
+      "game_alias": "",
+      "release_world": 2027,
+      "comp_main": 0,
+      "comp_plus": 0,
+      "comp_100": 0,
+      "comp_all": 0,
+      "comp_main_count": 0,
+      "comp_plus_count": 0,
+      "comp_100_count": 0,
+      "profile_platform": "PC"
+    }
+  ]
+}

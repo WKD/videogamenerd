@@ -159,11 +159,5 @@ private struct HLTBFindRow: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.4)))
     }
 
-    private var timesLine: String {
-        var parts: [String] = []
-        if let s = candidate.mainSeconds { parts.append("Main \(PlaytimeParser.formatApprox(seconds: s))") }
-        if let s = candidate.mainExtraSeconds { parts.append("Extra \(PlaytimeParser.formatApprox(seconds: s))") }
-        if let s = candidate.completionistSeconds { parts.append("100% \(PlaytimeParser.formatApprox(seconds: s))") }
-        return parts.joined(separator: " · ")
-    }
+    private var timesLine: String { candidate.timesLine }
 }

@@ -32,8 +32,9 @@ extension LibraryStore {
     /// Fill a game's time-to-beat gaps from a HowLongToBeat candidate (PLAN §5.3), in
     /// one transaction:
     ///  - **Only empty fields are filled** — an IGDB or hand-typed value is never
-    ///    overwritten (Main → `ttb_hastily_s`, Main+Extra → `ttb_normally_s`,
-    ///    Completionist → `ttb_completely_s`).
+    ///    overwritten. The values are ``HLTBCandidate/mappedTimes`` (wave 21 D1):
+    ///    normally = Main+Extra, else Main Story; hastily = Main Story; completely =
+    ///    Completionist — so a Main-Story-only game is measured.
     ///  - a zero / missing HLTB value is not written.
     ///  - `ttb_source = 'hltb'` **only** when at least one value was written *and* the
     ///    game had no prior source (a game that already carried IGDB times keeps its
@@ -57,16 +58,17 @@ extension LibraryStore {
 
             var result = HLTBFillResult(gameID: gameID, previous: prev)
 
-            // Fill only-empty fields with positive HLTB values.
-            if prev.hastily == nil, let v = candidate.mainSeconds, v > 0 {
+            // Fill only-empty fields with the mapped (positive) HLTB values (D1).
+            let mapped = candidate.mappedTimes
+            if prev.hastily == nil, let v = mapped.hastily {
                 try db.execute(sql: "UPDATE games SET ttb_hastily_s = ? WHERE id = ?", arguments: [v, gameID])
                 result.wroteHastily = true
             }
-            if prev.normally == nil, let v = candidate.mainExtraSeconds, v > 0 {
+            if prev.normally == nil, let v = mapped.normally {
                 try db.execute(sql: "UPDATE games SET ttb_normally_s = ? WHERE id = ?", arguments: [v, gameID])
                 result.wroteNormally = true
             }
-            if prev.completely == nil, let v = candidate.completionistSeconds, v > 0 {
+            if prev.completely == nil, let v = mapped.completely {
                 try db.execute(sql: "UPDATE games SET ttb_completely_s = ? WHERE id = ?", arguments: [v, gameID])
                 result.wroteCompletely = true
             }

@@ -138,6 +138,6 @@ struct HLTBBulkFetchModelTests {
         let model = HLTBBulkFetchModel(store: store, makeSearch: { FakeHLTBSearch(byTitle: [:]) })
         model.start(gameIDs: [])
         #expect(model.phase == .finished)
-        #expect(model.summaryLine == "0 filled · 0 not found · 0 ambiguous")
+        #expect(model.summaryLine == "0 filled · 0 need your pick · 0 no HLTB entry")
     }
 }

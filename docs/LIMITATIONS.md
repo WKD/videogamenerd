@@ -82,7 +82,7 @@ Still human-only: drag feel (Tier Board, divider drag's fixed 44 pt per game), a
   - The missing-side inflation ratio **R = 1.5** is a **named constant** (`PlayStyle.sidesRatio`), not measured per library (owner's library median completely ÷ normally = 1.54, so 1.5 is close). Could later be measured per library, per genre, or merged with the filed "personal pace factor" idea (§7b — inflating advertised times by my own ratio). [later]
   - `LibraryFilter.playStyle` **defaults to `.storyFirst`** (raw main-story length) so a bare/legacy filter bands by the plain `normally` estimate; the app always injects the owner's real style (`PlayStyle.default` = lots of side quests) through `LibraryViewModel`, and "Clear all" preserves it. The mismatch between that default and `PlayStyle.default` is deliberate (keeps neutral filters showing the plain advertised time). [by design]
   - ~~**Stats window** ("backlog in hours", `LibraryStatsStore`) still sums the raw `ttb_normally_s`, not the personal length.~~ **Fixed (wave 17, lane A):** "Backlog to beat" now sums the owner's **personal length** at their play style (the same source of truth the BY LENGTH shelves use; a rushed-only game counts as *without an estimate*), and the card labels the basis ("≈ … at your play style · N games, M without an estimate"). The Stats window re-queries on a play-style change (via `vgnPlayStyleDidChange`), like the shelves. "Me vs. average" deliberately still uses the raw advertised `ttb_normally_s` — that is what the comparison is against. [done]
-  - The rushed-only → *Unmeasured* rule is a **behaviour change** from the old `COALESCE(normally, hastily, completely)`: a game whose only time is rushed now shows in Unmeasured / "No Estimate" (so the HLTB fetch can fill main/completionist), instead of being banded by the rushed time. [by design]
+  - The rushed-only → *Unmeasured* rule is a **behaviour change** from the old `COALESCE(normally, hastily, completely)`: a game whose only time is rushed now shows in Unmeasured / "No Estimate" (so the HLTB fetch can fill main/completionist), instead of being banded by the rushed time. [by design] *(Wave 21: except an `hltb`-sourced row — there the rushed slot is HLTB's Main Story and is read as the main; see `docs/hltb.md` "Wave 21".)*
 
 ### Library Stats window (wave 7, lane D)
 - **Clicking a chart bar does nothing** in v1. Possible follow-up: click-through from a bar (platform / decade / tier / genre) to the main grid pre-filtered to that slice. [later]
@@ -314,6 +314,15 @@ main, or a lone completionist) so the owner can refresh them from HowLongToBeat.
   flagged. One Undo step restores the whole batch's previous times + source.
 - **Not retuned.** The recommendation weights and the taste backtest were not re-tuned for the
   fallback length (per brief).
+- **Wave 21 (lane B) edges.** The Main-Story-only tooltip in the inspector has no report count (the
+  `comp_*_count` values live in the cached reply, not in `games`; the picker / Find rows show them).
+  The "HLTB main story only" state is inferred as `ttb_source='hltb' AND rushed IS NOT NULL AND
+  (main IS NULL OR main = rushed)` — an HLTB entry whose Main and Main+Extra are genuinely equal also
+  reads so (harmless: the text is still true to the numbers). The order-free subset bonus is guarded
+  (≥ 3 words, ≥ 75 % coverage, no extra numeral unless a series tag, no remake/remaster-type word) but
+  is a heuristic; a wrong confident match is fixable with Find on HowLongToBeat… / Undo. **Estimate
+  Source filter (D4) not built** — it would have edited the filter facets in the same wave as the
+  *Holds Up* facet. [later]
 
 ## 5. Out of scope for now [later]
 Filed ideas (PLAN §7b "Ideas filed for later", owner 2026-09-19): a **personal pace factor** that inflates advertised completion times from my own finished games (median of mine ÷ advertised), applied to Play Next, the BY LENGTH shelves and the backlog-hours stat; and **"finish what you started"** pools in Play Next (*almost there* — most of the estimate already played; *worth another try* — abandoned early but a strong taste match). Both wait for per-game playtime, i.e. the PSN import. Also filed (PLAN §15): a **Batocera / ROM collection** importer — played or favourite ROMs become library games, the thousands of others stay in a separate catalogue that feeds a Play Next "Discover" row instead of flooding the grid. Also filed: **"Play it again"** replay suggestions for finished games — needs an inferred replay-value score (no online source has one) and a machine-known last-played date (PSN provides it); to be built only if enough finished games get that date from imports, never if it would rely on hand-entered dates.

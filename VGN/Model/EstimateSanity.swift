@@ -116,13 +116,39 @@ enum EstimateSanity {
     ///   completionist-only estimate rather than becoming Unmeasured.
     ///
     /// The SQL mirror lives in ``LibraryQuery/lengthEstimateExpr(style:r:)``.
-    static func lengthInputs(rushed: Int?, main: Int?, completionist: Int?,
+    ///
+    /// The returned *main* is ``effectiveMain(rushed:main:sourceIsHLTB:)`` — for an
+    /// HLTB-sourced game with no main it is the rushed slot (HLTB's Main Story), wave 21 D1.
+    static func lengthInputs(rushed: Int?, main rawMain: Int?, completionist: Int?,
                              sourceIsHLTB: Bool, dismissed: Bool) -> (main: Int?, completionist: Int?) {
+        let main = effectiveMain(rushed: rushed, main: rawMain, sourceIsHLTB: sourceIsHLTB)
         guard !sourceIsHLTB, !dismissed else { return (main, completionist) }
         if let m = main, let c = completionist, Double(c) >= completionistRatio * Double(m) {
             return (m, Int((Double(m) * PlayStyle.sidesRatio).rounded()))
         }
         return (main, completionist)
+    }
+
+    // MARK: HLTB Main-Story-only read rule (wave 21 D1)
+
+    /// A game's **effective main-story time** — the Swift mirror of
+    /// ``LibraryQuery/effectiveMainSQL``. The stored main, or — only when the times come
+    /// **from HowLongToBeat** and the main is empty — the rushed slot, which holds HLTB's
+    /// *Main Story* under the pre-wave-21 mapping (many retro games list only that; Akira,
+    /// NES). IGDB rows keep "rushed-only ⇒ unmeasured". A *read* rule (PLAN §4 inv. 5):
+    /// nothing is rewritten; new HLTB writes already fill the main slot.
+    static func effectiveMain(rushed: Int?, main: Int?, sourceIsHLTB: Bool) -> Int? {
+        if let main { return main }
+        return sourceIsHLTB ? rushed : nil
+    }
+
+    /// True when the main shown / planned with is HLTB's Main Story standing in for a missing
+    /// Main+Extra — either read from the rushed slot (rows written before wave 21) or written
+    /// into both slots by the wave-21 mapping (`main == rushed`). Drives the inspector's
+    /// "HowLongToBeat lists only Main Story" tooltip.
+    static func isHLTBMainStoryOnly(rushed: Int?, main: Int?, sourceIsHLTB: Bool) -> Bool {
+        guard sourceIsHLTB, let rushed else { return false }
+        return main == nil || main == rushed
     }
 
     // MARK: Formatting

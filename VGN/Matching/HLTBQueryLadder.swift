@@ -20,6 +20,10 @@ import Foundation
 ///  3. **also drop the subtitle** — last resort: cut at the first `:`/` - ` separator,
 ///     then re-strip edition tags. Reached only when 1 & 2 found nothing confident.
 ///
+/// Wave 21 (D2b): when the subtitle is a **series tag** ("The Beast Within: *A Gabriel
+/// Knight Mystery*"), rung 2 is the **subtitle-swapped** query instead ("Gabriel Knight
+/// Beast Within", ``subtitleSwapped(_:)``) — still ≤ 3 queries, the full title still first.
+///
 /// Deliberately conservative: it never strips a **numeral** ("Doom 3", "Resident Evil 2"
 /// keep their number, and neither collapses to a shorter game), and a bare qualifier that
 /// is not followed by "Edition"/"Cut" is left alone ("Persona 5 Royal" keeps *Royal*).
@@ -40,9 +44,29 @@ enum HLTBQueryLadder {
         }
         let original = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         add(original)                                   // 1 — as is
-        add(cleaned(original, dropSubtitle: false))     // 2 — noise off, subtitle kept
+        if let swapped = subtitleSwapped(original) {
+            add(swapped)                                // 2' — series tag → "Series Main" (wave 21)
+        } else {
+            add(cleaned(original, dropSubtitle: false)) // 2 — noise off, subtitle kept
+        }
         add(cleaned(original, dropSubtitle: true))      // 3 — also drop the subtitle
         return out
+    }
+
+    /// The **subtitle-swapped** query for a title whose subtitle is a series tag (wave 21
+    /// D2b): "The Beast Within: A Gabriel Knight Mystery" → "Gabriel Knight Beast Within" —
+    /// the series name first, then the main title without its leading article, which is how
+    /// HowLongToBeat (and most catalogues) name such games ("Gabriel Knight II: The Beast
+    /// Within"). Nil when the subtitle is not a series tag (``TitleTokenSet/seriesTag(in:)``),
+    /// so ordinary subtitles ("NieR: Automata", "Batman: Arkham Knight – Season of Infamy")
+    /// keep the old ladder. Rung 1 (the full title) is always tried first.
+    static func subtitleSwapped(_ rawTitle: String) -> String? {
+        guard let tag = TitleTokenSet.seriesTag(in: cleaned(rawTitle, dropSubtitle: false)) else { return nil }
+        var mainWords = collapse(tag.main).split(separator: " ").map(String.init)
+        if let first = mainWords.first, ["the", "a", "an"].contains(first.lowercased()), mainWords.count > 1 {
+            mainWords.removeFirst()
+        }
+        return collapse(tag.series + " " + mainWords.joined(separator: " "))
     }
 
     /// The search text prefilled into the manual "Find on HowLongToBeat…" sheet (D5):
