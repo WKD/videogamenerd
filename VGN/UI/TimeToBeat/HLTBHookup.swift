@@ -134,15 +134,31 @@ final class HLTBFetchPresenter {
     /// when HLTB has the game, leaves it flagged otherwise (PLAN §5.3, D3).
     func refreshOne(gameID: Int64) { fetchOne(gameID: gameID, mode: .replace) }
 
-    private func fetchOne(gameID: Int64, mode: HLTBWriteMode) {
+    /// "Ask HowLongToBeat Again" (PLAN §5.3, wave 21 D3) — the **one** explicit per-game
+    /// cache bypass: the same replace as ``refreshOne(gameID:)``, but every query of this
+    /// one game goes to the network (paced, ≤ 3 queries) and the fresh reply replaces the
+    /// cached one. A bulk run never bypasses.
+    func askAgainOne(gameID: Int64) { fetchOne(gameID: gameID, mode: .replace, policy: .bypassOne) }
+
+    /// Whether "Ask HowLongToBeat Again" is offerable from the Game menu (one game selected).
+    var canAskAgainSelected: Bool { canFindSelected && !isFetchingOne }
+
+    /// "Ask HowLongToBeat Again" for the single selected game (Game menu).
+    func askAgainSelected() {
+        guard let library, library.selectedGameIDs.count == 1,
+              let id = library.selectedGameIDs.first else { return }
+        askAgainOne(gameID: id)
+    }
+
+    private func fetchOne(gameID: Int64, mode: HLTBWriteMode, policy: HLTBFreshnessPolicy = .cacheFirst) {
         guard !isFetchingOne, let library else { return }
         isFetchingOne = true
         let search = makeSearch()
         let service = HLTBFillService(search: search)
         let store = self.store
-        // An explicit inspector Refresh honours the 24 h cache floor (D1); a gap-fill takes
-        // any fresh cache.
-        let policy: HLTBFreshnessPolicy = mode == .replace ? .refresh : .cacheFirst
+        // Wave 21 (D3): a Refresh serves any valid cached reply, exactly like a gap-fill —
+        // it re-applies VGN's mapping + matching at zero requests. Only "Ask HowLongToBeat
+        // Again" passes `.bypassOne`.
         Task { [weak self] in
             defer { self?.isFetchingOne = false }
             guard let facts = (try? await store.timeToBeatFacts(gameIDs: [gameID]))?[gameID] else { return }
@@ -153,7 +169,8 @@ final class HLTBFetchPresenter {
                     switch try await service.resolveLinked(
                         title: facts.title, year: facts.year, hltbID: hltbID, librarySlugs: slugs, policy: policy) {
                     case .exact(let candidate):
-                        await self?.applyConfident(gameID: gameID, candidate: candidate, mode: mode)
+                        let origin = await Self.originNote(search: search, titles: [facts.title, candidate.name])
+                        await self?.applyConfident(gameID: gameID, candidate: candidate, mode: mode, origin: origin)
                         await search.rememberChosen(candidate)
                     case .lost(let outcome):
                         await self?.handleSingle(outcome, gameID: gameID, facts: facts, mode: mode,
@@ -180,7 +197,8 @@ final class HLTBFetchPresenter {
         guard let library else { return }
         switch outcome {
         case .confident(let candidate):
-            await applyConfident(gameID: gameID, candidate: candidate, mode: mode)
+            let origin = await Self.originNote(search: search, titles: [facts.title, candidate.name])
+            await applyConfident(gameID: gameID, candidate: candidate, mode: mode, origin: origin)
             await search.rememberChosen(candidate)
         case .ambiguous(let list):
             if lostLink {
@@ -210,7 +228,29 @@ final class HLTBFetchPresenter {
 
     func dismissPicker() { picker = nil }
 
-    private func applyConfident(gameID: Int64, candidate: HLTBCandidate, mode: HLTBWriteMode) async {
+    /// " (from cache, 12 days old)" when this lookup made no request and the reply is cached,
+    /// " (asked HowLongToBeat)" when it went to the network, "" when unknown (fakes).
+    static func originNote(search: any HLTBSearching, titles: [String], now: Date = Date()) async -> String {
+        let tally = await search.requestTally()
+        if tally.fromNetwork > 0 { return " (asked HowLongToBeat)" }
+        guard tally.fromCache > 0 else { return "" }
+        for title in titles {
+            if let age = await search.cacheAge(title: title, now: now) {
+                return " (from cache, \(cacheAgeText(age)) old)"
+            }
+        }
+        return " (from cache)"
+    }
+
+    /// "less than a day" / "1 day" / "12 days" — the cache-age caption.
+    static func cacheAgeText(_ age: TimeInterval) -> String {
+        let days = Int(age / 86_400)
+        if days < 1 { return "less than a day" }
+        return days == 1 ? "1 day" : "\(days) days"
+    }
+
+    private func applyConfident(gameID: Int64, candidate: HLTBCandidate, mode: HLTBWriteMode,
+                                origin: String = "") async {
         guard let library else { return }
         let result: HLTBFillResult?
         switch mode {
@@ -222,7 +262,8 @@ final class HLTBFetchPresenter {
             registerUndo(gameID: gameID, snapshot: result.previous, mode: mode, library: library)
             await reloadDismissedEstimates()
             let verb = mode == .replace ? "Replaced" : "Filled"
-            library.showBanner("\(verb) times from HowLongToBeat. Press ⌘Z to undo.", kind: .info)
+            let note = candidate.usedMainStoryForMain ? " Main+Extra not on HowLongToBeat — main story used." : ""
+            library.showBanner("\(verb) times from HowLongToBeat\(origin).\(note) Press ⌘Z to undo.", kind: .info)
         } else if mode == .replace {
             library.showBanner("HowLongToBeat doesn't have “\(candidate.name)”; the estimate stays flagged.", kind: .info)
         } else {

@@ -18,28 +18,72 @@ struct HLTBFillService: Sendable {
         case lost(HLTBMatchOutcome)
     }
 
-    /// Search + match for one game (PLAN §5.3, D2/D3). Walks the query ladder (edition /
-    /// packaging noise, at most 3 queries), stopping at the **first confident match**;
-    /// platform overlap (`librarySlugs`) breaks title ties. Falls back to the richest
-    /// ambiguous set seen, else not-found. `policy` lets an explicit Refresh honour the
-    /// 24 h cache floor. Throws ``ImportError`` on the first unexpected response.
+    /// Search + match for one game (PLAN §5.3). Walks the query ladder (≤ 3 queries),
+    /// stopping at the **first confident match**; platform overlap (`librarySlugs`) breaks
+    /// title ties. Each rung's candidates are scored against the library title *and* the
+    /// rung's query (``HLTBMatcher/textScore(title:query:names:)``).
+    ///
+    /// Wave 21:
+    ///  - **cache pass first** (D3): with `.cacheFirst`, every rung already cached is
+    ///    evaluated before any request, so a Refresh whose answer is in the cache — even on
+    ///    a later rung — costs **zero** requests. Only then are the uncached rungs asked.
+    ///  - **never `notFound` while any rung returned plausible rows** (D2c): the candidates
+    ///    of every rung are pooled, and the final verdict is taken on the pool — `ambiguous`
+    ///    (the picker) as soon as one candidate is plausible; `notFound` only when nothing
+    ///    plausible came back from any rung.
+    ///
+    /// Throws ``ImportError`` on the first unexpected response.
     func resolve(title: String, year: Int?, librarySlugs: Set<String> = [],
                  policy: HLTBFreshnessPolicy = .cacheFirst) async throws -> HLTBMatchOutcome {
-        var lastAmbiguous: [HLTBCandidate] = []
-        for query in HLTBQueryLadder.queries(for: title) {
-            let candidates = try await search.search(title: query, policy: policy)
-            let outcome = HLTBMatcher.match(title: query, year: year,
-                                            candidates: candidates, librarySlugs: librarySlugs)
-            switch outcome {
-            case .confident:
-                return outcome
-            case .ambiguous(let list):
-                lastAmbiguous = list   // keep the richest ambiguous set the ladder produced
-            case .notFound:
-                break
+        let queries = HLTBQueryLadder.queries(for: title)
+        var answers: [String: [HLTBCandidate]] = [:]
+
+        func confident(_ query: String, _ candidates: [HLTBCandidate]) -> HLTBMatchOutcome? {
+            let outcome = HLTBMatcher.match(title: title, year: year, candidates: candidates,
+                                            librarySlugs: librarySlugs, query: query)
+            if case .confident = outcome { return outcome }
+            return nil
+        }
+
+        // Pass 1 — whatever the cache already knows (zero requests).
+        if policy == .cacheFirst {
+            for query in queries {
+                guard let cached = await search.cachedCandidates(title: query) else { continue }
+                answers[query] = cached
+                if let hit = confident(query, cached) { return hit }
             }
         }
-        return lastAmbiguous.isEmpty ? .notFound : .ambiguous(lastAmbiguous)
+        // Pass 2 — the rungs the cache did not answer, in ladder order.
+        for query in queries where answers[query] == nil {
+            let candidates = try await search.search(title: query, policy: policy)
+            answers[query] = candidates
+            if let hit = confident(query, candidates) { return hit }
+        }
+        return Self.pooledVerdict(title: title, year: year, librarySlugs: librarySlugs,
+                                  queries: queries, answers: answers)
+    }
+
+    /// The verdict over every rung's candidates at once (D2c): each candidate keeps its best
+    /// score across the rung queries; plausible anywhere ⇒ offered (best first).
+    static func pooledVerdict(title: String, year: Int?, librarySlugs: Set<String>,
+                              queries: [String], answers: [String: [HLTBCandidate]]) -> HLTBMatchOutcome {
+        var best: [Int64: HLTBMatcher.Scored] = [:]
+        for query in queries {
+            for s in HLTBMatcher.scored(title: title, year: year, candidates: answers[query] ?? [],
+                                        librarySlugs: librarySlugs, query: query) {
+                if let prev = best[s.candidate.id], prev.adjusted >= s.adjusted { continue }
+                best[s.candidate.id] = s
+            }
+        }
+        let viable = best.values
+            .filter { $0.base >= HLTBMatcher.plausibleThreshold }
+            .sorted { a, b in
+                if a.adjusted != b.adjusted { return a.adjusted > b.adjusted }
+                if a.platformMatch != b.platformMatch { return a.platformMatch }
+                return a.candidate.id < b.candidate.id
+            }
+        guard !viable.isEmpty else { return .notFound }
+        return .ambiguous(Array(viable.prefix(HLTBMatcher.maxAmbiguous).map(\.candidate)))
     }
 
     /// Refresh a game that already carries an `hltb_id` (D4) — **exact**: search by the
@@ -51,15 +95,16 @@ struct HLTBFillService: Sendable {
                        policy: HLTBFreshnessPolicy = .cacheFirst) async throws -> LinkedOutcome {
         let seededName = await search.linkedCandidate(hltbID: hltbID)?.name
         let queries = seededName.map { [$0] } ?? HLTBQueryLadder.queries(for: title)
-        var lastSeen: [HLTBCandidate] = []
+        var answers: [String: [HLTBCandidate]] = [:]
         for query in queries {
             let candidates = try await search.search(title: query, policy: policy)
             if let exact = candidates.first(where: { $0.id == hltbID }) {
                 return .exact(exact)
             }
-            if !candidates.isEmpty { lastSeen = candidates }
+            answers[query] = candidates
         }
-        return .lost(HLTBMatcher.match(title: title, year: year,
-                                       candidates: lastSeen, librarySlugs: librarySlugs))
+        // The id is gone: pool what the queries returned (D2c — plausible ⇒ a re-pick).
+        return .lost(Self.pooledVerdict(title: title, year: year, librarySlugs: librarySlugs,
+                                        queries: queries, answers: answers))
     }
 }

@@ -122,11 +122,30 @@ private struct HLTBCandidateRow: View {
         }
     }
 
-    private var timesLine: String {
+    private var timesLine: String { candidate.timesLine }
+}
+
+extension HLTBCandidate {
+    /// "Main 2 h · Extra 3 h · 100% 5 h" for a picker / Find row; a Main-Story-only entry
+    /// says so ("Main Story only (2 reports) — used as main"), matching what a pick writes
+    /// (``HLTBCandidate/mappedTimes``, wave 21 D1).
+    var timesLine: String {
         var parts: [String] = []
-        if let s = candidate.mainSeconds { parts.append("Main \(PlaytimeParser.formatApprox(seconds: s))") }
-        if let s = candidate.mainExtraSeconds { parts.append("Extra \(PlaytimeParser.formatApprox(seconds: s))") }
-        if let s = candidate.completionistSeconds { parts.append("100% \(PlaytimeParser.formatApprox(seconds: s))") }
+        if let s = mainSeconds { parts.append("Main \(PlaytimeParser.formatApprox(seconds: s))") }
+        if let s = mainExtraSeconds { parts.append("Extra \(PlaytimeParser.formatApprox(seconds: s))") }
+        if let s = completionistSeconds { parts.append("100% \(PlaytimeParser.formatApprox(seconds: s))") }
+        let mapped = mappedTimes
+        if mapped.mainStoryUsedForMain {
+            parts.append("Main Story only\(Self.reportsSuffix(mainCount)) — used as main")
+        } else if mapped.allStylesUsedForMain, let s = mapped.normally {
+            parts.append("All styles \(PlaytimeParser.formatApprox(seconds: s)) — used as main")
+        }
         return parts.joined(separator: " · ")
+    }
+
+    /// " (2 reports)" / " (1 report)" / "" when HLTB gave no count.
+    static func reportsSuffix(_ count: Int?) -> String {
+        guard let count, count > 0 else { return "" }
+        return " (\(count) report\(count == 1 ? "" : "s"))"
     }
 }

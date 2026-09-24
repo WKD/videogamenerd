@@ -62,7 +62,17 @@ final class HLTBBulkFetchModel {
     private(set) var total = 0
     private(set) var currentTitle = ""
     private(set) var filled = 0
+    /// No plausible HowLongToBeat entry came back from any ladder rung (wave 21 D2c) —
+    /// distinct from ``ambiguous`` ("needs your pick").
     private(set) var notFound = 0
+    /// Matched an entry, but nothing was written (HLTB had no times, or every gap was
+    /// already filled).
+    private(set) var unchanged = 0
+    /// Written games whose Main+Extra was missing on HLTB, so the Main Story filled the
+    /// main slot (wave 21 D1).
+    private(set) var mainStoryUsed = 0
+    /// This run's cache / network tallies ("40 from cache · 3 from network").
+    private(set) var tally = HLTBRequestTally()
     private(set) var ambiguous: [HLTBAmbiguousGame] = []
     private(set) var stoppedReason: String?
     /// Previous times of every game whose estimates were replaced this run (D4 batch Undo).
@@ -124,7 +134,7 @@ final class HLTBBulkFetchModel {
                     + gameIDs.filter { facts[$0]?.hltbID == nil }
         for id in ordered {
             if Task.isCancelled {
-                finish(.stopped, reason: "Cancelled.")
+                await finish(.stopped, reason: "Cancelled.")
                 return
             }
             guard let f = facts[id] else { completed += 1; continue }
@@ -147,18 +157,18 @@ final class HLTBBulkFetchModel {
                     await handle(outcome, id: id, facts: f, search: search)
                 }
             } catch is CancellationError {
-                finish(.stopped, reason: "Cancelled.")
+                await finish(.stopped, reason: "Cancelled.")
                 return
             } catch let error as ImportError {
-                finish(.stopped, reason: Self.reason(from: error))
+                await finish(.stopped, reason: Self.reason(from: error))
                 return
             } catch {
-                finish(.stopped, reason: "the request failed")
+                await finish(.stopped, reason: "the request failed")
                 return
             }
             completed += 1
         }
-        finish(.finished, reason: nil)
+        await finish(.finished, reason: nil)
     }
 
     /// Route one game's match outcome: apply a confident match (and remember it), list an
@@ -183,20 +193,25 @@ final class HLTBBulkFetchModel {
         switch mode {
         case .fillGaps:
             let result = try? await store.applyHLTBTimes(gameID: gameID, candidate: candidate)
-            if result?.didWrite == true { filled += 1 } else { notFound += 1 }
+            if result?.didWrite == true {
+                filled += 1
+                if result?.wroteNormally == true, candidate.usedMainStoryForMain { mainStoryUsed += 1 }
+            } else { unchanged += 1 }
         case .replace:
             let result = try? await store.replaceHLTBTimes(gameID: gameID, candidate: candidate)
             if let result, result.didWrite {
                 filled += 1
+                if candidate.usedMainStoryForMain { mainStoryUsed += 1 }
                 if replacedSnapshots[gameID] == nil { replacedSnapshots[gameID] = result.previous }
             } else {
-                // HLTB did not know the game — it stays flagged.
-                notFound += 1
+                // HLTB has the entry but no times — the game stays as it was (and flagged).
+                unchanged += 1
             }
         }
     }
 
-    private func finish(_ phase: Phase, reason: String?) {
+    private func finish(_ phase: Phase, reason: String?) async {
+        if let search = runSearch { tally = await search.requestTally() }
         self.phase = phase
         self.stoppedReason = reason
         if mode == .replace { onReplaceFinished?(replacedSnapshots) }
@@ -234,15 +249,29 @@ final class HLTBBulkFetchModel {
         mode == .replace ? "Refresh Time Estimates" : "Fetch Missing Time Estimates"
     }
 
-    /// "12 filled · 4 not found · 3 ambiguous · stopped: …" ("replaced" in replace mode).
-    /// D6: also surfaces games resolved exactly by their stored id and links HLTB dropped.
+    /// "12 filled · 3 need your pick · 4 no HLTB entry · stopped: …" ("replaced" in replace
+    /// mode). Wave 21 (D2c) separates "no HLTB entry" (nothing plausible from any rung) from
+    /// "needs your pick" (plausible rows came back). Also surfaces games resolved exactly by
+    /// their stored id, links HLTB dropped, matched-but-unchanged games, and the cache /
+    /// network tallies.
     var summaryLine: String {
         let verb = mode == .replace ? "replaced" : "filled"
-        var parts = "\(filled) \(verb) · \(notFound) not found · \(ambiguous.count) ambiguous"
+        let pick = ambiguous.count
+        var parts = "\(filled) \(verb) · \(pick) need\(pick == 1 ? "s" : "") your pick · \(notFound) no HLTB entry"
         if linkedByID > 0 { parts = "\(linkedByID) linked by id · " + parts }
+        if unchanged > 0 { parts += " · \(unchanged) unchanged" }
         if lostLinks > 0 { parts += " · \(lostLinks) link\(lostLinks == 1 ? "" : "s") lost" }
+        if tally.fromCache + tally.fromNetwork > 0 {
+            parts += " · \(tally.fromCache) from cache · \(tally.fromNetwork) from network"
+        }
         if let reason = stoppedReason { parts += " · stopped: \(reason)" }
         return parts
+    }
+
+    /// "2 games: Main+Extra not on HowLongToBeat — main story used" (wave 21 D1), or nil.
+    var mainStoryNote: String? {
+        guard mainStoryUsed > 0 else { return nil }
+        return "\(mainStoryUsed) game\(mainStoryUsed == 1 ? "" : "s"): Main+Extra not on HowLongToBeat — main story used."
     }
 
     /// The reassurance line shown when a run stopped on a reject (PLAN §5.3).

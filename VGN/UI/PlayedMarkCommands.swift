@@ -73,6 +73,11 @@ struct PlayedMarkCommands: Commands {
             Button("Find on HowLongToBeat…") { hltb?.findSelected() }
                 .disabled(!(hltb?.canFindSelected ?? false))
                 .help("Search HowLongToBeat by title and link the selected game to its entry.")
+            // The one explicit cache bypass (PLAN §5.3, wave 21): a Refresh serves the cached
+            // reply; this asks HowLongToBeat again for the one selected game.
+            Button("Ask HowLongToBeat Again") { hltb?.askAgainSelected() }
+                .disabled(!(hltb?.canAskAgainSelected ?? false))
+                .help("Ignore the cached HowLongToBeat reply for the selected game, ask the site again and replace its times.")
         }
     }
 }

@@ -78,12 +78,16 @@ struct HLTBBulkSheet: View {
     private var summaryBody: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(model.summaryLine).font(.callout.weight(.medium)).monospacedDigit()
+                .lineLimit(3)
+            if let note = model.mainStoryNote {
+                Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
             if let note = model.stoppedNote {
                 Text(note).font(.caption).foregroundStyle(.secondary)
             }
 
             if !model.ambiguous.isEmpty {
-                Text("Pick a match for these:").font(.subheadline.weight(.semibold))
+                Text("Needs your pick — HowLongToBeat has plausible entries:").font(.subheadline.weight(.semibold))
                 ScrollView {
                     VStack(spacing: 6) {
                         ForEach(model.ambiguous) { game in
