@@ -23,7 +23,9 @@ struct TriageView: View {
         .onKeyPress { press in
             guard let ch = press.characters.first, press.modifiers.isEmpty else { return .ignored }
             // `U` = "not actually played" (safe un-play), plus the tier letters + 0.
-            if ch == "0" || (ch.isLetter && "sabcdfu".contains(Character(ch.lowercased()))) {
+            // `1`/`2`/`3` rate "Holds up today?" (PLAN §7b) without advancing.
+            if ch == "0" || TriageModel.holdsUpKeys[ch] != nil
+                || (ch.isLetter && "sabcdfu".contains(Character(ch.lowercased()))) {
                 Task { await model.handle(character: ch) }
                 return .handled
             }
@@ -102,6 +104,9 @@ struct TriageView: View {
                     ForEach(game.platformIDs.prefix(3), id: \.self) { PlatformChip(slug: $0) }
                 }
                 .font(.callout)
+                TriageHoldsUpRow(current: game.holdsUp) { value in
+                    Task { await model.rateCurrent(value) }
+                }
             }
 
             // Preload the next cover so advancing is instant (PLAN §7 target ≈ 2 s).
@@ -156,11 +161,48 @@ struct TriageView: View {
                     Task { await model.tierCurrent(tier.id) }
                 }
                 .padding(.vertical, 8)
-                Text("Press a letter to tier · 0 / space to skip · U not played · ← back")
+                Text(TriageView.legendText)
                     .font(.caption2).foregroundStyle(.tertiary)
                     .padding(.bottom, 8)
             }
         }
+    }
+}
+
+extension TriageView {
+    /// The key legend under the tier chips (PLAN §7 + §7b).
+    static let legendText = "Press a letter to tier · 1 Holds Up · 2 Of Its Time · 3 Too Archaic "
+        + "· 0 / space to skip · U not played · ← back"
+}
+
+/// The "Holds up today?" chips on the Triage card — the current mark highlighted, a click (or
+/// `1`/`2`/`3`) sets it; pressing the current one again clears it. Bounded, single line.
+private struct TriageHoldsUpRow: View {
+    let current: HoldsUp?
+    let onPick: (HoldsUp) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(HoldsUp.allCases.enumerated()), id: \.element) { index, value in
+                Button {
+                    onPick(value)
+                } label: {
+                    Text("\(index + 1) \(value.label)")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .foregroundStyle(current == value ? Color.white : Color.secondary)
+                        .background(Capsule().fill(current == value ? Color.accentColor : Color.secondary.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .appKitTooltip(value.explanation)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Holds up today?")
+        .accessibilityValue(HoldsUp.label(for: current))
     }
 }
 

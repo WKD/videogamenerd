@@ -35,6 +35,7 @@ enum A11yID {
     static let inspectorStatus = "inspector.status"
     static let inspectorPlaytimeField = "inspector.playtime"
     static let inspectorTierChip = "inspector.tierChip"
+    static let inspectorHoldsUp = "inspector.holdsUp"
 
     // Quick Add
     static let quickAddField = "quickadd.field"

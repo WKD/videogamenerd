@@ -36,6 +36,16 @@ struct PlayedMarkCommands: Commands {
             }
             .disabled(!enabled)
 
+            // Holds Up Today? ▸ Holds Up / Of Its Time / Too Archaic / Clear (PLAN §7b). Acts on
+            // the selection's played games; unplayed ones are ignored (disabled footer).
+            let canHoldsUp = library?.canSetSelectionHoldsUp ?? false
+            Menu(HoldsUpMenuItems.title) {
+                HoldsUpMenuItems(targets: selection, isEnabled: canHoldsUp, registersShortcuts: true) { value in
+                    library?.setHoldsUp(value)
+                }
+            }
+            .disabled(!canHoldsUp)
+
             // Change Copy Format ▸ Physical / Digital / ROM (PLAN §13.3). Acts on the
             // selection's single-copy games; several-copy games are skipped (banner + footer).
             let canFormat = library?.canChangeSelectionCopyFormat ?? false

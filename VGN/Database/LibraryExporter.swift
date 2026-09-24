@@ -88,6 +88,9 @@ struct LibraryExporter: Sendable {
         /// The "To Revisit" flag (v15): with `status == "abandoned"`, `true` means the owner
         /// wants to come back to it. Additive; raw `status` keeps the four legacy values.
         var revisit: Bool
+        /// "Holds up today?" (v16): `"holds_up"` / `"of_its_time"` / `"too_archaic"`, or nil =
+        /// unrated. Optional so an export written before v16 still decodes (absent ⇒ unrated).
+        var holdsUp: String?
         var tierID: Int64?
         var rankKey: Int64?
         var myPlaytimeS: Int?
@@ -182,7 +185,7 @@ struct LibraryExporter: Sendable {
 
         let games = try Row.fetchAll(db, sql: """
             SELECT id, igdb_id, title, sort_title, alt_titles, summary, release_date, year,
-                   played, status, revisit, tier_id, rank_key, my_playtime_s, psn_playtime_s,
+                   played, status, revisit, holds_up, tier_id, rank_key, my_playtime_s, psn_playtime_s,
                    ttb_hastily_s, ttb_normally_s, ttb_completely_s, ttb_source,
                    igdb_cover_image_id, cover_file, igdb_rating, igdb_rating_count,
                    user_edited, hltb_id, origin, first_played_at, last_played_at,
@@ -196,6 +199,7 @@ struct LibraryExporter: Sendable {
                 altTitles: altRaw.split(separator: "\n").map(String.init),
                 summary: r["summary"], releaseDate: r["release_date"], year: r["year"],
                 played: r["played"], status: r["status"], revisit: r["revisit"],
+                holdsUp: r["holds_up"],
                 tierID: r["tier_id"], rankKey: r["rank_key"],
                 myPlaytimeS: r["my_playtime_s"], psnPlaytimeS: r["psn_playtime_s"],
                 ttbHastilyS: r["ttb_hastily_s"], ttbNormallyS: r["ttb_normally_s"],
@@ -238,7 +242,7 @@ struct LibraryExporter: Sendable {
     static let csvHeader = [
         "title", "year", "platforms", "owned", "played", "status", "revisit", "tier",
         "overall_rank", "score", "my_playtime_hours", "igdb_main_hours",
-        "igdb_rating", "formats", "compilation", "origin", "last_played",
+        "igdb_rating", "formats", "compilation", "origin", "last_played", "holds_up",
     ]
 
     /// ISO-8601 (date only) formatter for the CSV `last_played` column. Read-only after
@@ -283,7 +287,7 @@ struct LibraryExporter: Sendable {
 
         var lines: [String] = [csvHeader.map(escapeCSV).joined(separator: ",")]
         let rows = try Row.fetchAll(db, sql: """
-            SELECT id, title, year, played, status, revisit, tier_id,
+            SELECT id, title, year, played, status, revisit, holds_up, tier_id,
                    my_playtime_s, psn_playtime_s, ttb_normally_s, igdb_rating, origin,
                    last_played_at
             FROM games ORDER BY sort_title, id
@@ -315,6 +319,8 @@ struct LibraryExporter: Sendable {
                 compilationByGame[id] ?? "",
                 (r["origin"] as String?) ?? "",
                 (r["last_played_at"] as Date?).map { csvDateFormatter.string(from: $0) } ?? "",
+                // "Holds up today?" (v16) — appended last so existing column positions never move.
+                (r["holds_up"] as String?) ?? "",
             ]
             lines.append(field.map(escapeCSV).joined(separator: ","))
         }

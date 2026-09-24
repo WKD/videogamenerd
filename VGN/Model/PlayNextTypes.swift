@@ -125,6 +125,12 @@ enum PlayNextReason: Hashable, Sendable {
     /// A game you dropped but flagged **To Revisit** — the whole point of the status
     /// (PLAN §7b): it is a candidate by default, and this is why.
     case wantedToRevisit
+    /// "Holds up today?" (PLAN §7b): the owner marked it **Holds Up** — a small bonus.
+    case markedHoldsUp
+    /// The owner marked it **Of Its Time** — a small penalty; still suggested.
+    case markedOfItsTime
+    /// The owner marked it **Too Archaic** — only shown because "Include archaic" is on.
+    case markedTooArchaic
     /// Well regarded by the crowd (IGDB aggregated rating, 0…100).
     case crowdRated(rating: Double, count: Int?)
     /// No IGDB match — suggested on time fit alone.
@@ -174,6 +180,10 @@ struct PlayNextSuggestion: Hashable, Sendable, Identifiable {
     /// The game's IGDB id, when it is matched — drives the card's "Open on IGDB" button
     /// (nil for a manual / unmatched entry, which shows no button). Additive.
     var igdbID: Int64?
+    /// The owner's "Holds up today?" mark, echoed for display (PLAN §7b). Additive.
+    var holdsUp: HoldsUp?
+    /// Importer-filled first-played date — the card's quiet "first played in 1991". Additive.
+    var firstPlayedAt: Date?
 
     init(
         id: GameID,
@@ -189,7 +199,9 @@ struct PlayNextSuggestion: Hashable, Sendable, Identifiable {
         matchStrength: MatchStrength,
         reasons: [PlayNextReason],
         hasMetadata: Bool,
-        igdbID: Int64? = nil
+        igdbID: Int64? = nil,
+        holdsUp: HoldsUp? = nil,
+        firstPlayedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -205,6 +217,8 @@ struct PlayNextSuggestion: Hashable, Sendable, Identifiable {
         self.reasons = reasons
         self.hasMetadata = hasMetadata
         self.igdbID = igdbID
+        self.holdsUp = holdsUp
+        self.firstPlayedAt = firstPlayedAt
     }
 }
 
@@ -215,8 +229,10 @@ struct RecommendationExclusions: Hashable, Sendable {
     var byStatus: Int = 0      // abandoned/played-without-status filtered out
     var byFeedback: Int = 0    // snoozed or nevered
     var unknownLength: Int = 0 // no estimate → unknown-length lane
+    /// Marked **Too Archaic** ("Holds up today?", PLAN §7b) and "Include archaic" is off.
+    var tooArchaic: Int = 0
 
-    var total: Int { byTime + byStatus + byFeedback }
+    var total: Int { byTime + byStatus + byFeedback + tooArchaic }
 }
 
 /// The engine's answer (PLAN §7b): a hero pick, up to four alternatives, the

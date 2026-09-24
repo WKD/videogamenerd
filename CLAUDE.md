@@ -131,7 +131,12 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   v15 `games.revisit` (PLAN §4/§7b, the **"To Revisit"** play status) — a purely additive `ADD COLUMN`
   flag so a dropped-but-want-to-come-back game is `status='abandoned' AND revisit=1`; the v1 `status`
   CHECK and its four legacy strings are untouched (no `games` rebuild), no backfill; mapped in one place
-  by `PlayStatus.from(dbStatus:revisit:)` / `dbStatus` / `dbRevisit`)). `LibraryStore`
+  by `PlayStatus.from(dbStatus:revisit:)` / `dbStatus` / `dbRevisit`);
+  v16 `games.holds_up` (PLAN §4/§7b, **"Holds up today?"**) — nullable TEXT, CHECK in
+  `('holds_up','of_its_time','too_archaic')`, NULL = unrated; purely additive, **no backfill, nothing
+  inferred** from year/platform/tier; only a played game carries one (`LibraryStore.setHoldsUp` refuses
+  unplayed games, every un-play path clears it); mapped once by `HoldsUp(dbValue:)` / `dbValue`; it
+  changes **Play Next only** (bonus / penalty / exclusion), never the ranking, taste profile or backtest). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`

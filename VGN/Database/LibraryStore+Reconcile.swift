@@ -414,6 +414,7 @@ extension LibraryStore {
         // source's; carry the source's tier/rank only when the target is unranked.
         target.played = target.played || source.played
         target.status = target.status ?? source.status
+        target.holdsUp = target.holdsUp ?? source.holdsUp   // v16; target.played is set above
         target.myPlaytimeS = target.myPlaytimeS ?? source.myPlaytimeS
         target.psnPlaytimeS = target.psnPlaytimeS ?? source.psnPlaytimeS
         target.year = target.year ?? source.year

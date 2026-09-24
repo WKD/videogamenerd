@@ -104,6 +104,14 @@ struct RootView: View {
             if vm.isBundlesToExpandSelection {
                 BundlesToExpandHeader(vm: vm)
             }
+            // "Needs a 'Holds Up' Rating" (PLAN §7b) — same slim, bounded bar, mounted the same
+            // way (outer VStack, never wrapping the grid).
+            if vm.isNeedsHoldsUpRatingSelection {
+                HoldsUpRatingHeader()
+            }
+            if vm.isPSPlusOnlySelection {
+                PSPlusOnlyHeader(count: vm.counts.psPlusOnly)
+            }
             // STRUCTURAL GUARD (wave 19): the destination area lives inside a `GeometryReader`
             // so the DETAIL column can never leak an unbounded ideal height into the
             // `NavigationSplitView` — which would size BOTH columns to it and push the sidebar
@@ -204,6 +212,7 @@ struct RootView: View {
                 decadeMenu
                 tierMenu
                 statusMenu
+                holdsUpMenu
                 formatMenu
                 playtimeMenu
                 platformMenu
@@ -313,6 +322,38 @@ struct RootView: View {
                 .symbolVariant(statusFacetActive ? .fill : .none)
         }
         .accessibilityIdentifier(A11yID.toolbarFilterStatus)
+    }
+
+    // "Holds up today?" (PLAN §7b/§8): the three marks + Unrated (played, no mark yet).
+    private var holdsUpMenu: some View {
+        Menu {
+            ForEach(HoldsUp.allCases) { value in
+                Toggle(value.label, isOn: membership(\.holdsUp, value))
+                    .help(value.explanation)
+            }
+            Divider()
+            Toggle(HoldsUp.unratedLabel, isOn: flag(\.includeHoldsUpUnrated))
+                .help("Played games you haven't judged yet — the \u{201C}Needs a \u{2018}Holds Up\u{2019} Rating\u{201D} list.")
+            if holdsUpFacetActive {
+                Divider()
+                Button("Clear") { clearHoldsUpFacet() }
+            }
+        } label: {
+            Label("Holds Up", systemImage: "hourglass")
+                .symbolVariant(holdsUpFacetActive ? .fill : .none)
+        }
+        .help("Holds up today? — filter by how a played game plays now")
+    }
+
+    private var holdsUpFacetActive: Bool {
+        !vm.filter.holdsUp.isEmpty || vm.filter.includeHoldsUpUnrated
+    }
+
+    private func clearHoldsUpFacet() {
+        var f = vm.filter
+        f.holdsUp.removeAll()
+        f.includeHoldsUpUnrated = false
+        vm.setFilter(f)
     }
 
     private var statusFacetActive: Bool {

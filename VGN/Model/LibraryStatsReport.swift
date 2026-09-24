@@ -82,6 +82,8 @@ struct LibraryStatsReport: Sendable, Hashable {
     var statusCounts: StatusCounts
     /// (finished + 100 %) / played, or nil when nothing is played.
     var completionRate: Double?
+    /// "Holds up today?" over played games (PLAN §7b) — four disjoint slices.
+    var holdsUpCounts: HoldsUpCounts = .zero
 
     // MARK: 8 — Activity
     /// Games added per month, the last twelve months, oldest → newest.
@@ -213,6 +215,26 @@ struct LibraryStatsReport: Sendable, Hashable {
 
         static let zero = StatusCounts(playing: 0, finished: 0, completed: 0,
                                        abandoned: 0, toRevisit: 0, noStatus: 0)
+    }
+
+    /// The "Holds up today?" slice over played games (PLAN §7b, v16): the three marks plus
+    /// Unrated (played, no mark). The four sum to the played count.
+    struct HoldsUpCounts: Sendable, Hashable {
+        var holdsUp: Int
+        var ofItsTime: Int
+        var tooArchaic: Int
+        var unrated: Int
+
+        static let zero = HoldsUpCounts(holdsUp: 0, ofItsTime: 0, tooArchaic: 0, unrated: 0)
+
+        func count(_ value: HoldsUp?) -> Int {
+            switch value {
+            case .holdsUp: return holdsUp
+            case .ofItsTime: return ofItsTime
+            case .tooArchaic: return tooArchaic
+            case nil: return unrated
+            }
+        }
     }
 
     struct MonthCount: Sendable, Hashable, Identifiable {

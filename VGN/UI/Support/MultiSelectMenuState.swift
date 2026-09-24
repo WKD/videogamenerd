@@ -37,6 +37,19 @@ extension Collection where Element == GameSummary {
         SelectionState.over(filter { $0.singleCopyFormat != nil }) { $0.singleCopyFormat == format }
     }
 
+    /// "Holds Up Today? ▸ value / Clear" (PLAN §7b): computed **only over the played games**
+    /// (the ones the action can mark); unplayed games are ignored for the state and counted
+    /// by ``unplayedCount`` for the disabled footer. `nil` = the "Clear" (Unrated) option.
+    func holdsUpState(_ value: HoldsUp?) -> SelectionState {
+        SelectionState.over(filter(\.played)) { $0.holdsUp == value }
+    }
+
+    /// How many games in this set are unplayed — the "N unplayed games not changed" footer
+    /// of the Holds Up Today? menu.
+    var unplayedCount: Int {
+        reduce(0) { $0 + ($1.played ? 0 : 1) }
+    }
+
     /// How many games in this set own several reformat-able copies — the "N games with
     /// several copies are not changed" footer (PLAN §13.3).
     var severalCopiesCount: Int {

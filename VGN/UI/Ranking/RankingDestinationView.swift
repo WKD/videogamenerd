@@ -68,13 +68,30 @@ private struct DuelDestinationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Mode", selection: $mode) {
-                ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+            ZStack(alignment: .trailing) {
+                Picker("Mode", selection: $mode) {
+                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 260)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier(A11yID.duelModePicker)
+
+                // Ranking ▸ Reset All Duels… (PLAN §7) — an explicit, confirmed, undoable
+                // action; the per-tier variant lives in the Ranking menu.
+                Button {
+                    Task { await env.duelReset.request(.all) }
+                } label: {
+                    Label("Reset Duels…", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .appKitTooltip("Forget every duel and un-place every game — tiers are kept. "
+                               + "Asks first, saves a snapshot, undoable. (Ranking menu: one tier only.)")
+                .padding(.trailing, 12)
+                .accessibilityIdentifier("duel.resetAll")
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 260)
             .padding(.vertical, 8)
-            .accessibilityIdentifier(A11yID.duelModePicker)
 
             Divider()
 
@@ -89,6 +106,11 @@ private struct DuelDestinationView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .duelResetConfirmation(env.duelReset)
+        // After a reset (or its undo) the duel queue / triage reload from the database.
+        .onChange(of: env.duelReset.resetGeneration) {
+            Task { await duelModel.refresh() }
+        }
         .sheet(isPresented: $showDisputes) {
             DisputesSheet(
                 disputes: duelModel.disputes,

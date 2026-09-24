@@ -170,6 +170,7 @@ extension LibraryStore {
             played: g["played"],
             owned: owned,
             status: PlayStatus.from(dbStatus: statusRaw, revisit: revisit),
+            holdsUp: HoldsUp(dbValue: g["holds_up"]),
             tierID: g["tier_id"],
             tierLetter: g["tier_letter"],
             tierLabel: g["tier_label"],

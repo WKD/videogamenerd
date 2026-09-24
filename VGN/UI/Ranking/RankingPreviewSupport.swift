@@ -76,6 +76,14 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
     }
     func deleteGame(_ gameID: Int64) async throws { deleted.append(gameID) }
 
+    // MARK: "Holds up today?"
+    private(set) var holdsUpCalls: [(value: HoldsUp?, ids: [Int64])] = []
+    func setHoldsUp(_ value: HoldsUp?, for gameIDs: [Int64]) async throws -> SetHoldsUpOutcome {
+        holdsUpCalls.append((value, gameIDs))
+        return SetHoldsUpOutcome(applied: gameIDs, skippedUnplayed: [],
+                                 previous: Dictionary(uniqueKeysWithValues: gameIDs.map { ($0, HoldsUp?.none) }))
+    }
+
     // MARK: Drag / drop overrides
     func move(gameID: Int64, toTier: Int64, atIndex: Int?) async throws {
         moves.append((gameID, toTier, atIndex))

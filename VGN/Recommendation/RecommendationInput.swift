@@ -8,12 +8,17 @@ struct RankedGame: Hashable, Sendable {
     var igdbID: Int64?
     var score: Double
     var traits: [GameTrait]
+    /// The importer-filled first-played year (v9), or nil when unknown — used ONLY by the
+    /// backtest's optional cutoff (PLAN §7b "Helping me judge"); never a taste signal.
+    var firstPlayedYear: Int?
 
-    init(id: GameID, igdbID: Int64? = nil, score: Double, traits: [GameTrait] = []) {
+    init(id: GameID, igdbID: Int64? = nil, score: Double, traits: [GameTrait] = [],
+         firstPlayedYear: Int? = nil) {
         self.id = id
         self.igdbID = igdbID
         self.score = score
         self.traits = traits
+        self.firstPlayedYear = firstPlayedYear
     }
 
     /// The IGDB ids listed in this game's `similar_games`.
@@ -57,6 +62,12 @@ struct Candidate: Hashable, Sendable {
     /// (PLAN §15). When unplayed it earns a modest backlog boost and the reason "★ a
     /// favourite on your Batocera". Default false.
     var isBatoceraFavourite: Bool
+    /// The owner's "Holds up today?" mark (PLAN §7b) — a fact about how the game plays NOW.
+    /// Adjusts this candidate only (bonus / penalty / Too Archaic excluded unless opted in);
+    /// never the taste profile, links or the backtest. nil = Unrated (no effect).
+    var holdsUp: HoldsUp?
+    /// Importer-filled first-played date (v9), echoed to the card as "first played in 1991".
+    var firstPlayedAt: Date?
 
     init(
         id: GameID,
@@ -76,7 +87,9 @@ struct Candidate: Hashable, Sendable {
         formats: [ProductFormat] = [],
         playStatus: PlayStatus? = nil,
         ownedOnlyViaSubscription: Bool = false,
-        isBatoceraFavourite: Bool = false
+        isBatoceraFavourite: Bool = false,
+        holdsUp: HoldsUp? = nil,
+        firstPlayedAt: Date? = nil
     ) {
         self.id = id
         self.igdbID = igdbID
@@ -96,6 +109,8 @@ struct Candidate: Hashable, Sendable {
         self.playStatus = playStatus
         self.ownedOnlyViaSubscription = ownedOnlyViaSubscription
         self.isBatoceraFavourite = isBatoceraFavourite
+        self.holdsUp = holdsUp
+        self.firstPlayedAt = firstPlayedAt
     }
 
     var similarIGDBIDs: [Int64] { traits.compactMap(\.similarGameID) }
@@ -158,6 +173,11 @@ struct RecommendationOptions: Hashable, Sendable {
     var includeAbandoned: Bool
     /// Include games played with no completion status ("played" may mean finished).
     var includePlayedWithoutStatus: Bool
+    /// Include games the owner marked **Too Archaic** ("Holds up today?", PLAN §7b) — off by
+    /// default: they are excluded from the regular picks and counted in
+    /// ``RecommendationExclusions/tooArchaic``. When on they compete with the "of its time"
+    /// penalty and say why they're here.
+    var includeArchaic: Bool
     /// Deterministic rotation seed; changing it re-rolls near-ties (PLAN §7b `R`).
     var seed: UInt64
     /// "Now" for snooze comparison, seconds since 1970.
@@ -181,6 +201,7 @@ struct RecommendationOptions: Hashable, Sendable {
     init(
         includeAbandoned: Bool = false,
         includePlayedWithoutStatus: Bool = false,
+        includeArchaic: Bool = false,
         seed: UInt64 = 0,
         now: Double = Date().timeIntervalSince1970,
         maxAlternatives: Int = 4,
@@ -191,6 +212,7 @@ struct RecommendationOptions: Hashable, Sendable {
     ) {
         self.includeAbandoned = includeAbandoned
         self.includePlayedWithoutStatus = includePlayedWithoutStatus
+        self.includeArchaic = includeArchaic
         self.seed = seed
         self.now = now
         self.maxAlternatives = maxAlternatives

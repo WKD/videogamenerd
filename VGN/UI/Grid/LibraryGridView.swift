@@ -170,6 +170,13 @@ struct LibraryGridView: View {
                 }
             }
         }
+        // "Holds up today?" (PLAN §7b): the three values + Clear, state over the played targets;
+        // unplayed ones are ignored and named in a disabled footer.
+        Menu(HoldsUpMenuItems.title) {
+            HoldsUpMenuItems(targets: targets) { value in
+                act(on: game) { vm.setHoldsUp(value, for: $0) }
+            }
+        }
         StateMenuButton(title: "Mark Owned", state: targets.ownedState) {
             act(on: game) { vm.setOwned(true, for: $0) }
         }

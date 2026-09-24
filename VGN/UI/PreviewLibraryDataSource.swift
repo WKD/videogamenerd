@@ -89,7 +89,7 @@ extension GameDetail {
         self.init(
             id: s.id, igdbID: nil, title: s.title, sortTitle: s.title, summary: nil,
             releaseDate: nil, year: s.year, decade: s.year.map { ($0 / 10) * 10 },
-            played: s.played, owned: s.owned, status: s.status,
+            played: s.played, owned: s.owned, status: s.status, holdsUp: s.holdsUp,
             tierID: s.tierID, tierLetter: s.tierLetter, tierLabel: nil, tierColorHex: s.tierColorHex,
             rankKey: s.rankKey, coverFile: s.coverFile, igdbCoverImageID: nil,
             genres: [], platformIDs: s.platformIDs,

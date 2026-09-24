@@ -31,10 +31,11 @@ extension RecommendationStore {
         let ids = Array(scores.keys)
         let igdbByID = try igdbIDs(for: ids, db: db)
         let features = try loadFeatures(ids: ids, db: db)
+        let firstYears = try firstPlayedYears(for: ids, db: db)
 
         return ids.map { id in
             RankedGame(id: id, igdbID: igdbByID[id] ?? nil, score: scores[id] ?? 0.5,
-                       traits: features[id]?.traits ?? [])
+                       traits: features[id]?.traits ?? [], firstPlayedYear: firstYears[id])
         }
     }
 
@@ -47,6 +48,7 @@ extension RecommendationStore {
     static func loadCandidates(db: Database) throws -> [Candidate] {
         let rows = try Row.fetchAll(db, sql: """
             SELECT g.id, g.igdb_id, g.title, g.year, g.played, g.status, g.revisit,
+                   g.holds_up, g.first_played_at,
                    g.my_playtime_s, g.ttb_hastily_s, g.ttb_normally_s, g.ttb_completely_s,
                    g.ttb_source,
                    g.igdb_rating, g.igdb_rating_count, g.cover_file,
@@ -102,7 +104,10 @@ extension RecommendationStore {
                 formats: formats[id] ?? [],
                 playStatus: PlayStatus.from(dbStatus: statusRaw, revisit: revisit),
                 ownedOnlyViaSubscription: row["sub_only"],
-                isBatoceraFavourite: row["bato_fav"]
+                isBatoceraFavourite: row["bato_fav"],
+                // "Holds up today?" (PLAN §7b) — adjusts this candidate only (never the profile).
+                holdsUp: HoldsUp(dbValue: row["holds_up"]),
+                firstPlayedAt: row["first_played_at"]
             )
         }
     }
@@ -199,6 +204,21 @@ extension RecommendationStore {
         }
         // Stable, catalogue order.
         return out.mapValues { set in ProductFormat.allCases.filter(set.contains) }
+    }
+
+    /// The importer-filled first-played **year** (v9) per game, for the backtest's optional
+    /// "exclude games first played before …" cutoff (PLAN §7b). Games without one are absent.
+    static func firstPlayedYears(for ids: [Int64], db: Database) throws -> [Int64: Int] {
+        guard !ids.isEmpty else { return [:] }
+        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
+        var out: [Int64: Int] = [:]
+        for row in try Row.fetchAll(db, sql: """
+            SELECT id, CAST(strftime('%Y', first_played_at) AS INTEGER) AS y
+            FROM games WHERE id IN (\(placeholders)) AND first_played_at IS NOT NULL
+            """, arguments: StatementArguments(ids)) {
+            if let year = row["y"] as Int? { out[row["id"]] = year }
+        }
+        return out
     }
 
     static func igdbIDs(for ids: [Int64], db: Database) throws -> [Int64: Int64?] {

@@ -104,6 +104,7 @@ enum LibraryQuery {
             g.played                                         AS played,
             g.status                                         AS status,
             g.revisit                                        AS revisit,
+            g.holds_up                                       AS holds_up,
             COALESCE(own.owned, 0)                           AS owned,
             COALESCE(own.is_comp, 0)                         AS is_comp,
             COALESCE(own.has_rom, 0)                         AS has_rom,
@@ -205,6 +206,12 @@ enum LibraryQuery {
             wheres.append(dlcAndExpansionsPredicate())
         case .sameGameTwoEntries:
             wheres.append(sameGameTwoEntriesPredicate())
+        case .psPlusOnly:
+            // Owned only through PS Plus — the ONE predicate Format ▸ PS Plus uses too.
+            wheres.append(subscriptionOnlyPredicate)
+        case .needsHoldsUpRating:
+            // The rating pass (PLAN §7b): played, not yet judged "Holds up today?".
+            wheres.append(needsHoldsUpRatingPredicate)
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
@@ -298,6 +305,17 @@ enum LibraryQuery {
         if filter.includeNoStatus { statusOrs.append("(g.played = 1 AND g.status IS NULL)") }
         appendOR(statusOrs, into: &wheres)
 
+        // "Holds up today?" facet (PLAN §7b, OR within kind): any selected mark OR "Unrated"
+        // (played, no mark — the same predicate as the "Needs a 'Holds Up' Rating" list).
+        var holdsUpOrs: [String] = []
+        if !filter.holdsUp.isEmpty {
+            let values = HoldsUp.allCases.filter(filter.holdsUp.contains).map(\.dbValue)
+            holdsUpOrs.append("g.holds_up IN (\(placeholders(values.count)))")
+            args.append(contentsOf: values.map { $0 as DatabaseValueConvertible })
+        }
+        if filter.includeHoldsUpUnrated { holdsUpOrs.append(needsHoldsUpRatingPredicate) }
+        appendOR(holdsUpOrs, into: &wheres)
+
         // Format / ownership facet (OR within kind): a game matches if it has ≥ 1
         // owned product in one of the formats (PLAN §4), OR "Not Owned" (no owned
         // product/copy at all — the sidebar "Owned" definition, so compilation-owned
@@ -336,11 +354,7 @@ enum LibraryQuery {
         // must be owned AND have no owned copy that is really owned (subscription IS NULL).
         // With Status ▸ Not Played this is the "finish before unsubscribing" list.
         if filter.includeSubscriptionOnly {
-            wheres.append("""
-                (EXISTS(SELECT 1 FROM product_games pg6 WHERE pg6.game_id = g.id)
-                 AND NOT EXISTS(SELECT 1 FROM product_games pg7 JOIN products p7 ON p7.id = pg7.product_id
-                                WHERE pg7.game_id = g.id AND p7.subscription IS NULL))
-                """)
+            wheres.append(subscriptionOnlyPredicate)
         }
         if !filter.genres.isEmpty {
             let gs = filter.genres.sorted()
@@ -556,6 +570,31 @@ enum LibraryQuery {
         """
     }
 
+    /// **Owned only through a subscription** (PLAN §13.3): owned, and no owned copy is really
+    /// owned (`subscription IS NULL`). The ONE SQL definition shared by the Format ▸ PS Plus
+    /// facet, the "PS Plus Only" sidebar scope and its count (mirrors the grid row's `sub_only`
+    /// / ``GameSummary/ownedOnlyViaSubscription``).
+    static let subscriptionOnlyPredicate = """
+        (EXISTS(SELECT 1 FROM product_games pg6 WHERE pg6.game_id = g.id)
+         AND NOT EXISTS(SELECT 1 FROM product_games pg7 JOIN products p7 ON p7.id = pg7.product_id
+                        WHERE pg7.game_id = g.id AND p7.subscription IS NULL))
+        """
+
+    /// Sidebar count for the "PS Plus Only" row (single counts observation).
+    static func fetchPSPlusOnlyCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(subscriptionOnlyPredicate)") ?? 0
+    }
+
+    /// PLAN §7b "Needs a 'Holds Up' Rating": played games with no "Holds up today?" mark. The
+    /// ONE predicate shared by the grid scope and the sidebar count (list ≡ count).
+    static let needsHoldsUpRatingPredicate = "(g.played = 1 AND g.holds_up IS NULL)"
+
+    /// Sidebar count for the "Needs a 'Holds Up' Rating" row (composed into the single counts
+    /// observation, so rating a game re-runs it — no timer, no second observation).
+    static func fetchNeedsHoldsUpRatingCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(needsHoldsUpRatingPredicate)") ?? 0
+    }
+
     /// Sidebar count for the "DLC & Expansions" row (composed into the single counts observation).
     static func fetchDLCAndExpansionsCount(_ db: Database) throws -> Int {
         try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games g WHERE \(dlcAndExpansionsPredicate())") ?? 0
@@ -687,6 +726,7 @@ enum LibraryQuery {
             compilationProductID: row["comp_id"],
             platformIDs: platformIDs,
             status: PlayStatus.from(dbStatus: statusRaw, revisit: revisit),
+            holdsUp: HoldsUp(dbValue: row["holds_up"]),
             hasROM: row["has_rom"],
             ownedOnlyViaSubscription: row["sub_only"],
             physicalPlatformIDs: dedupedList(row["physical_plats"]),

@@ -643,6 +643,42 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   added for To Revisit (the brief: "no new grid badge unless statuses already have one"). Quick Add has no
   status control, so nothing was added there. PSN's `statusPrefill` only ever emits 100 %, never To Revisit.
 
+## "Holds up today?" (owner, 2026-09-25) — built (wave 21, lane A)
+- Migration **v16** `games.holds_up` (TEXT, CHECK `holds_up|of_its_time|too_archaic`, NULL = unrated), purely
+  additive, **no backfill** — every existing game starts Unrated; nothing is inferred from year / platform / tier.
+  Only a played game carries one (`LibraryStore.setHoldsUp` refuses unplayed games with an outcome; setPlayed(false),
+  Triage's un-play and the Start-playing undo that restores played = 0 all clear it). A merge keeps the target's
+  mark, else the source's.
+- **Keys, by design:** the ⌃⌥⌘1/2/3/0 key equivalents live on the menu-bar Game ▸ Holds Up Today? items (so they
+  act on the grid selection with or without the inspector); the inspector segments only *name* them in tooltips —
+  registering them twice would make SwiftUI pick one arbitrarily. They are therefore disabled outside a library
+  grid destination (Tier Board / The Top / Duel), where Triage's own 1/2/3 apply.
+- **Unrated means "played, no mark"** in the filter and the smart list (mirrors Tier ▸ Unrated); an unplayed game
+  is not "unrated" — it cannot be rated at all.
+- **Play Next numbers:** Holds Up +0.04, Of Its Time −0.04 (the size of the PS Plus / Batocera nudges — they only
+  reorder near-ties), Too Archaic excluded unless "Include too archaic" (then −0.04). The backtest never sees the
+  mark. The **first-played cutoff** only affects games with an importer-filled `first_played_at` (PSN today); with
+  no such dates it reports the same ρ as the headline. No grid badge for the mark (statuses have none either).
+- The sidebar row's full name, **Needs a "Holds Up" Rating**, truncates at the default sidebar width
+  ("Needs a "Holds Up" R…"); the tooltip and the grid header carry the full wording. Widen the sidebar to read it.
+- The **sample library** carries four marks (Bloodborne, Chrono Trigger: Holds Up; Broken Sword, MGS3: Of Its Time)
+  so every state shows in `-VGNSampleData` mode.
+
+## Reset All Duels (owner, 2026-09-25) — built (wave 21, lane A)
+- **Ranking ▸ Reset All Duels… / Reset Duels in Tier ▸ S…F** and a Duel-header button. The only duel-related
+  `app_state` key is `ranking.duel` (session + per-answer log + one-step undo history + dismissed borders +
+  enqueued pairs); "all" deletes it, a tier reset trims it (and clears the whole one-step history, whose entries
+  could reference deleted rows). The pre-reset snapshot is written **only in a live launch**
+  (`backups/before-duel-reset-<stamp>.sqlite`, outside the `vgn-*` rotation — these accumulate until deleted by
+  hand); sample / seeded runs skip it.
+- The undo restores keys only onto games still in the same tier, still unplaced, and whose key no game has taken
+  since; a game moved after the reset keeps its new place. Redo re-runs the reset (with a new snapshot).
+- A tier reset deletes every comparison touching one of the tier's games — including cross-tier border duels.
+
+## "PS Plus Only" smart list (owner, 2026-09-25) — built (wave 21, lane A)
+- Same set as Format ▸ PS Plus (one predicate). Shown right after Owned only while N > 0. The header's leave date
+  comes from Settings ▸ PlayStation's "I plan to leave PS Plus around…" and is read when the header appears.
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.

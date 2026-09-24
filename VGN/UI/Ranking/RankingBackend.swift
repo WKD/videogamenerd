@@ -30,6 +30,10 @@ protocol RankingBackend: Sendable {
     /// Remove a game from the library entirely (Triage's explicit removal path).
     func deleteGame(_ gameID: Int64) async throws
 
+    // MARK: "Holds up today?" (Triage `1`/`2`/`3` — PLAN §7b)
+    /// Set / clear the mark on played games (unplayed ones are refused, reported).
+    @discardableResult func setHoldsUp(_ value: HoldsUp?, for gameIDs: [Int64]) async throws -> SetHoldsUpOutcome
+
     // MARK: Drag / drop overrides (Tier Board + The Top — PLAN §7)
     /// Move a game to `toTier` at an exact position (0 = top). `atIndex == nil`
     /// drops it into the unplaced tail (tier set, key cleared, re-queued).

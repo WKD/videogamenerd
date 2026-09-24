@@ -119,5 +119,16 @@ struct RecommendationWeights: Sendable, Hashable {
     /// backtest's `predict`), so it is backtest-neutral exactly like the PS Plus term.
     var batoceraFavouriteBonus: Double = 0.05
 
+    // MARK: "Holds up today?" (PLAN §7b)
+
+    /// Added to a candidate the owner marked **Holds Up** (still a great play today). Small —
+    /// the size of the PS Plus / Batocera nudges — so it reorders near-ties rather than
+    /// overturning taste. Applied in ``RecommendationEngine`` only (never the backtest), so it
+    /// is backtest-neutral; the taste profile never sees the mark.
+    var holdsUpBonus: Double = 0.04
+    /// Subtracted from a candidate marked **Of Its Time** (great then, dated now) — and from a
+    /// **Too Archaic** one when the owner opts to include those. Same size as the bonus.
+    var ofItsTimePenalty: Double = 0.04
+
     init() {}
 }
