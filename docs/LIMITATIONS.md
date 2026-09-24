@@ -308,7 +308,7 @@ main, or a lone completionist) so the owner can refresh them from HowLongToBeat.
   raw stored values (plus the ⚠︎); a dismissed game uses its raw values again.
 - **Refresh (replace) semantics.** "Refresh Time Estimates from HowLongToBeat…" **overwrites** all
   three `ttb_*` columns with HLTB's values and stamps `ttb_source = 'hltb'` (so the game leaves the
-  filter); it never touches the owner's own **playtime** (`my_playtime_s` / `psn_playtime_s`). If
+  filter); it never touches the owner's own **playtime** (`my_playtime_s` / `psn_playtime_s` / `batocera_playtime_s`). If
   HLTB has the game but lacks one of the three times, that column is set to NULL (HLTB is the new
   reference) — usually HLTB has all three. A game HLTB does not know is left untouched and stays
   flagged. One Undo step restores the whole batch's previous times + source.
@@ -367,13 +367,9 @@ Phase 1 landed the whole non-UI half; phase 2 (a later wave) owns everything vis
   `ProductSource.batocera`). Dry-run on the real share: 35 mapped systems, 9 skipped, **0 unknown**,
   **10 912** entries after folding 112 dupes, **292** promotion candidates, **91.6 %** genre→trait
   coverage, full read+fold in ~0.7 s (Swift perf test).
-- **Interim: Batocera play time storage.** There is no neutral `imported_playtime_s` column, so
-  Batocera `gametime` is written into `psn_playtime_s` **only when both `my_playtime_s` and
-  `psn_playtime_s` are NULL** (`LibraryStore.setImportedPlaytimeIfEmpty`, gated by
-  `PSNCommit.playtimeOnlyIfEmpty`) — a real PSN value is never clobbered, but a game with a
-  PSN time will not also show its Batocera time. **Proposed to lane A:** add `imported_playtime_s`
-  (or a `playtime_source` tag) in a future migration so the two coexist; the read-time playtime
-  precedence (manual > …) would then include it. Not added silently.
+- ~~Interim: Batocera play time stored in `psn_playtime_s`.~~ **Resolved wave 21 (W21-C):**
+  migration v17 gives Batocera its own `games.batocera_playtime_s` and moved the interim values
+  (see §5j).
 - **Deferred (phase 2 — the UI lane).** The **Batocera sidebar browser** + search + "Add to
   Library"; the **promotion review sheet** + banner + Undo after a sync (data ready:
   `BatoceraSyncSummary.candidateCatalogIDs`, `BatoceraPromoter.Plan`, `gameHasROMCopy`); **Settings ▸
@@ -394,14 +390,8 @@ Phase 1 landed the whole non-UI half; phase 2 (a later wave) owns everything vis
 ## 5e. Batocera ROM catalogue UI (§15, wave 13 — lane A, phase 2) — **as built**
 Phase 2 built the whole visible surface (see `docs/batocera-import.md`). No schema change (v10
 sufficed). Watch items / follow-ups:
-- **Ask Claude for Discover is a follow-up [later].** The regular Play Next shortlist has "Ask
-  Claude"; the Batocera Discover row does **not** wire a second opinion this lane (the brief
-  scoped it out). Discover reasons are the engine's structured `PlayNextReason` sentences only.
-- **Batocera play time still shares `psn_playtime_s` [watch].** The phase-1 interim above is
-  unchanged — no neutral `imported_playtime_s` column was added (it was not needed for the UI, and
-  a migration was avoided per the brief). A promoted ROM's time still lands in `psn_playtime_s`
-  only when both playtime columns are empty, so a game with a real PSN time won't also show its
-  Batocera time. Still proposed for a future migration.
+- ~~Ask Claude for Discover is a follow-up.~~ **Built wave 21 (W21-C)** — see §5j.
+- ~~Batocera play time still shares `psn_playtime_s`.~~ **Resolved wave 21 (v17)** — see §5j.
 - **Discover crowd prior is a local, capped weight [watch].** ScreenScraper ratings carry **no
   rating count**, so the engine's count-confidence crowd weight would be zero. `DiscoverScorer`
   instead blends the 0–1 rating with a small weight capped at 0.25 that shrinks as the owner ranks
@@ -678,6 +668,37 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
 ## "PS Plus Only" smart list (owner, 2026-09-25) — built (wave 21, lane A)
 - Same set as Format ▸ PS Plus (one predicate). Shown right after Owned only while N > 0. The header's leave date
   comes from Settings ▸ PlayStation's "I plan to leave PS Plus around…" and is read when the header appears.
+
+## 5j. Batocera play time column · Ask Claude for the vault · compilation caption (wave 21, W21-C) — as built
+- **v17 moved data once, on the owner's request [expected].** The only data change: Batocera-tied,
+  not-PSN-tied games' `psn_playtime_s` → `batocera_playtime_s`, then promoted games filled from the
+  largest catalogue `game_time_s` > 0. "Tied to PSN" also counts a **promoted PS Plus Vault row**
+  (`rom_catalog.source = 'psn'`), on top of the brief's PSN copy / PSN import row — the safe side:
+  such a game keeps its PSN time. A game whose interim time came from Batocera but that has since
+  gained a PSN copy/import row keeps the value in `psn_playtime_s` (indistinguishable from a real
+  PSN time) — max(PSN, Batocera) still reads the right number.
+- **Batocera time is monotonic [expected].** `setBatoceraPlaytime` only ever raises the value; a
+  lowered `gametime` on the box (a reset) is ignored. Manual time always wins on read. The favourites
+  auto-add Undo still leaves a play-time-only addition on a pre-existing game (§5f).
+- **Effective play time = manual, else MAX(PSN, Batocera) — never summed [expected].** If the owner
+  really played the same game on both machines the smaller session is not added; that's the owner's
+  rule (same act measured twice). All readers go through `LibraryQuery.effectivePlaytimeSQL`.
+- **Play Next remaining time now counts imported time [expected].** Playing / To Revisit remaining
+  time used the manual value only; it now uses the effective play time (PSN / Batocera too).
+- **"Ask Claude" for "From the vault" — what Claude is told [watch].** Per candidate: title,
+  platform/system, source (ROM / PS Plus claim / owned, not in backlog), IGDB genres + themes (not
+  keywords), year, IGDB rating when matched, the personal-length estimate, "leaves with PS Plus in N
+  months" for a claim when a cancellation date is set. **An unmatched entry (most Batocera ROMs) is
+  sent as title + system only** — its ScreenScraper genre/year never leave the app — and the prompt
+  tells Claude to say plainly when it doesn't recognise such a game (or leave it out) rather than
+  guess. Claude re-orders the top-10 shortlist (the cards show 8, so a pick may be one of the two
+  entries without a card — the panel names it by title). No caching across launches; nothing stored.
+- **The vault row now follows the Play Next bracket [expected].** `DiscoverRowView(bracket:)` feeds
+  the scorer's (already built, never wired) time-fit term, so matched PS Plus / GOG / Delicious
+  entries with a known length are fitted to the bracket; ROMs stay neutral.
+- **Compilation editor caption [expected].** Same rule as the inspector's compilation copy row:
+  shown only when an importer recorded a whole-collection time not routed to a single member (PSN
+  only today; the label says "(PSN)").
 
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.

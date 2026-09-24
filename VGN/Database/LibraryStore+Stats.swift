@@ -22,7 +22,7 @@ extension LibraryStore {
                 COALESCE(SUM(g.played), 0) AS played,
                 COALESCE(SUM(g.played = 0 AND
                              EXISTS(SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)), 0) AS backlog,
-                COALESCE(SUM(COALESCE(g.my_playtime_s, g.psn_playtime_s, 0)), 0) AS playtime
+                COALESCE(SUM(COALESCE(\(LibraryQuery.effectivePlaytimeSQL()), 0)), 0) AS playtime
             FROM games g
             """)!
 

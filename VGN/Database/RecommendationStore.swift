@@ -178,6 +178,14 @@ struct RecommendationStore: Sendable {
             try Self.buildSecondOpinion(result: result, topRankedLimit: topRankedLimit, db: db)
         }
     }
+
+    /// Just the taste half (tier list + "didn't click") for the "From the vault" second
+    /// opinion (PLAN §7b) — the vault shortlist itself is built from catalogue rows.
+    func secondOpinionTaste(topRankedLimit: Int = 60) async throws -> SecondOpinionTaste {
+        try await dbReader.read { db in
+            try Self.secondOpinionTaste(topRankedLimit: topRankedLimit, db: db)
+        }
+    }
 }
 
 /// The exact prior state captured when "Start playing" runs, so it can be undone

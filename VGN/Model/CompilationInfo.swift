@@ -46,6 +46,10 @@ struct CompilationProductInfo: Sendable, Hashable, Identifiable {
     var region: String?
     var igdbID: Int64?
     var members: [CompilationMemberInfo]
+    /// The play time an importer recorded for the **whole collection** and did not route to a
+    /// single member ("75 h on the whole collection (PSN)", PLAN §13.3 / §7b) — nil otherwise.
+    /// From ``LibraryStore/collectionPlaytimeSeconds(source:externalID:)``.
+    var collectionPlaytimeS: Int?
 
     init(
         id: Int64,
@@ -56,7 +60,8 @@ struct CompilationProductInfo: Sendable, Hashable, Identifiable {
         edition: String? = nil,
         region: String? = nil,
         igdbID: Int64? = nil,
-        members: [CompilationMemberInfo] = []
+        members: [CompilationMemberInfo] = [],
+        collectionPlaytimeS: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -67,5 +72,6 @@ struct CompilationProductInfo: Sendable, Hashable, Identifiable {
         self.region = region
         self.igdbID = igdbID
         self.members = members
+        self.collectionPlaytimeS = collectionPlaytimeS
     }
 }

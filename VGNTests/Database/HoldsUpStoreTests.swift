@@ -121,6 +121,9 @@ import GRDB
         let lines = csv.split(separator: "\n").map(String.init)
         let header = lines[0].split(separator: ",").map(String.init)
         let col = try #require(header.firstIndex(of: "holds_up"))
+        // Appended columns keep existing positions: v16's holds_up, then v17's Batocera hours.
+        #expect(Array(header.suffix(2)) == ["holds_up", "batocera_playtime_hours"])
+        #expect(header.firstIndex(of: "last_played") == 16)
         let alpha = try #require(lines.first { $0.hasPrefix("Alpha,") }).split(separator: ",", omittingEmptySubsequences: false)
         let beta = try #require(lines.first { $0.hasPrefix("Beta,") }).split(separator: ",", omittingEmptySubsequences: false)
         #expect(alpha[col] == "too_archaic")

@@ -483,7 +483,7 @@ enum LibraryQuery {
     }
 
     /// The seconds a game is bucketed on for the playtime filter: effective playtime
-    /// (manual over PSN), falling back to the owner's **personal length** (see
+    /// (manual, else max(PSN, Batocera) — ``effectivePlaytimeSQL(alias:)``), falling back to the owner's **personal length** (see
     /// ``lengthEstimateExpr(style:r:)``) for a game they have not played, so an unplayed
     /// game is banded by how long it is *for them* rather than dropped (PLAN §6.4/§8).
     /// The filter always prefers the owner's own playtime first. "No Estimate" (this
@@ -491,7 +491,7 @@ enum LibraryQuery {
     /// counts as No Estimate, since rushed is never used for length — but an HLTB row whose
     /// only time is the Main Story in the rushed slot is measured, wave 21 D1).
     static func playtimeBucketExpr(style: PlayStyle) -> String {
-        "COALESCE(g.my_playtime_s, g.psn_playtime_s, \(lengthEstimateExpr(style: style)))"
+        "COALESCE(\(effectivePlaytimeSQL()), \(lengthEstimateExpr(style: style)))"
     }
 
     /// One grouped pass computing the five "By Length" shelf counts plus the
@@ -653,8 +653,8 @@ enum LibraryQuery {
             terms = ["(g.tier_id IS NULL)", "t.sort \(dir)",
                      "(g.rank_key IS NULL)", "g.rank_key \(dir)"]
         case .playtime:
-            terms = ["(COALESCE(g.my_playtime_s, g.psn_playtime_s) IS NULL)",
-                     "COALESCE(g.my_playtime_s, g.psn_playtime_s) \(dir)"]
+            let played = effectivePlaytimeSQL()
+            terms = ["(\(played) IS NULL)", "\(played) \(dir)"]
         case .length:
             // By the personal length (how long the game is for the owner), NULLs last.
             let expr = lengthEstimateExpr(style: filter.playStyle)

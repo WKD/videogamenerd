@@ -6,7 +6,12 @@ import SwiftUI
 /// ``BatoceraEnvironment``; renders nothing when the vault is empty or Play Next has "not
 /// enough data" (no ranked games).
 struct DiscoverRowView: View {
+    /// The Play Next bracket the vault is fitted to and the "Ask Claude" answer is keyed by.
+    var bracket: TimeBracket? = nil
+
     @Environment(\.batoceraEnvironment) private var env
+    /// The same second-opinion provider as the regular picks (PLAN §7b) — nil ⇒ no button.
+    @Environment(\.playNextEnvironment) private var playNextEnv
     @State private var model: DiscoverModel?
 
     var body: some View {
@@ -18,10 +23,12 @@ struct DiscoverRowView: View {
         .task {
             guard model == nil, let env else { return }
             let m = DiscoverModel(backend: env.discover, thumbnails: env.thumbnails,
-                                  openURL: env.openURL)
+                                  openURL: env.openURL, bracket: bracket,
+                                  secondOpinion: playNextEnv?.secondOpinion)
             model = m
             m.load()
         }
+        .onChange(of: bracket) { _, newValue in model?.setBracket(newValue) }
     }
 
     @ViewBuilder
@@ -32,6 +39,17 @@ struct DiscoverRowView: View {
                     .font(.headline)
                 Text("within reach · your taste").font(.caption).foregroundStyle(.secondary)
                 Spacer()
+                if model.canAskClaude {
+                    Button {
+                        model.askClaude()
+                    } label: {
+                        Label("Ask Claude", systemImage: "sparkles")
+                    }
+                    .controlSize(.small)
+                    .disabled(model.secondOpinionState == .asking)
+                    .accessibilityIdentifier("discover.askClaude")
+                    .help("Ask Claude — sends only your tier list and this vault shortlist, nothing else")
+                }
                 Button {
                     model.shuffle()
                 } label: {
@@ -53,6 +71,9 @@ struct DiscoverRowView: View {
                     }
                 }
                 .padding(.vertical, 2)
+            }
+            if model.secondOpinionActive {
+                DiscoverClaudePanel(model: model)
             }
         }
         .padding(.top, 4)
@@ -134,12 +155,7 @@ struct DiscoverCardView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.secondary.opacity(0.15)))
     }
 
-    private var systemLabel: String {
-        // A PS Plus entry's `system` is already a VGN platform slug (PLAN §16).
-        if entry.vaultSource == .psn { return PlatformLabels.short(entry.system) }
-        if let slug = BatoceraSystems.platformSlug(for: entry.system) { return PlatformLabels.short(slug) }
-        return entry.system
-    }
+    private var systemLabel: String { DiscoverSecondOpinion.systemLabel(for: entry) }
 
     /// Render the reason's Markdown bold ("**Elden Ring** (S)").
     private func reasonText(_ sentence: String) -> AttributedString {

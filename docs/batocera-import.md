@@ -100,14 +100,25 @@ path:
 `playcount` alone never promotes; the 5-minute threshold is one constant
 (`BatoceraPromotion.playedThresholdSeconds = 300`, `> 300` exclusive).
 
-### How Batocera play time is stored (interim — see LIMITATIONS)
+### How Batocera play time is stored (v17, wave 21)
 
-VGN has `my_playtime_s` (manual, never overwritten) and `psn_playtime_s`. There is **no**
-neutral `imported_playtime_s` column yet. Batocera play time is stored into `psn_playtime_s`
-**only when both columns are NULL** (`LibraryStore.setImportedPlaytimeIfEmpty`, driven by
-`PSNCommit.playtimeOnlyIfEmpty`), so a real PSN value is never clobbered. **Proposed for
-phase 2/lane A:** add a neutral `imported_playtime_s` (or a `playtime_source` tag) so Batocera
-and PSN times can coexist. Until then the interim rule above is what ships.
+Three columns, one per source: `my_playtime_s` (manual, typed — never written by an importer),
+`psn_playtime_s` (PSN only) and **`batocera_playtime_s`** (Batocera only, migration v17). The
+promotion commit (`PSNCommit.playtimeColumn = .batocera`), the favourites auto-add and a
+one-member bundle all write it through `LibraryStore.setBatoceraPlaytime` — **monotonic max**
+(a re-promotion never lowers it) and never touching PSN's or the manual value.
+
+Read side, everywhere play time is used (grid sort + playtime filter, Stats, Play Next remaining
+time, CSV export, inspector bar): **manual if set, else MAX(PSN, Batocera)** — the same act
+measured on two machines, never summed (`LibraryQuery.effectivePlaytimeSQL` + the Swift mirror
+`EffectivePlaytime`). The inspector's Playtime section lists "PSN" and "Batocera" on their own
+rows. The JSON export carries `batocera_playtime_s`, the CSV a `batocera_playtime_hours` column.
+
+Until v17 the Batocera time was parked in `psn_playtime_s` when both columns were empty (the
+phase-1 interim). v17 moved it once, on the owner's request: Batocera-tied games with no PSN copy /
+PSN import row / promoted PS Plus Vault row had `psn_playtime_s` moved to `batocera_playtime_s`;
+then every game with a promoted catalogue row got the largest catalogue `game_time_s` > 0 when
+still unset (games that also have a PSN time keep PSN's in `psn_playtime_s`).
 
 ## Taste-ready queries (`RomCatalogStore` + `RomCatalogTraits`)
 
@@ -229,8 +240,13 @@ week. 5–8 cards: thumbnail, title, system, year, genre, taste reason(s), ★ r
 **Add to Library…**, **Not Interested**, **Show in Catalogue**. Excluded from the taste backtest
 (no ground truth). Scoring runs off the main actor (≈ 0.36 s for 11 300 entries).
 
-**"Ask Claude" is not wired to Discover in this lane** — noted as a follow-up in
-`docs/LIMITATIONS.md`.
+**"Ask Claude" (wave 21).** The row (now "From the vault") has the same on-demand second opinion
+as the regular picks: **Ask Claude** sends the tier list + the vault shortlist (the scorer's top 10
+for the Play Next bracket) through the shared `claude` CLI provider; an Engine vs Claude panel
+shows Claude's re-ordering with a reason and optional caveat, cancellable, cached per (shortlist,
+bracket) for the session. A matched entry is described (source, IGDB genres/themes/year/rating,
+time estimate, PS Plus months left); an **unmatched ROM goes as title + system only** and Claude
+may say it doesn't know it. Nothing is stored. See `docs/LIMITATIONS.md` §5j.
 
 ## Favourites — the ★ you set on the box (`BatoceraFavouriteAutoAdd` + wave 13)
 

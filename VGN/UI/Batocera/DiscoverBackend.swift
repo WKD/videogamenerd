@@ -15,6 +15,13 @@ protocol DiscoverBackend: Sendable {
     func exemplarInfo(ids: [Int64]) async throws -> [Int64: ExemplarInfo]
     /// Retire an entry from Discover for good ("Not Interested").
     func setNotInterested(catalogID: Int64) async throws
+    /// The taste half of an "Ask Claude" request (tier list + "didn't click") for the vault
+    /// second opinion (PLAN §7b). Defaults to empty for fakes that don't care.
+    func secondOpinionTaste() async throws -> SecondOpinionTaste
+}
+
+extension DiscoverBackend {
+    func secondOpinionTaste() async throws -> SecondOpinionTaste { .empty }
 }
 
 /// Forwards the Discover seam to the real stores.
@@ -28,6 +35,9 @@ struct LiveDiscoverBackend: DiscoverBackend {
         try await catalog.vaultPool(limit: limit)
     }
     func playedSystems() async throws -> Set<String> { try await catalog.playedSystems() }
+    func secondOpinionTaste() async throws -> SecondOpinionTaste {
+        try await recommendation.secondOpinionTaste()
+    }
     func setNotInterested(catalogID: Int64) async throws {
         try await catalog.setNotInterested(catalogID: catalogID)
     }

@@ -53,6 +53,14 @@ extension LibraryStore {
     static func fetchCompilationProduct(_ productID: Int64, _ db: Database) throws -> CompilationProductInfo? {
         guard let p = try ProductRecord.fetchOne(db, key: productID) else { return nil }
         let members = try fetchCompilationMembers(productID, db)
+        // The whole-collection play time (PLAN §13.3 / §7b) — the same rule the inspector's
+        // compilation copy row uses, keyed by the product's importer `(source, external_id)`.
+        var collectionPlaytimeS: Int?
+        if let externalID = try String.fetchOne(
+            db, sql: "SELECT external_id FROM products WHERE id = ?", arguments: [productID]) {
+            collectionPlaytimeS = try collectionPlaytimeSeconds(
+                source: p.source, externalID: externalID, db: db)
+        }
         return CompilationProductInfo(
             id: productID,
             title: p.title,
@@ -62,7 +70,8 @@ extension LibraryStore {
             edition: p.edition,
             region: p.region,
             igdbID: p.igdbID,
-            members: members)
+            members: members,
+            collectionPlaytimeS: collectionPlaytimeS)
     }
 
     // MARK: - Writes

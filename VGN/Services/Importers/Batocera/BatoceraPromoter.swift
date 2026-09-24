@@ -117,7 +117,7 @@ struct BatoceraPromoter: Sendable {
     }
 
     /// Apply the ROM's play data to the sole member of a one-member bundle (D2 / PLAN §13.3):
-    /// mark it played + set the imported play time (only if the game has none) + last-played
+    /// mark it played + set its Batocera play time (monotonic max, v17) + last-played
     /// date. A no-op when the ROM has no play data (a favourite never launched).
     private func applyBundlePlayData(entry: RomCatalogEntry, gameID: Int64) async throws {
         let played = BatoceraPromotion.isPlayed(gameTimeSeconds: entry.gameTimeSeconds)
@@ -125,7 +125,7 @@ struct BatoceraPromoter: Sendable {
         try await database.dbWriter.write { db in
             if played {
                 try LibraryStore.markPlayedWithoutCopy(gameID: gameID, platformID: entry.platformID, db: db)
-                try LibraryStore.setImportedPlaytimeIfEmpty(
+                try LibraryStore.setBatoceraPlaytime(
                     gameID: gameID, seconds: entry.gameTimeSeconds, db: db)
             }
             try LibraryStore.setPSNPlayedDates(gameID: gameID, first: nil, last: entry.lastPlayedAt, db: db)

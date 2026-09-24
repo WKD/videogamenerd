@@ -50,6 +50,31 @@ struct CompilationEditorModelTests {
         #expect(model.isCompilation)
     }
 
+    /// The header caption "75 h on the whole collection (PSN)" (PLAN §7b): threaded from
+    /// `collectionPlaytimeSeconds` through `fetchCompilationProduct` into the model; nil for a
+    /// hand-made compilation or when the time was routed to a single member.
+    @Test func loadCarriesWholeCollectionPlaytime() async throws {
+        let store = try await TestDB.makeStore()
+        let productID = try await makeCompilation(store)
+        let plain = makeModel(store, productID: productID)
+        await plain.load()
+        #expect(plain.collectionPlaytimeS == nil)          // manual compilation: nothing shown
+
+        try await store.dbWriter.write { db in
+            try db.execute(sql: "UPDATE products SET source = 'psn', external_id = 'coll' WHERE id = ?",
+                           arguments: [productID])
+            try db.execute(sql: """
+                INSERT INTO import_titles (source, external_id, name, play_duration_s)
+                VALUES ('psn', 'coll', 'A Collection', 270000)
+                """)
+        }
+        let product = try #require(try await store.compilationProduct(id: productID))
+        #expect(product.collectionPlaytimeS == 270_000)
+        let model = makeModel(store, productID: productID)
+        await model.load()
+        #expect(model.collectionPlaytimeS == 270_000)
+    }
+
     // MARK: - Pure builders
 
     @Test func buildResultsFlagsExistingMembers() {

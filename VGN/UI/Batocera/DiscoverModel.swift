@@ -42,6 +42,23 @@ final class DiscoverModel {
     @ObservationIgnored nonisolated(unsafe) private var deadlineObserver: NSObjectProtocol?
 
     private(set) var items: [DiscoverItem] = []
+    /// The vault shortlist behind "Ask Claude" (PLAN §7b): the scorer's top ~10 for the chosen
+    /// bracket, best first. The first ``cardCount`` of them are the visible cards.
+    private(set) var shortlist: [RomCatalogEntry] = []
+    /// The Play Next bracket the vault is fitted to (nil ⇒ no time-fit term, as before).
+    private(set) var bracket: TimeBracket?
+
+    // MARK: Ask Claude (PLAN §7b "Ask Claude for From the vault")
+
+    /// The on-demand second opinion over ``shortlist`` — the same state machine as Play Next's.
+    private(set) var secondOpinionState: SecondOpinionState = .idle
+    /// Seconds since the current ask started (the "Thinking… N s" spinner).
+    private(set) var secondOpinionElapsed = 0
+    @ObservationIgnored private let secondOpinion: (any SecondOpinionProviding)?
+    @ObservationIgnored private var secondOpinionCache: [DiscoverSecondOpinion.CacheKey: SecondOpinion] = [:]
+    @ObservationIgnored private var activeSecondOpinionKey: DiscoverSecondOpinion.CacheKey?
+    @ObservationIgnored private var askTask: Task<Void, Never>?
+    @ObservationIgnored private var elapsedTask: Task<Void, Never>?
     private(set) var rankedCount = 0
     private(set) var poolCount = 0
     private(set) var hasLoaded = false
@@ -56,7 +73,9 @@ final class DiscoverModel {
          pace: PlayPace = UserDefaultsPlayPacePreferences().playPace(),
          prioritisePSPlus: Bool = DiscoverModel.prioritisePSPlusDefault(),
          deadlineMonthsLeft: @escaping @MainActor () -> Double? = { PSPlusDeadlinePreferences().monthsLeft() },
-         openURL: @escaping (URL) -> Void = { _ in }) {
+         openURL: @escaping (URL) -> Void = { _ in },
+         bracket: TimeBracket? = nil,
+         secondOpinion: (any SecondOpinionProviding)? = nil) {
         self.backend = backend
         self.thumbnails = thumbnails
         self.cardCount = cardCount
@@ -66,6 +85,8 @@ final class DiscoverModel {
         self.prioritisePSPlus = prioritisePSPlus
         self.deadlineMonthsLeft = deadlineMonthsLeft
         self.openURL = openURL
+        self.bracket = bracket
+        self.secondOpinion = secondOpinion
     }
 
     // MARK: - Open on IGDB (D7)
@@ -112,12 +133,21 @@ final class DiscoverModel {
         }
     }
 
+    /// Follow the Play Next bracket: the vault scorer fits it (time fit when a length is known)
+    /// and the "Ask Claude" cache is keyed by it. A no-op when unchanged.
+    func setBracket(_ newBracket: TimeBracket?) {
+        guard newBracket != bracket else { return }
+        bracket = newBracket
+        if hasLoaded || isLoading { recompute() }
+    }
+
     /// "Shuffle" — re-roll the rotation within the current week (PLAN §15).
     func shuffle() { shuffleCount += 1; recompute() }
 
     /// Retire an entry from Discover for good ("Not Interested"), then drop it from the row.
     func notInterested(_ entry: RomCatalogEntry) {
         items.removeAll { $0.entry.id == entry.id }
+        shortlist.removeAll { $0.id == entry.id }
         let backend = self.backend
         Task { try? await backend.setNotInterested(catalogID: entry.id) }
     }
@@ -133,6 +163,8 @@ final class DiscoverModel {
         let pace = self.pace
         let prioritisePSPlus = self.prioritisePSPlus
         let monthsLeft = deadlineMonthsLeft()
+        let bracket = self.bracket
+        let shortlistSize = max(cardCount, DiscoverSecondOpinion.shortlistSize)
         loadTask = Task { [weak self] in
             do {
                 let ranked = try await backend.rankedGames()
@@ -145,13 +177,14 @@ final class DiscoverModel {
                 let options = DiscoverScorer.Options(
                     seed: seed, playedSystems: played,
                     maxPinnedFavourites: max(1, cardCount / 2),
-                    playStyle: playStyle, pace: pace,
+                    bracket: bracket, playStyle: playStyle, pace: pace,
                     psPlusMonthsLeft: monthsLeft, prioritisePSPlus: prioritisePSPlus)
                 // Score off the main actor (pure, ~11 000 entries — PLAN §15 perf).
-                let top = await Task.detached(priority: .userInitiated) {
+                let scored = await Task.detached(priority: .userInitiated) {
                     Array(DiscoverScorer.score(entries: pool, ranked: ranked, options: options)
-                        .prefix(cardCount))
+                        .prefix(shortlistSize))
                 }.value
+                let top = Array(scored.prefix(cardCount))
 
                 // Resolve the cited exemplars for the reason sentences.
                 let exemplarIDs = top.flatMap { Self.exemplarIDs(in: $0.reasons) }
@@ -169,6 +202,8 @@ final class DiscoverModel {
                 self.rankedCount = ranked.count
                 self.poolCount = pool.count
                 self.items = items
+                self.shortlist = scored.map(\.entry)
+                self.invalidateStaleSecondOpinion()
                 self.hasLoaded = true
                 self.isLoading = false
             } catch {
@@ -177,6 +212,121 @@ final class DiscoverModel {
                 self.isLoading = false
             }
         }
+    }
+
+    // MARK: - Ask Claude (PLAN §7b "Ask Claude for From the vault")
+
+    /// Whether the "Ask Claude" button can run (a provider is wired and there is a shortlist).
+    var canAskClaude: Bool { secondOpinion != nil && !shortlist.isEmpty }
+
+    /// Whether the Claude column is showing (asking, answered or failed).
+    var secondOpinionActive: Bool { secondOpinionState != .idle }
+
+    /// The cache key for the current shortlist + bracket.
+    var currentSecondOpinionKey: DiscoverSecondOpinion.CacheKey {
+        DiscoverSecondOpinion.CacheKey(shortlist: shortlist.map(\.id), bracket: bracket)
+    }
+
+    /// A shortlist entry by catalogue id (Claude's picks are always shortlist ids).
+    func shortlistEntry(for id: Int64) -> RomCatalogEntry? {
+        shortlist.first { $0.id == id }
+    }
+
+    /// True when the scorer and Claude agree on the same #1.
+    var secondOpinionAgreesOnTop: Bool {
+        guard case let .result(opinion) = secondOpinionState,
+              let engineTop = shortlist.first?.id,
+              let claudeTop = opinion.picks.first?.gameID else { return false }
+        return engineTop == claudeTop
+    }
+
+    /// Ask Claude to re-order the vault shortlist. On demand only; cached per
+    /// (shortlist, bracket) for the session; cancellable; a failure explains itself and the
+    /// scorer's order stands. Nothing is stored — no rating, no DB write.
+    func askClaude() {
+        guard let provider = secondOpinion, !shortlist.isEmpty else { return }
+        let key = currentSecondOpinionKey
+        if let cached = secondOpinionCache[key] {
+            activeSecondOpinionKey = key
+            secondOpinionState = .result(cached)
+            return
+        }
+
+        askTask?.cancel()
+        activeSecondOpinionKey = key
+        secondOpinionState = .asking
+        startElapsedTimer()
+
+        let backend = self.backend
+        let entries = self.shortlist
+        let bracket = self.bracket
+        let playStyle = self.playStyle
+        let monthsLeft = deadlineMonthsLeft()
+        askTask = Task { [weak self] in
+            do {
+                let taste = try await backend.secondOpinionTaste()
+                let request = DiscoverSecondOpinion.request(
+                    shortlist: entries, taste: taste, bracket: bracket,
+                    playStyle: playStyle, psPlusMonthsLeft: monthsLeft)
+                let opinion = try await provider.secondOpinion(for: request)
+                // Belt and braces: Claude may re-order, never add (the live provider already
+                // discards foreign ids; a stub or a future provider might not).
+                let allowed = Set(entries.map(\.id))
+                let picks = opinion.picks.filter { allowed.contains($0.gameID) }
+                guard let self, !Task.isCancelled else { return }
+                if picks.isEmpty {
+                    self.secondOpinionState = .failed(.empty)
+                } else {
+                    let kept = SecondOpinion(picks: picks, model: opinion.model, metrics: opinion.metrics)
+                    self.secondOpinionCache[key] = kept
+                    if self.activeSecondOpinionKey == key { self.secondOpinionState = .result(kept) }
+                }
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                let failure = SecondOpinionError.wrap(error)
+                self.secondOpinionState = failure == .cancelled ? .idle : .failed(failure)
+            }
+            self?.stopElapsedTimer()
+        }
+    }
+
+    /// Cancel an ask in flight; the scorer's order stands.
+    func cancelSecondOpinion() {
+        askTask?.cancel()
+        stopElapsedTimer()
+        secondOpinionState = .idle
+        activeSecondOpinionKey = nil
+    }
+
+    /// Close the Claude column without re-running (the cached answer stays for the session).
+    func dismissSecondOpinion() {
+        secondOpinionState = .idle
+    }
+
+    /// A new shortlist or bracket makes a showing / pending answer stale.
+    private func invalidateStaleSecondOpinion() {
+        guard let active = activeSecondOpinionKey, active != currentSecondOpinionKey else { return }
+        askTask?.cancel()
+        stopElapsedTimer()
+        secondOpinionState = .idle
+        activeSecondOpinionKey = nil
+    }
+
+    private func startElapsedTimer() {
+        secondOpinionElapsed = 0
+        elapsedTask?.cancel()
+        elapsedTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { break }
+                self.secondOpinionElapsed += 1
+            }
+        }
+    }
+
+    private func stopElapsedTimer() {
+        elapsedTask?.cancel()
+        elapsedTask = nil
     }
 
     private static func exemplarIDs(in reasons: [PlayNextReason]) -> [Int64] {

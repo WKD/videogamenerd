@@ -49,7 +49,8 @@ extension RecommendationStore {
         let rows = try Row.fetchAll(db, sql: """
             SELECT g.id, g.igdb_id, g.title, g.year, g.played, g.status, g.revisit,
                    g.holds_up, g.first_played_at,
-                   g.my_playtime_s, g.ttb_hastily_s, g.ttb_normally_s, g.ttb_completely_s,
+                   \(LibraryQuery.effectivePlaytimeSQL()) AS effective_playtime_s,
+                   g.ttb_hastily_s, g.ttb_normally_s, g.ttb_completely_s,
                    g.ttb_source,
                    g.igdb_rating, g.igdb_rating_count, g.cover_file,
                    NOT EXISTS (
@@ -92,7 +93,9 @@ extension RecommendationStore {
                 traits: feature?.traits ?? [],
                 estimateSeconds: length.main,
                 completionistSeconds: length.completionist,
-                myPlaytimeSeconds: row["my_playtime_s"],
+                // Effective play time (manual, else max(PSN, Batocera) — v17), so Play Next's
+                // remaining time for Playing / To Revisit counts imported hours too.
+                myPlaytimeSeconds: row["effective_playtime_s"],
                 status: status,
                 igdbRating: row["igdb_rating"],
                 ratingCount: row["igdb_rating_count"],
@@ -268,6 +271,31 @@ extension RecommendationStore {
     static func buildSecondOpinion(
         result: PlayNextResult, topRankedLimit: Int, db: Database
     ) throws -> SecondOpinionRequest {
+        let taste = try secondOpinionTaste(topRankedLimit: topRankedLimit, db: db)
+
+        // Shortlist (hero + alternatives) in engine order.
+        let shortlist = result.shortlist.enumerated().map { index, s in
+            SecondOpinionRequest.Shortlisted(
+                id: s.id, title: s.title,
+                platform: s.platformIDs.first,
+                format: s.formats.first?.rawValue,
+                estimateHours: s.estimateSeconds.map { (Double($0) / 3600).rounded(toPlaces: 1) },
+                status: s.status?.rawValue,
+                engineRank: index + 1)
+        }
+
+        return SecondOpinionRequest(
+            bracket: result.bracket.label,
+            completionist: result.bracket.completionist,
+            topRanked: taste.topRanked,
+            didntClick: taste.didntClick,
+            shortlist: shortlist,
+            engineOrdering: result.shortlist.map(\.id))
+    }
+
+    /// The tier list (top ~60 by global rank) + the D–F "didn't click" titles — the taste half
+    /// every "Ask Claude" prompt carries (regular picks and "From the vault").
+    static func secondOpinionTaste(topRankedLimit: Int, db: Database) throws -> SecondOpinionTaste {
         let snapshot = try RankingStore.loadSnapshot(db)
 
         // tier id → letter, and titles for the ids we cite.
@@ -302,25 +330,7 @@ extension RecommendationStore {
             """) {
             didntClick.append(.init(title: row["title"], tier: row["letter"]))
         }
-
-        // Shortlist (hero + alternatives) in engine order.
-        let shortlist = result.shortlist.enumerated().map { index, s in
-            SecondOpinionRequest.Shortlisted(
-                id: s.id, title: s.title,
-                platform: s.platformIDs.first,
-                format: s.formats.first?.rawValue,
-                estimateHours: s.estimateSeconds.map { (Double($0) / 3600).rounded(toPlaces: 1) },
-                status: s.status?.rawValue,
-                engineRank: index + 1)
-        }
-
-        return SecondOpinionRequest(
-            bracket: result.bracket.label,
-            completionist: result.bracket.completionist,
-            topRanked: topRanked,
-            didntClick: didntClick,
-            shortlist: shortlist,
-            engineOrdering: result.shortlist.map(\.id))
+        return SecondOpinionTaste(topRanked: topRanked, didntClick: didntClick)
     }
 
     static func titles(for ids: [Int64], db: Database) throws -> [Int64: String] {

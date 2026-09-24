@@ -65,6 +65,11 @@ struct CompilationEditorView: View {
                     .font(.title2.bold())
                 Text("^[\(model.members.count) game](inflect: true)")
                     .font(.callout).foregroundStyle(.secondary)
+                // Bounded single line (the same label as the inspector's compilation copy row).
+                if let seconds = model.collectionPlaytimeS {
+                    CompilationCollectionPlaytimeLabel(seconds: seconds)
+                        .accessibilityIdentifier("compilationEditor.collectionPlaytime")
+                }
             }
             Spacer()
         }

@@ -137,7 +137,7 @@ struct BatoceraBundlePromoteTests {
         let (played, playtime): (Int, Int?) = try await db.dbWriter.read { db in
             let p = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games WHERE played = 1") ?? 0
             let t = try Int.fetchOne(db, sql: "SELECT my_playtime_s FROM games WHERE played = 1")
-                ?? Int.fetchOne(db, sql: "SELECT psn_playtime_s FROM games WHERE played = 1")
+                ?? Int.fetchOne(db, sql: "SELECT batocera_playtime_s FROM games WHERE played = 1")
             return (p, t)
         }
         #expect(played == 1)                 // the sole member gets the ROM's play data

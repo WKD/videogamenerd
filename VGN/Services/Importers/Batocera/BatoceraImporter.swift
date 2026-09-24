@@ -61,8 +61,8 @@ enum BatoceraPromotionBuilder {
     }
 
     /// The commit item for one promotion (PLAN §15). Owned ROM copy on the catalogue's
-    /// platform; `markPlayed` + play time (stored **only if the game has none**, so a real
-    /// PSN value is never clobbered) when > 10 min; last-played date; a favourite with no play
+    /// platform; `markPlayed` + play time (into its own `batocera_playtime_s`, monotonic max —
+    /// a PSN value is never touched, v17) when > 10 min; last-played date; a favourite with no play
     /// time lands owned-not-played. When the matched game **already has a ROM copy on the same
     /// platform** (`alreadyHasROMCopy`), no second copy is created — the play data still lands
     /// on the existing game and the catalogue row is linked.
@@ -74,7 +74,7 @@ enum BatoceraPromotionBuilder {
             markPlayed: played,
             playDurationS: played ? e.gameTimeSeconds : nil,
             lastPlayedAt: e.lastPlayedAt,
-            playtimeOnlyIfEmpty: true)
+            playtimeColumn: .batocera)
         return ImportCommitItem(
             source: ImportSourceID.batocera,
             externalID: e.externalID,

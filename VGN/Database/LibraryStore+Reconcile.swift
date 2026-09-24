@@ -417,6 +417,7 @@ extension LibraryStore {
         target.holdsUp = target.holdsUp ?? source.holdsUp   // v16; target.played is set above
         target.myPlaytimeS = target.myPlaytimeS ?? source.myPlaytimeS
         target.psnPlaytimeS = target.psnPlaytimeS ?? source.psnPlaytimeS
+        target.batoceraPlaytimeS = [target.batoceraPlaytimeS, source.batoceraPlaytimeS].compactMap { $0 }.max()
         target.year = target.year ?? source.year
         target.releaseDate = target.releaseDate ?? source.releaseDate
         target.summary = target.summary ?? source.summary

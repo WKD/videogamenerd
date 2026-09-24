@@ -136,7 +136,14 @@ Requires `xcode-select -s /Applications/Xcode.app`.
   `('holds_up','of_its_time','too_archaic')`, NULL = unrated; purely additive, **no backfill, nothing
   inferred** from year/platform/tier; only a played game carries one (`LibraryStore.setHoldsUp` refuses
   unplayed games, every un-play path clears it); mapped once by `HoldsUp(dbValue:)` / `dbValue`; it
-  changes **Play Next only** (bonus / penalty / exclusion), never the ranking, taste profile or backtest). `LibraryStore`
+  changes **Play Next only** (bonus / penalty / exclusion), never the ranking, taste profile or backtest);
+  v17 `games.batocera_playtime_s` (PLAN §7b / §15) — Batocera's own play-time column (nullable, ≥ 0,
+  written monotonically by the Batocera promotion via `LibraryStore.setBatoceraPlaytime`, never into
+  `psn_playtime_s` again) + the **owner-requested one-shot move**: Batocera-tied, not-PSN-tied games'
+  interim `psn_playtime_s` → `batocera_playtime_s`, then promoted games get the largest catalogue
+  `game_time_s` > 0 when still unset (`Migrations+V17.swift`). Read side: effective play time =
+  manual, else MAX(PSN, Batocera), never summed — ONE fragment `LibraryQuery.effectivePlaytimeSQL`
+  + its Swift mirror `EffectivePlaytime`)). `LibraryStore`
   (writes, invariants), `LibraryQuery` (grid SQL), `RankingStore` (tier/duel data
   side, resumable state in `app_state`), `RecommendationStore`, `CatalogTitleIndex`,
   `EnrichmentJobStore`, `LibraryExporter` (JSON/CSV), `AppDatabase+Snapshot`
