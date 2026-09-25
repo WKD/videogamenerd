@@ -272,6 +272,16 @@ end to end (see `docs/hltb.md` for the request log and the real mechanics).
   in-run refresh, by design) and the owner just re-runs — only still-missing games are re-queried.
   Fix lives in that one file; re-record fixtures with `scripts/record-hltb-fixtures.swift`
   (≤ 25 requests, ≥ 2 s apart). See `docs/hltb.md`.
+- **Token-only HLTB sign-in is unverified (wave 21 E).** Since 2026-09-24 `/init` returns only
+  `{token}`; VGN now accepts that and sends just `x-auth-token`. Whether the search endpoint accepts a
+  token-only session has **not** been tried live (no request was made from the build lane) — the
+  owner's next Refresh is the test. If it stops again, the stop message names the step and the
+  (now redacted) excerpt is in `import_cache_rejects`.
+- **Old reject rows may still hold the owner's IP (wave 21 E).** Excerpts recorded before the
+  redaction fix (the three `hltb/auth` rows of 2026-09-24) are **not** rewritten automatically (no
+  background repair). They go only through the explicit **"Clear rejected-response log (N)"** button in
+  the HowLongToBeat Refresh / Fetch sheet. There is no HowLongToBeat pane in Settings; the button lives
+  in that sheet (it also shows on the Refresh confirmation, before any request).
 - **`ttb_source = 'igdb'` on empty games:** the enrichment write no longer tags a game
   `ttb_source = 'igdb'` when IGDB returned no time (it stays `NULL`, so the value is not
   mislabelled). **Existing rows were not backfilled** — a library enriched before wave 9 may still
