@@ -29,6 +29,10 @@ import Foundation
 //     field names are read defensively (any field whose name contains "key"/"val"), so
 //     a rename survives. The token embeds the caller IP + UA and expires — fetch it
 //     once per run; a 403 later means it lapsed (we stop; the owner re-runs).
+//     **2026-09-24:** `/init` now answers `{ token }` only (no hpKey/hpVal). A token-only
+//     reply is accepted: the search then sends just `x-auth-token` — no `x-hp-*` headers,
+//     no body field. Whether the search accepts that is UNVERIFIED (the owner's next live
+//     retry tells); the search validator stays strict, so a refusal stops the run cleanly.
 //   - POST body: { searchType:"games", searchTerms:[…], searchPage, size,
 //     searchOptions:{ games:{…}, … }, useCache:true, <hpKey>:<hpVal> }.
 //   - Response: { data: [ { game_id, game_name, game_alias, release_world,
@@ -72,10 +76,28 @@ enum HLTBEndpoint {
 
     /// The per-session credentials the `/init` endpoint hands out. `key`/`value` are
     /// both an `x-hp-*` header pair and a dynamic field injected into the POST body.
+    ///
+    /// Since **2026-09-24** `/init` answers `{ "token": "…" }` only — no `hpKey`/`hpVal`
+    /// (seen in the owner's reject log). The pair is therefore optional: when absent the
+    /// search carries only `x-auth-token` (no `x-hp-*` header, no body field); when present
+    /// it behaves exactly as before. Whether the search accepts a token-only session is
+    /// **unverified** — the search validator stays strict, so a refusal stops cleanly.
     struct Auth: Sendable, Hashable, Codable {
         var token: String
-        var key: String
-        var value: String
+        var key: String?
+        var value: String?
+
+        init(token: String, key: String? = nil, value: String? = nil) {
+            self.token = token
+            self.key = key
+            self.value = value
+        }
+
+        /// The `hpKey`/`hpVal` pair, when `/init` handed one out.
+        var hpPair: (key: String, value: String)? {
+            guard let key, let value else { return nil }
+            return (key, value)
+        }
     }
 
     /// Extract the `/_next/static/chunks/*.js` app-chunk paths referenced by the
@@ -116,13 +138,16 @@ enum HLTBEndpoint {
         return Discovery(searchPath: "api/" + path)
     }
 
-    /// Parse the `/init` response into per-session `Auth`. `token` is read directly; the
-    /// key/value pair is taken from whichever fields' names contain "key" / "val" (today
-    /// `hpKey` / `hpVal`), so a field rename doesn't break the port. Returns nil when the
-    /// shape is not the expected token envelope (→ the client stops with a reject).
+    /// Parse the `/init` response into per-session `Auth`. `token` is required and must be
+    /// a non-empty string. The key/value pair is taken from whichever fields' names contain
+    /// "key" / "val" (historically `hpKey` / `hpVal`), so a field rename doesn't break the
+    /// port; since 2026-09-24 the site sends **token only**, which is accepted as a
+    /// token-only session. Returns nil (→ the client stops with a schemaMismatch reject)
+    /// when the body is not a JSON object, has no string `token`, or carries only half of
+    /// the key/value pair.
     static func parseAuth(_ data: Data) -> Auth? {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let token = obj["token"] as? String else { return nil }
+              let token = obj["token"] as? String, !token.isEmpty else { return nil }
         var key: String?
         var value: String?
         for (name, raw) in obj {
@@ -132,14 +157,18 @@ enum HLTBEndpoint {
             if lower.contains("key") { key = v }
             if lower.contains("val") { value = v }
         }
-        guard let k = key, let val = value else { return nil }
-        return Auth(token: token, key: k, value: val)
+        switch (key, value) {
+        case let (k?, val?): return Auth(token: token, key: k, value: val)
+        case (nil, nil):     return Auth(token: token)
+        default:             return nil   // half a pair — an unknown shape, stop
+        }
     }
 
     // MARK: - Request
 
     /// Headers a search request carries. Without the browser UA / Origin the CDN 403s;
-    /// without the `x-auth-token` / `x-hp-*` trio the search endpoint 403s.
+    /// without `x-auth-token` (plus the `x-hp-*` pair when `/init` sent one) the search
+    /// endpoint 403s.
     static func headers(auth: Auth?) -> [String: String] {
         var h: [String: String] = [
             "Content-Type": "application/json",
@@ -151,8 +180,10 @@ enum HLTBEndpoint {
         ]
         if let auth {
             h["x-auth-token"] = auth.token
-            h["x-hp-key"] = auth.key
-            h["x-hp-val"] = auth.value
+            if let pair = auth.hpPair {
+                h["x-hp-key"] = pair.key
+                h["x-hp-val"] = pair.value
+            }
         }
         return h
     }
@@ -188,7 +219,7 @@ enum HLTBEndpoint {
             ],
             "useCache": true,
         ]
-        if let auth { body[auth.key] = auth.value }
+        if let pair = auth?.hpPair { body[pair.key] = pair.value }
         return (try? JSONSerialization.data(withJSONObject: body)) ?? Data("{}".utf8)
     }
 

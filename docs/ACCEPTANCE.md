@@ -563,6 +563,16 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 - **Compilation editor** of a PSN collection whose time was not given to one member: the header shows
   "75 h on the whole collection (PSN)" under the member count (nothing for a hand-made compilation).
 
+## HowLongToBeat token-only sign-in (wave 21 E) [owner, live]
+- [ ] **Retry the Suspicious Estimate refresh**: filter to Suspicious Estimate, select them, **Refresh Time
+  Estimates from HowLongToBeat…**. The confirmation shows **"Clear rejected-response log (3)"** at the bottom
+  left — click it, confirm; the count disappears (the old rows held your IP). Then **Replace**.
+  - Games already in the cache are updated first, even if the network part stops.
+  - If it **finishes**: token-only sign-in works — note it here.
+  - If it **stops again**: report the exact summary line (e.g. "… · stopped: HowLongToBeat's search answered
+    unexpectedly (…)") — nothing else was changed, and the redacted excerpt in `import_cache_rejects` no longer
+    contains the token or your IP.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

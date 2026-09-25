@@ -91,6 +91,11 @@ final class HLTBBulkFetchModel {
     /// the summary so the owner knows to pick again.
     private(set) var lostLinks = 0
     private(set) var linkedByID = 0
+    /// Games written by the zero-request cache pass (wave 21 E) — they stay written even
+    /// when the network part stops.
+    private(set) var updatedFromCache = 0
+    /// Whether the run ended on an unexpected response (not a Cancel).
+    private(set) var stoppedByReject = false
 
     init(store: LibraryStore, makeSearch: @escaping @Sendable () -> any HLTBSearching,
          mode: HLTBWriteMode = .fillGaps) {
@@ -126,12 +131,27 @@ final class HLTBBulkFetchModel {
         task = Task { [weak self] in await self?.run(gameIDs: gameIDs, search: search) }
     }
 
+    /// A game the cache pass could not settle — the network pass takes it from there,
+    /// reusing what the cache already knew.
+    private enum Deferred {
+        case plain(HLTBFillService.CachePass)
+        case linked(Int64, HLTBFillService.LinkedCachePass)
+    }
+
+    /// Two passes (wave 21 E). **Pass 1 — cache only, zero requests:** every game the
+    /// cache settles is applied first. **Pass 2 — network:** only the rest go through
+    /// discovery / sign-in / search. A reject in pass 2 stops the network part, but what
+    /// pass 1 applied stays applied and is reported ("12 updated from cache · stopped: …").
     private func run(gameIDs: [Int64], search: any HLTBSearching) async {
         let facts = (try? await store.timeToBeatFacts(gameIDs: gameIDs)) ?? [:]
         let service = HLTBFillService(search: search)
         // D4: id-linked games first — each is one exact lookup (no ladder), stable order.
         let ordered = gameIDs.filter { facts[$0]?.hltbID != nil }
                     + gameIDs.filter { facts[$0]?.hltbID == nil }
+
+        // Pass 1 — the cache.
+        var deferred: [(id: Int64, facts: HLTBGameFacts, pass: Deferred)] = []
+        let filledBefore = filled
         for id in ordered {
             if Task.isCancelled {
                 await finish(.stopped, reason: "Cancelled.")
@@ -139,36 +159,76 @@ final class HLTBBulkFetchModel {
             }
             guard let f = facts[id] else { completed += 1; continue }
             currentTitle = f.title
+            if let hltbID = f.hltbID {
+                let pass = await service.resolveLinkedFromCache(
+                    title: f.title, year: f.year, hltbID: hltbID, librarySlugs: f.platformSlugSet)
+                guard let outcome = pass.outcome else {
+                    deferred.append((id, f, .linked(hltbID, pass)))
+                    continue
+                }
+                await handleLinked(outcome, id: id, facts: f, search: search)
+            } else {
+                let pass = await service.resolveFromCache(
+                    title: f.title, year: f.year, librarySlugs: f.platformSlugSet)
+                guard let outcome = pass.outcome else {
+                    deferred.append((id, f, .plain(pass)))
+                    continue
+                }
+                await handle(outcome, id: id, facts: f, search: search)
+            }
+            completed += 1
+        }
+        updatedFromCache = filled - filledBefore
+
+        // Pass 2 — the network, for what the cache could not settle.
+        for item in deferred {
+            if Task.isCancelled {
+                await finish(.stopped, reason: "Cancelled.")
+                return
+            }
+            let f = item.facts
+            currentTitle = f.title
             do {
-                if let hltbID = f.hltbID {
-                    switch try await service.resolveLinked(
-                        title: f.title, year: f.year, hltbID: hltbID, librarySlugs: f.platformSlugSet) {
-                    case .exact(let candidate):
-                        linkedByID += 1
-                        await apply(gameID: id, candidate: candidate)
-                        await search.rememberChosen(candidate)
-                    case .lost(let outcome):
-                        lostLinks += 1
-                        await handle(outcome, id: id, facts: f, search: search)
-                    }
-                } else {
+                switch item.pass {
+                case .linked(let hltbID, let cached):
+                    let outcome = try await service.resolveLinked(
+                        title: f.title, year: f.year, hltbID: hltbID,
+                        librarySlugs: f.platformSlugSet, cached: cached)
+                    await handleLinked(outcome, id: item.id, facts: f, search: search)
+                case .plain(let cached):
                     let outcome = try await service.resolve(
-                        title: f.title, year: f.year, librarySlugs: f.platformSlugSet)
-                    await handle(outcome, id: id, facts: f, search: search)
+                        title: f.title, year: f.year, librarySlugs: f.platformSlugSet, cached: cached)
+                    await handle(outcome, id: item.id, facts: f, search: search)
                 }
             } catch is CancellationError {
                 await finish(.stopped, reason: "Cancelled.")
                 return
             } catch let error as ImportError {
+                stoppedByReject = true
                 await finish(.stopped, reason: Self.reason(from: error))
                 return
             } catch {
+                stoppedByReject = true
                 await finish(.stopped, reason: "the request failed")
                 return
             }
             completed += 1
         }
         await finish(.finished, reason: nil)
+    }
+
+    /// Route an exact refresh-by-id outcome (D4).
+    private func handleLinked(_ outcome: HLTBFillService.LinkedOutcome, id: Int64,
+                              facts f: HLTBGameFacts, search: any HLTBSearching) async {
+        switch outcome {
+        case .exact(let candidate):
+            linkedByID += 1
+            await apply(gameID: id, candidate: candidate)
+            await search.rememberChosen(candidate)
+        case .lost(let outcome):
+            lostLinks += 1
+            await handle(outcome, id: id, facts: f, search: search)
+        }
     }
 
     /// Route one game's match outcome: apply a confident match (and remember it), list an
@@ -264,7 +324,16 @@ final class HLTBBulkFetchModel {
         if tally.fromCache + tally.fromNetwork > 0 {
             parts += " · \(tally.fromCache) from cache · \(tally.fromNetwork) from network"
         }
-        if let reason = stoppedReason { parts += " · stopped: \(reason)" }
+        if let reason = stoppedReason {
+            if stoppedByReject {
+                // Wave 21 E: the cache pass already ran — say what it kept, and that the
+                // stop changed nothing else.
+                if updatedFromCache > 0 { parts = "\(updatedFromCache) updated from cache · " + parts }
+                parts += " · stopped: \(reason) — nothing else was changed"
+            } else {
+                parts += " · stopped: \(reason)"
+            }
+        }
         return parts
     }
 
@@ -281,9 +350,24 @@ final class HLTBBulkFetchModel {
             : nil
     }
 
+    /// The stop reason, in HowLongToBeat terms (wave 21 E): which step refused matters
+    /// more to the owner than the transport detail — a sign-in (`/init`) change, the site
+    /// itself (endpoint discovery), or the search reply.
     static func reason(from error: ImportError) -> String {
-        if case .rejected(let reject) = error { return reject.reason.message }
+        if case .rejected(let reject) = error {
+            let detail = reject.reason.message.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            switch reject.endpoint {
+            case HLTBClient.authEndpoint: return "HowLongToBeat changed its sign-in"
+            case HLTBClient.discoveryEndpoint: return "HowLongToBeat's site did not answer as expected"
+            default: return "HowLongToBeat's search answered unexpectedly (\(detail.lowercasedFirst))"
+            }
+        }
         if case .budgetExceeded = error { return "the per-run request budget was reached" }
         return "an unexpected response"
     }
+}
+
+private extension String {
+    /// "The response…" → "the response…" (for embedding a sentence mid-line).
+    var lowercasedFirst: String { prefix(1).lowercased() + dropFirst() }
 }

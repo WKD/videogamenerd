@@ -9,6 +9,7 @@ struct HLTBBulkSheet: View {
     var onClose: () -> Void
 
     @State private var pickFor: HLTBAmbiguousGame?
+    @State private var confirmClearLog = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -25,6 +26,14 @@ struct HLTBBulkSheet: View {
         .padding(22)
         .frame(minWidth: 460, minHeight: 240)
         .accessibilityIdentifier("hltb.bulk")
+        .task(id: model.phase) { await presenter.reloadRejectLogCount() }
+        .alert("Clear the rejected-response log?", isPresented: $confirmClearLog) {
+            Button("Clear", role: .destructive) { Task { await presenter.clearRejectLog() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Deletes the \(presenter.rejectLogCount) HowLongToBeat response(s) VGN kept as evidence of a stop. "
+                 + "Older ones may contain your sign-in token. Your games and cached times are not touched.")
+        }
         .sheet(item: $pickFor) { game in
             HLTBPickerSheet(
                 title: game.title, year: game.year, candidates: game.candidates,
@@ -43,6 +52,7 @@ struct HLTBBulkSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(model.confirmationMessage).font(.callout).fixedSize(horizontal: false, vertical: true)
             HStack {
+                clearLogButton
                 Spacer()
                 Button("Cancel") { onClose() }
                     .keyboardShortcut(.cancelAction)
@@ -115,11 +125,23 @@ struct HLTBBulkSheet: View {
             }
 
             HStack {
+                clearLogButton
                 Spacer()
                 Button("Done") { onClose() }
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("hltb.bulk.done")
             }
+        }
+    }
+
+    /// "Clear rejected-response log (N)" — only when HowLongToBeat has rows in the log;
+    /// asks for confirmation first (wave 21 E).
+    @ViewBuilder private var clearLogButton: some View {
+        if presenter.rejectLogCount > 0 {
+            Button("Clear rejected-response log (\(presenter.rejectLogCount))") { confirmClearLog = true }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .accessibilityIdentifier("hltb.bulk.clearRejectLog")
         }
     }
 

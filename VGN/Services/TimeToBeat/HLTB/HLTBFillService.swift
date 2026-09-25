@@ -33,10 +33,14 @@ struct HLTBFillService: Sendable {
     ///    plausible came back from any rung.
     ///
     /// Throws ``ImportError`` on the first unexpected response.
+    ///
+    /// `cached` (wave 21 E) is an earlier ``resolveFromCache`` pass for this game: its rungs
+    /// are reused as-is and the cache pass is skipped, so nothing is re-read or re-tallied.
     func resolve(title: String, year: Int?, librarySlugs: Set<String> = [],
-                 policy: HLTBFreshnessPolicy = .cacheFirst) async throws -> HLTBMatchOutcome {
+                 policy: HLTBFreshnessPolicy = .cacheFirst,
+                 cached: CachePass? = nil) async throws -> HLTBMatchOutcome {
         let queries = HLTBQueryLadder.queries(for: title)
-        var answers: [String: [HLTBCandidate]] = [:]
+        var answers: [String: [HLTBCandidate]] = cached?.answers ?? [:]
 
         func confident(_ query: String, _ candidates: [HLTBCandidate]) -> HLTBMatchOutcome? {
             let outcome = HLTBMatcher.match(title: title, year: year, candidates: candidates,
@@ -46,7 +50,7 @@ struct HLTBFillService: Sendable {
         }
 
         // Pass 1 — whatever the cache already knows (zero requests).
-        if policy == .cacheFirst {
+        if policy == .cacheFirst, cached == nil {
             for query in queries {
                 guard let cached = await search.cachedCandidates(title: query) else { continue }
                 answers[query] = cached
@@ -61,6 +65,69 @@ struct HLTBFillService: Sendable {
         }
         return Self.pooledVerdict(title: title, year: year, librarySlugs: librarySlugs,
                                   queries: queries, answers: answers)
+    }
+
+    /// What the cache alone knows about one game (wave 21 E): the decided `outcome` (nil
+    /// when the network must still be asked) plus every cached rung's candidates, which
+    /// the later network pass reuses so nothing is looked up — or tallied — twice.
+    struct CachePass: Sendable {
+        var outcome: HLTBMatchOutcome?
+        var answers: [String: [HLTBCandidate]]
+    }
+
+    /// The linked-game counterpart of ``CachePass``.
+    struct LinkedCachePass: Sendable {
+        var outcome: LinkedOutcome?
+        var answers: [String: [HLTBCandidate]]
+    }
+
+    /// The **cache-only** verdict for one game (wave 21 E) — zero requests, never throws.
+    /// Decided when the cache alone settles it: a confident hit on any cached rung, or —
+    /// when *every* rung is cached — the pooled verdict. Undecided (nil outcome) when some
+    /// rung is uncached and nothing cached was confident. A bulk run resolves every game it
+    /// can this way **before** any request, so a sign-in / discovery / search reject never
+    /// blocks what the cache already knows.
+    func resolveFromCache(title: String, year: Int?, librarySlugs: Set<String> = []) async -> CachePass {
+        let queries = HLTBQueryLadder.queries(for: title)
+        var answers: [String: [HLTBCandidate]] = [:]
+        for query in queries {
+            guard let cached = await search.cachedCandidates(title: query) else { continue }
+            answers[query] = cached
+            let outcome = HLTBMatcher.match(title: title, year: year, candidates: cached,
+                                            librarySlugs: librarySlugs, query: query)
+            if case .confident = outcome { return CachePass(outcome: outcome, answers: answers) }
+        }
+        guard answers.count == queries.count else { return CachePass(outcome: nil, answers: answers) }
+        return CachePass(outcome: Self.pooledVerdict(title: title, year: year, librarySlugs: librarySlugs,
+                                                     queries: queries, answers: answers),
+                         answers: answers)
+    }
+
+    /// The **cache-only** exact refresh of a linked game (wave 21 E) — zero requests. `.exact`
+    /// when a cached reply of any of its queries carries the stored id; `.lost` when every
+    /// query is cached and none does; undecided when the cache cannot tell.
+    func resolveLinkedFromCache(title: String, year: Int?, hltbID: Int64,
+                                librarySlugs: Set<String> = []) async -> LinkedCachePass {
+        let queries = await linkedQueries(title: title, hltbID: hltbID)
+        var answers: [String: [HLTBCandidate]] = [:]
+        for query in queries {
+            guard let cached = await search.cachedCandidates(title: query) else { continue }
+            if let exact = cached.first(where: { $0.id == hltbID }) {
+                return LinkedCachePass(outcome: .exact(exact), answers: answers)
+            }
+            answers[query] = cached
+        }
+        guard answers.count == queries.count else { return LinkedCachePass(outcome: nil, answers: answers) }
+        return LinkedCachePass(
+            outcome: .lost(Self.pooledVerdict(title: title, year: year, librarySlugs: librarySlugs,
+                                              queries: queries, answers: answers)),
+            answers: answers)
+    }
+
+    /// The queries of an exact refresh: the remembered canonical HLTB name, else the ladder.
+    private func linkedQueries(title: String, hltbID: Int64) async -> [String] {
+        let seededName = await search.linkedCandidate(hltbID: hltbID)?.name
+        return seededName.map { [$0] } ?? HLTBQueryLadder.queries(for: title)
     }
 
     /// The verdict over every rung's candidates at once (D2c): each candidate keeps its best
@@ -91,12 +158,15 @@ struct HLTBFillService: Sendable {
     /// fallback), then pick the candidate whose id equals the stored id. Never ambiguous,
     /// never re-asks the owner. When the id is absent from the reply, returns `.lost` with a
     /// normal-matching outcome so the caller can offer "pick again".
+    ///
+    /// `cached` (wave 21 E): an earlier ``resolveLinkedFromCache`` pass — its cached queries
+    /// (already known not to carry the id) are not asked again.
     func resolveLinked(title: String, year: Int?, hltbID: Int64, librarySlugs: Set<String> = [],
-                       policy: HLTBFreshnessPolicy = .cacheFirst) async throws -> LinkedOutcome {
-        let seededName = await search.linkedCandidate(hltbID: hltbID)?.name
-        let queries = seededName.map { [$0] } ?? HLTBQueryLadder.queries(for: title)
-        var answers: [String: [HLTBCandidate]] = [:]
-        for query in queries {
+                       policy: HLTBFreshnessPolicy = .cacheFirst,
+                       cached: LinkedCachePass? = nil) async throws -> LinkedOutcome {
+        let queries = await linkedQueries(title: title, hltbID: hltbID)
+        var answers: [String: [HLTBCandidate]] = cached?.answers ?? [:]
+        for query in queries where answers[query] == nil {
             let candidates = try await search.search(title: query, policy: policy)
             if let exact = candidates.first(where: { $0.id == hltbID }) {
                 return .exact(exact)

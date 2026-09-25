@@ -91,6 +91,43 @@ Today's mechanics (**verified live 2026-09-19**):
 | 6–14 | homepage+chunks+init + 5 searches (recorder run) | 200 | recorded the fixtures (9 req) |
 | 15 | GET `/` (interpreted-mode sync-IO proof) | 200 | recorder runs to completion under `swift file.swift` |
 
+### Live log — 2026-09-24: `/init` now returns token only
+
+Observed on the owner's machine (a Suspicious Estimate → Refresh from HowLongToBeat run, three
+attempts from 22:58): `GET <path>/init?t=…` → **200 `{"token":"<base64>"}`** — no `hpKey`, no
+`hpVal`. The old parser required all three, so every run stopped with `schemaMismatch` on
+`hltb/auth` before any search ("0 games updated" · "the response did not match the expected
+shape"). The stop itself was the correct safety behaviour; nothing was written. The token decodes
+to `<ms timestamp>::<caller public IP>|<User-Agent>.<hex>` — and the reject excerpt stored it
+verbatim, i.e. the owner's IP ended up in `import_cache_rejects` (fixed below).
+
+**Wave 21 E response** (no live request was made — the owner's next retry is the test):
+
+- `HLTBEndpoint.Auth` has an **optional** `hpKey`/`hpVal` pair. A token-only `/init` is a valid
+  session: the search sends **only `x-auth-token`** — no `x-hp-*` header, no body field. When the
+  pair is present, behaviour is exactly as before. Still a `schemaMismatch` reject: no `token`, a
+  non-string / empty `token`, half a pair, or a non-object body.
+- **UNVERIFIED:** whether `api/search/site` accepts a token-only session. The search validator is
+  unchanged (strict), so if HowLongToBeat wants something new the owner's next run stops cleanly on
+  `hltb/search` ("HowLongToBeat's search answered unexpectedly (…)") with a redacted excerpt — report
+  that message and the excerpt; the next fix is again in `HLTBEndpoint.swift`.
+- **Cache first, network second.** A bulk run (fill and replace) first applies every game the
+  cache alone settles (0 requests), and only then starts discovery → `/init` → search for the rest.
+  A reject stops the network part only: the cached results stay applied, are part of the batch
+  Undo, and the summary reads e.g. "2 updated from cache · … · stopped: HowLongToBeat changed its
+  sign-in — nothing else was changed". The stop reason names the step: *changed its sign-in*
+  (`hltb/auth`), *site did not answer as expected* (`hltb/discovery`), *search answered
+  unexpectedly (…)* (`hltb/search`). The single-game Refresh was already cache-first.
+- **Reject excerpts are redacted** (`ImportRedactor.redactSecretValues`, applied through
+  `ImportRedactor.redact`, so GOG/PSN get it too): values of `token`, `access_token`,
+  `refresh_token`, `id_token`, `npsso`, `authorization`, `hpVal`, `session_id`, any base64 run that
+  decodes to text with `|Mozilla` or an IP address, and literal IPv4/IPv6 addresses become
+  `‹redacted›` — key names and shape stay, so `{"token":"‹redacted›"}` still says "token only".
+- **Old rows are not rewritten** (PLAN §4 inv. 5 — no background repair). The Refresh / Fetch sheet
+  shows **"Clear rejected-response log (N)"** when HowLongToBeat has rows in the log; after a
+  confirmation it deletes that source's `import_cache_rejects` rows in one transaction (the response
+  cache and the library are untouched).
+
 ## Politeness / frailty rules (the same importer machinery)
 
 - **URL allow-list**: `howlongtobeat.com` only (`HLTBClient.allowList`).
@@ -103,7 +140,9 @@ Today's mechanics (**verified live 2026-09-19**):
 - **Stop on the first unexpected response** — HTML/captcha, 403, 429, not-JSON, schema
   mismatch, discovery failure. **No retries, no variants.** The run stops with a clear
   message and "VGN stopped and made no further requests."; a redacted excerpt is logged
-  to `import_cache_rejects` (no credentials exist for HLTB).
+  to `import_cache_rejects`. HLTB has no account, but its `/init` token embeds the caller's IP +
+  User-Agent, so the excerpt goes through `ImportRedactor` like every importer's (wave 21 E).
+  Cached games are applied before the network part starts, so a stop never blocks them.
 
 ## What breaks first, and where to fix it
 
