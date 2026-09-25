@@ -330,6 +330,19 @@ from Xcode) was running the whole session, and `XCUIApplication.launch()` termin
 running instance of the same bundle id — so the per-class run was skipped, not failed.
 Run `scripts/uitests.sh --per-class` once that app is quit.
 
+**2026-09-26 00:10 per-class run (orchestrator, main `6da5f92`): 11/12 PASS**; only
+`LaunchSmokeTests.testLaunchWithSavedStateStillShowsWindow` failed — no window at its
+FIRST launch (stale saved state from an older build). Cause: the W23-A guard opened
+windows through an `openWindow` captured in `Commands`, which SwiftUI never evaluates
+while no window exists (guard log: `opener=false`). W23-B switched it to SwiftUI's
+delegate `applicationOpenUntitledFile(_:)` and gave the WindowGroup a stable id (see
+`docs/LIMITATIONS.md` §2); hand-verified with `open -g`. The W23-B re-run of
+`--per-class LaunchSmokeTests` at 00:21 could not execute: **the login session was
+locked** (`CGSSessionScreenIsLocked = 1`), so XCUITest failed both tests with "Failed to
+activate application … (current state: Running Background)" — environmental, the
+previously green `testLaunchShowsSidebarSmartListsAndGrid` failed identically. Re-run
+`scripts/uitests.sh --per-class` with the session unlocked.
+
 **Were open (app, written up in wave 22 — fixed in wave 23):**
 - *Background launch shows no window.* Steps: quit VGN with its window open; launch it
   without activating (`open -g "Video Game Nerd.app"`, a login item, a script). Expected:
