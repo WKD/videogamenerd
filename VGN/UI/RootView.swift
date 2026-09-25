@@ -576,17 +576,18 @@ struct BannerView: View {
             .help("Dismiss")
             .accessibilityLabel("Dismiss")
         }
-        .padding(.leading, 18)
+        .padding(.leading, 14)
         .padding(.trailing, 12)
         .padding(.vertical, 10)
         .background {
             let shape = RoundedRectangle(cornerRadius: Self.corner)
-            ZStack(alignment: .leading) {
+            // No leading colour stripe (owner, W22): clipped by the rounded corners it
+            // read as a thick, oddly-shaped border. The kind's colour lives only in the
+            // icon, a faint wash and the 1 pt border.
+            ZStack {
                 shape.fill(Color(nsColor: .windowBackgroundColor))
-                shape.fill(tint.opacity(0.10))
-                Rectangle().fill(tint).frame(width: 4)
+                shape.fill(tint.opacity(0.07))
             }
-            .clipShape(shape)
             .shadow(color: .black.opacity(0.28), radius: 10, y: 3)
         }
         .overlay(RoundedRectangle(cornerRadius: Self.corner).strokeBorder(tint.opacity(0.45)))
