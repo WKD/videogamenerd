@@ -635,6 +635,24 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   Memories count here — how a game plays today goes in Holds Up." with an ⓘ that explains on hover; Triage shows
   "Tiers = your favourites, memories included." The sidebar stays in place when switching to Duel.
 
+## Smoke-suite bugs (wave 23, W23-A) [owner]
+- **Background launch:** open VGN, leave its window open, quit (⌘Q). In Terminal run
+  `open -g "/Applications/Video Game Nerd.app"` (or wherever your build lives) — the library window appears
+  (behind your current app; VGN does not steal focus). Exactly **one** window, even when macOS restored it
+  normally. Same after a login-item launch. The very first launch after this update opens at the default
+  size once (the main window got a new scene id); after that its size/position is remembered as before.
+- **Play Next with no lengths:** in a library whose unfinished owned games have no time estimate yet (a fresh
+  import before HowLongToBeat ran), Play Next no longer says "Nothing to play here yet" — it reads "None of
+  your unfinished games has a length yet", shows **Fetch Missing Time Estimates…** (opens the usual bulk sheet
+  for every game without an estimate) and lists those games, each card starting with "No time estimate —
+  fetch from HowLongToBeat". With some estimates present, the unknown ones stay in the collapsed "Unknown
+  length (N)" lane under the picks.
+- **Triage stays live:** open Triage and, without leaving it, Quick Add (⌘N) a game marked **played** → it
+  joins the end of the queue ("x of N" grows by one). Tiering / ← Back / U inside Triage behave as before (no
+  duplicates). (A game tiered elsewhere leaving the queue, and the current card moving on with a small grey
+  "… changed elsewhere — moved on." line, are covered by `TriageLiveQueueTests`; worth a glance if you ever
+  change a queued game from a second window.)
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.
