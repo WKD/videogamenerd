@@ -576,7 +576,7 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 ## Play Next: pace factor · Finish what you started · Play it again · Estimate Source (wave 22, W22-A) [owner]
 - **Settings ▸ General ▸ Your pace** reads "You take about N× the advertised time · based on M finished
   games" (M should be about 109 on your library). Tick **Set by hand**, step to 1.5×: the BY LENGTH counts
-  move at once, a 30 h game's inspector shows "≈ 45 h for you · 30 h advertised", Play Next re-plans and
+  move at once, a 30 h game's inspector shows "≈ 45 h for you · your pace 1.5×", Play Next re-plans and
   Library Stats ▸ "Backlog to beat" grows. **Use measured** puts it back. The advertised Main /
   Completionist / Rushed rows never change.
 - **Almost there**: a *Playing* game you are near the end of (≥ 70 % of its length for you) appears in
@@ -589,6 +589,20 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   have no last-played date. **Start playing** marks it Playing; Undo puts it back to Finished / 100 %.
 - **Playtime ▸ Estimate Source** ▸ IGDB / HowLongToBeat / None narrows the grid and shows its own chip
   ("Estimate Source: HowLongToBeat"); it combines with the other filters.
+
+## Per-genre pace (wave 22, W22-C) [owner]
+- **Settings ▸ General ▸ Your pace** reads "You take about 1.8× the advertised time · based on ~104 finished
+  games (~12 set aside as incomplete)", and below it a wrapped line "By genre: Point-and-click 2.8× (32) ·
+  Puzzle 2.4× (58) · Adventure 1.9× (…) · … · everything else 1.8×" (only genres with ≥ 10 plausible
+  games; Platform should no longer drag anything down). The line stays inside the pane at its normal width.
+- A **point-and-click** game's inspector reads "≈ N h for you · point-and-click pace 2.8×" (its main ×
+  2.8 at your play style); a game in no listed genre reads "· your pace 1.8×"; a game in two listed genres
+  names both ("point-and-click + puzzle pace 2.6×") or "genre mix pace" when the names are long. The line
+  never wraps in the 300 pt inspector.
+- The same game sits on the BY LENGTH shelf / Length-sort position its "for you" time says; Play Next and
+  the vault fit it on that time; Library Stats ▸ "Backlog to beat" grows accordingly.
+- **Set by hand** (e.g. 1.5×) replaces everything: the By-genre line disappears and every inspector line
+  reads "your pace 1.5×". **Use measured** brings the genre factors back.
 
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
