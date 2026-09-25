@@ -131,6 +131,8 @@ struct DuelView: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier(A11yID.duelProgress)
             .accessibilityValue([h.text, h.stepText].compactMap { $0 }.joined(separator: " "))
+            // What a duel asks (PLAN §7/§7b): favourites, memories included — not how it plays now.
+            RankingPhilosophyCaption(style: .duel)
             if let progress = h.progress {
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
