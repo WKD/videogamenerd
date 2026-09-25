@@ -104,7 +104,10 @@ struct RootView: View {
             // "Needs a 'Holds Up' Rating" (PLAN §7b) — same slim, bounded bar, mounted the same
             // way (outer VStack, never wrapping the grid).
             if vm.isNeedsHoldsUpRatingSelection {
-                HoldsUpRatingHeader()
+                HoldsUpRatingHeader(canRate: vm.canSetSelectionHoldsUp,
+                                    showsClear: vm.selectedGames.contains { $0.holdsUp != nil }) {
+                    vm.setHoldsUp($0)
+                }
             }
             if vm.isPSPlusOnlySelection {
                 PSPlusOnlyHeader(count: vm.counts.psPlusOnly)

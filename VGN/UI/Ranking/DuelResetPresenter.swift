@@ -21,6 +21,8 @@ final class DuelResetPresenter {
     }
 
     private(set) var confirmation: Confirmation?
+    /// The last failure, in words (also shown as an error banner). nil after a success.
+    private(set) var lastError: String?
     /// Bumped after every reset / undo so open ranking screens reload.
     private(set) var resetGeneration = 0
 
@@ -66,9 +68,11 @@ final class DuelResetPresenter {
 
     func cancel() { confirmation = nil }
 
-    /// The confirmed action.
-    func confirm() async {
-        guard let pending = confirmation else { return }
+    /// The confirmed action. Takes the confirmation **value** the alert presented, never the
+    /// stored ``confirmation``: SwiftUI dismisses the alert (its `isPresented` setter →
+    /// ``cancel()`` clears ``confirmation``) before the button's `Task` runs, so re-reading the
+    /// stored value here found nil and the reset silently never ran (owner bug, wave 22).
+    func confirm(_ pending: Confirmation) async {
         confirmation = nil
         await perform(pending.scope)
     }
@@ -78,8 +82,15 @@ final class DuelResetPresenter {
     @discardableResult
     func perform(_ scope: RankingStore.DuelResetScope) async -> RankingStore.DuelResetUndo? {
         do {
-            let dir = try snapshotDirectory?()
+            let dir: URL?
+            do {
+                dir = try snapshotDirectory?()
+            } catch {
+                throw RankingStore.DuelResetError.snapshotFailed(
+                    "no backups folder: \(error.localizedDescription)")
+            }
             let undo = try await ranking.resetDuels(scope, snapshotDirectory: dir)
+            lastError = nil
             resetGeneration &+= 1
             registerUndo(undo)
             let placed = undo.placements.count, duels = undo.comparisons.count
@@ -89,7 +100,9 @@ final class DuelResetPresenter {
                 kind: .info)
             return undo
         } catch {
-            library?.showBanner("Couldn't reset the duels — nothing was changed.", kind: .error)
+            let message = Self.failureText(error)
+            lastError = message
+            library?.showBanner(message, kind: .error)
             return nil
         }
     }
@@ -106,7 +119,7 @@ final class DuelResetPresenter {
             }
             um.setActionName(actionName(undo.scope))
         } catch {
-            library?.showBanner("Couldn't undo the duel reset.", kind: .error)
+            library?.showBanner("Couldn't undo the duel reset: \(error).", kind: .error)
         }
     }
 
@@ -142,6 +155,17 @@ final class DuelResetPresenter {
         return (title, message, tierLetter == nil ? "Reset All Duels" : "Reset Tier \(tierLetter!)")
     }
 
+    /// The error banner: says nothing changed AND why (never a silent no-op).
+    nonisolated static func failureText(_ error: any Error) -> String {
+        let reason: String
+        if let reset = error as? RankingStore.DuelResetError {
+            reason = reset.description
+        } else {
+            reason = String(describing: error)
+        }
+        return "Couldn't reset the duels — nothing was changed: \(reason)."
+    }
+
     nonisolated static func nothingToReset(tierLetter: String?) -> String {
         tierLetter.map { "No duels to reset in tier \($0)." } ?? "No duels to reset."
     }
@@ -166,7 +190,7 @@ private struct DuelResetAlertModifier: ViewModifier {
                                  set: { if !$0 { presenter.cancel() } }),
             presenting: presenter.confirmation
         ) { pending in
-            Button(pending.confirmTitle, role: .destructive) { Task { await presenter.confirm() } }
+            Button(pending.confirmTitle, role: .destructive) { Task { await presenter.confirm(pending) } }
             Button("Cancel", role: .cancel) { presenter.cancel() }
         } message: { pending in
             Text(pending.message)

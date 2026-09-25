@@ -243,3 +243,134 @@ struct DuelResetPresenterTests {
         #expect(presenter.confirmation == nil)
     }
 }
+
+/// The path the owner actually takes (wave 22 bug): a **file-backed `DatabasePool` in WAL
+/// mode** (like the live library, not an in-memory queue) + a real snapshot directory, driven
+/// through the presenter in the order the alert produces — the alert's `isPresented` setter
+/// fires `cancel()` BEFORE the confirm button's `Task` runs. Before the fix `confirm()` re-read
+/// the (now nil) stored confirmation and silently did nothing: no snapshot, nothing reset.
+@MainActor
+@Suite(.serialized, .timeLimit(.minutes(1)))
+struct DuelResetFileBackedTests {
+
+    private struct Fixture {
+        let db: AppDatabase
+        let dir: URL
+        let rank: RankingStore
+        let tier1: [Int64]
+        let tier2: [Int64]
+    }
+
+    private func fixture() async throws -> Fixture {
+        let (db, dir) = try AppDatabase.temporary()
+        _ = try await db.seedPlatformsFromBundle()
+        let lib = LibraryStore(db)
+        let rank = RankingStore(db)
+        var t1: [Int64] = [], t2: [Int64] = []
+        for i in 0..<3 {
+            t1.append(try await RankTestDB.addGame(lib, title: "One\(i)", tier: 1))
+            t2.append(try await RankTestDB.addGame(lib, title: "Two\(i)", tier: 2))
+        }
+        while let p = try await rank.currentDuel(), p.kind == .placement {
+            _ = try await rank.answer(winner: min(p.candidate, p.opponent))
+        }
+        try await rank.enqueuePair(t1[0], t1[1])     // leaves the `ranking.duel` blob behind
+        return Fixture(db: db, dir: dir, rank: rank, tier1: t1, tier2: t2)
+    }
+
+    private func count(_ db: AppDatabase, _ sql: String) async throws -> Int {
+        try await db.dbWriter.read { db in try Int.fetchOne(db, sql: sql) ?? 0 }
+    }
+
+    private func snapshots(in dir: URL) -> [URL] {
+        ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.lastPathComponent.hasPrefix(RankingStore.resetSnapshotPrefix) }
+    }
+
+    @Test func isAWALPool() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let mode = try await f.db.dbWriter.read { db in try String.fetchOne(db, sql: "PRAGMA journal_mode") }
+        #expect(mode?.lowercased() == "wal")
+    }
+
+    @Test func confirmAfterTheAlertDismissedStillResetsAllAndSnapshotsFirst() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let backups = f.dir.appendingPathComponent("backups", isDirectory: true)
+        let presenter = DuelResetPresenter(ranking: f.rank, snapshotDirectory: { backups })
+        let um = UndoManager()
+        presenter.undoManagerOverride = um
+        let placedBefore = try await count(f.db, "SELECT COUNT(*) FROM games WHERE rank_key IS NOT NULL")
+        let duelsBefore = try await count(f.db, "SELECT COUNT(*) FROM comparisons")
+        #expect(placedBefore == 6 && duelsBefore > 0)
+
+        await presenter.request(.all)
+        let pending = try #require(presenter.confirmation)
+        presenter.cancel()                         // the alert's isPresented setter, first…
+        await presenter.confirm(pending)           // …then the button's Task
+        #expect(presenter.lastError == nil)
+
+        let snaps = snapshots(in: backups)
+        #expect(snaps.count == 1)
+        let snapPlaced = try await DatabaseQueue(path: try #require(snaps.first).path).read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM games WHERE rank_key IS NOT NULL")
+        }
+        #expect(snapPlaced == placedBefore)          // the snapshot holds the pre-reset state
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM games WHERE rank_key IS NOT NULL") == 0)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM comparisons") == 0)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM app_state WHERE key = '\(RankingStore.duelStateKey)'") == 0)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM games WHERE tier_id IS NOT NULL") == 6)
+        #expect(um.canUndo)
+    }
+
+    @Test func tierResetOnAPoolSnapshotsAndUndoRestores() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let backups = f.dir.appendingPathComponent("backups", isDirectory: true)
+        let presenter = DuelResetPresenter(ranking: f.rank, snapshotDirectory: { backups })
+        presenter.undoManagerOverride = UndoManager()
+        let keysBefore = try await count(f.db, "SELECT COUNT(*) FROM games WHERE rank_key IS NOT NULL")
+        let duelsBefore = try await count(f.db, "SELECT COUNT(*) FROM comparisons")
+
+        let undo = try #require(await presenter.perform(.tier(2)))
+        #expect(snapshots(in: backups).count == 1)
+        #expect(undo.snapshotURL != nil)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM games WHERE tier_id = 2 AND rank_key IS NOT NULL") == 0)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM games WHERE tier_id = 1 AND rank_key IS NOT NULL") == 3)
+        let ids = f.tier2.map(String.init).joined(separator: ",")
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM comparisons WHERE winner_id IN (\(ids)) OR loser_id IN (\(ids))") == 0)
+
+        await presenter.performUndo(undo)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM games WHERE rank_key IS NOT NULL") == keysBefore)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM comparisons") == duelsBefore)
+    }
+
+    @Test func aFailedSnapshotIsSurfacedAndChangesNothing() async throws {
+        let f = try await fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        // The "backups directory" is a regular file → the snapshot cannot be written.
+        let blocker = f.dir.appendingPathComponent("not-a-dir")
+        try Data("x".utf8).write(to: blocker)
+        let presenter = DuelResetPresenter(ranking: f.rank, snapshotDirectory: { blocker })
+        let um = UndoManager()
+        presenter.undoManagerOverride = um
+        let placedBefore = try await count(f.db, "SELECT COUNT(*) FROM games WHERE rank_key IS NOT NULL")
+        let duelsBefore = try await count(f.db, "SELECT COUNT(*) FROM comparisons")
+
+        let undo = await presenter.perform(.all)
+        #expect(undo == nil)
+        let message = try #require(presenter.lastError)
+        #expect(message.hasPrefix("Couldn't reset the duels — nothing was changed: the safety snapshot could not be saved"))
+        #expect(!um.canUndo)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM games WHERE rank_key IS NOT NULL") == placedBefore)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM comparisons") == duelsBefore)
+
+        // A throwing folder resolver is surfaced the same way.
+        struct NoFolder: Error {}
+        let p2 = DuelResetPresenter(ranking: f.rank, snapshotDirectory: { throw NoFolder() })
+        #expect(await p2.perform(.all) == nil)
+        #expect(p2.lastError?.contains("safety snapshot") == true)
+        #expect(try await count(f.db, "SELECT COUNT(*) FROM games WHERE rank_key IS NOT NULL") == placedBefore)
+    }
+}

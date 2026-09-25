@@ -535,8 +535,9 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
 
 ## "Holds up today?" (wave 21) [owner]
 - Open **Needs a "Holds Up" Rating (N)** in the sidebar (under the review lists). It lists your played games,
-  best-ranked first. Rate a few with the inspector's three buttons or **⌃⌥⌘1 / 2 / 3** — each one leaves the list
-  at once, the count drops, and the selection moves to the next game. **⌃⌥⌘0** (or the ✕) clears; Edit ▸ Undo
+  best-ranked first. Rate a few with the inspector's three buttons, the header's **Holds Up · Of Its Time · Too
+  Archaic** buttons or plain **1 / 2 / 3** (wave 22) — each one leaves the list at once, the count drops, and the
+  selection moves to the next game. **0** (or the ✕ / the header's Clear) clears; Edit ▸ Undo
   "Holds Up Today?" reverts. The row disappears when every played game is rated.
 - Right-click a mixed selection ▸ **Holds Up Today?**: ✓ / – reflect the played games; unplayed ones are named in a
   greyed footer and left alone. In **Triage**, press **1 / 2 / 3** to rate the card without leaving it.
@@ -617,6 +618,22 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
   the vault fit it on that time; Library Stats ▸ "Backlog to beat" grows accordingly.
 - **Set by hand** (e.g. 1.5×) replaces everything: the By-genre line disappears and every inspector line
   reads "your pace 1.5×". **Use measured** brings the genre factors back.
+
+## Reset All Duels really resets · Holds Up keys · duel caption (wave 22, W22-E) [owner]
+- **Ranking ▸ Reset All Duels…** → confirm: the banner reads "Forgot N duels and un-placed M games — tiers kept.
+  A snapshot was saved first."; the Duel screen starts placing again; The Top shows ~ midpoints; and
+  `~/Library/Application Support/VGN/backups/before-duel-reset-<stamp>.sqlite` now exists. **Edit ▸ Undo Reset All
+  Duels** brings every placement back. Same for **Reset Duels in Tier ▸ A…** (other tiers untouched). If the
+  snapshot cannot be written you see a red banner saying why, and nothing changes.
+- In the library grid (any list), select a played game and press **⇧1 / ⇧2 / ⇧3** (⇧0 clears) — the Holds Up mark
+  changes (inspector shows it). Plain **0** there still clears the tier. Typing "!" or "1" in the search field or
+  Quick Add types normally. **Game ▸ Holds Up Today?** items read "Holds Up   ⇧1" etc. and still work by click.
+- In **Needs a "Holds Up" Rating**: the header shows **Holds Up 1 · Of Its Time 2 · Too Archaic 3** buttons (greyed
+  with nothing selected); a click or plain **1 / 2 / 3** rates and moves to the next game; plain **0** clears the
+  mark (not the tier). Triage still rates with 1 / 2 / 3.
+- The **Duel** screen shows under the prompt, small and grey: "Which one would you rather keep on your Top list?
+  Memories count here — how a game plays today goes in Holds Up." with an ⓘ that explains on hover; Triage shows
+  "Tiers = your favourites, memories included." The sidebar stays in place when switching to Duel.
 
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line

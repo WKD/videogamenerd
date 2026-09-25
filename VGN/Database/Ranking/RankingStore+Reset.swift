@@ -105,7 +105,14 @@ extension RankingStore {
     /// the `vgn-*.sqlite` rotation pattern, so they are never rotated away. Returns the undo
     /// token (exact inverse via ``undoDuelReset(_:)``).
     func resetDuels(_ scope: DuelResetScope, snapshotDirectory: URL?) async throws -> DuelResetUndo {
-        let snapshot = try snapshotDirectory.map { try Self.writeResetSnapshot(database, into: $0) }
+        var snapshot: URL?
+        if let snapshotDirectory {
+            do {
+                snapshot = try await Self.writeResetSnapshot(database, into: snapshotDirectory)
+            } catch {
+                throw DuelResetError.snapshotFailed(String(describing: error))
+            }
+        }
         var undo = try await dbWriter.write { db in try Self.applyDuelReset(scope, db) }
         undo.snapshotURL = snapshot
         return undo
@@ -210,16 +217,34 @@ extension RankingStore {
 
     // MARK: - Snapshot
 
-    /// `before-duel-reset-<stamp>.sqlite` via `VACUUM INTO` (consistent, WAL-safe).
-    static func writeResetSnapshot(_ database: AppDatabase, into directory: URL) throws -> URL {
+    /// Why a reset did not run — shown to the owner verbatim (never a silent no-op).
+    enum DuelResetError: Error, Equatable, Sendable, CustomStringConvertible {
+        /// The pre-reset snapshot could not be written, so nothing was reset.
+        case snapshotFailed(String)
+
+        var description: String {
+            switch self {
+            case .snapshotFailed(let reason): return "the safety snapshot could not be saved (\(reason))"
+            }
+        }
+    }
+
+    /// `before-duel-reset-<stamp>.sqlite` via `VACUUM INTO` (consistent, WAL-safe). Runs OUTSIDE
+    /// any transaction (`writeWithoutTransaction` — `VACUUM` refuses to run inside one) and
+    /// asynchronously, so a large library never blocks a cooperative thread.
+    static func writeResetSnapshot(_ database: AppDatabase, into directory: URL) async throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let stamp = AppDatabase.timestampFormatter.string(from: Date())
         var url = directory.appendingPathComponent("\(resetSnapshotPrefix)\(stamp).sqlite")
         if FileManager.default.fileExists(atPath: url.path) {
             url = directory.appendingPathComponent("\(resetSnapshotPrefix)\(stamp)-\(UUID().uuidString.prefix(6)).sqlite")
         }
-        try database.dbWriter.writeWithoutTransaction { db in
-            try db.execute(sql: "VACUUM INTO ?", arguments: [url.path])
+        let path = url.path
+        try await database.dbWriter.writeWithoutTransaction { db in
+            try db.execute(sql: "VACUUM INTO ?", arguments: [path])
+        }
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: path])
         }
         return url
     }

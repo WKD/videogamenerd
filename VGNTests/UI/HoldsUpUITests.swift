@@ -138,8 +138,8 @@ struct HoldsUpUITests {
         }
         #expect(FirstPlayedCaption.text(first, calendar: Calendar(identifier: .gregorian)) == "First played in 1991")
         #expect(FirstPlayedCaption.text(nil) == nil)
-        #expect(HoldsUpInspectorRow.keyHint(for: .ofItsTime) == "⌃⌥⌘2")
-        #expect(HoldsUpInspectorRow.keyHint(for: nil) == "⌃⌥⌘0")
+        #expect(HoldsUpInspectorRow.keyHint(for: .ofItsTime) == "⇧2 in the grid")
+        #expect(HoldsUpInspectorRow.keyHint(for: nil) == "⇧0 in the grid")
     }
 }
 

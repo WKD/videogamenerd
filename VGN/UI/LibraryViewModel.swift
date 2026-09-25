@@ -760,6 +760,9 @@ final class LibraryViewModel {
             togglePlayedForSelection(); return nil
         case .markPlayedAsLast:
             applyLastPlayedMark(); return nil
+        case .holdsUp(let value):
+            // Only played games can be rated; `setHoldsUp` refuses unplayed ones (banner).
+            setHoldsUp(value); return nil
         case .typeSelect(let character):
             return isTypeBufferActive() ? appendTypeSelect(character)
                                         : startTypeSelect(character)

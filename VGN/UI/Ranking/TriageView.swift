@@ -87,6 +87,8 @@ struct TriageView: View {
                 .buttonStyle(.borderless)
             }
             .padding(.horizontal)
+            // Tiers = favourites, memories included (PLAN §7/§7b) — Holds Up is the "now" fact.
+            RankingPhilosophyCaption(style: .triage)
 
             RankingCoverView(title: game.title, coverFile: game.coverFile,
                              platformID: game.platformIDs.first, loader: loader)
