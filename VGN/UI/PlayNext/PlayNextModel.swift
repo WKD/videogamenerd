@@ -55,7 +55,7 @@ final class PlayNextModel {
     /// The owner's personal pace factor (PLAN §7b "Scheduled 2026-09-25") — the *same* value
     /// the sidebar shelves use (``PlayPaceModel/paceFactor``). Every candidate's personal
     /// length is multiplied by it for the time fit. A change recomputes once.
-    private(set) var paceFactor: Double
+    private(set) var paceFactor: PaceProfile
 
     /// A one-shot hint (consumed at ``start()``): the "By Length" shelf last selected
     /// in the sidebar, so opening Play Next preselects the matching bracket.
@@ -134,7 +134,7 @@ final class PlayNextModel {
         defaults: UserDefaults = AppPreferences.defaults,
         pace: PlayPace = .default,
         playStyle: PlayStyle = .default,
-        paceFactor: Double = 1.0,
+        paceFactor: PaceProfile = .neutral,
         bracketHint: (@MainActor () -> LengthShelf?)? = nil,
         deadlineMonthsLeft: @escaping @MainActor () -> Double? = { PSPlusDeadlinePreferences().monthsLeft() },
         recomputeDebounce: Duration = .milliseconds(250),
@@ -310,7 +310,7 @@ final class PlayNextModel {
 
     /// Adopt a new personal pace factor (from the shared ``PlayPaceModel``). Recomputes once —
     /// every candidate's planning length moves with it (PLAN §7b "Scheduled 2026-09-25").
-    func setPaceFactor(_ newFactor: Double) {
+    func setPaceFactor(_ newFactor: PaceProfile) {
         guard newFactor != paceFactor else { return }
         paceFactor = newFactor
         recompute(debounce: false)
@@ -628,7 +628,7 @@ struct SecondOpinionCacheKey: Hashable {
     /// bracket's identity here (two equal shortlists at different styles differ).
     var style: PlayStyle
     /// The personal pace factor scales the lengths sent to Claude too (wave 22).
-    var paceFactor: Double
+    var paceFactor: PaceProfile
 
     init(result: PlayNextResult) {
         self.shortlist = result.shortlist.map(\.id)

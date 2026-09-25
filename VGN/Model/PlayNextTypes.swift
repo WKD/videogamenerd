@@ -29,11 +29,13 @@ struct TimeBracket: Hashable, Sendable, Codable {
     /// The owner's **personal pace factor** (PLAN §7b "Scheduled 2026-09-25"): every
     /// candidate's personal length is multiplied by it for the time fit ("≈ 52 h for you").
     /// 1.0 = the advertised times. Shared with the sidebar (``PlayPaceModel/paceFactor``).
-    var paceFactor: Double
+    /// Per genre (PLAN §7b "Per-genre pace"): each candidate resolves its own factor from its
+    /// genre traits (``PaceProfile/factor(traits:)``).
+    var paceFactor: PaceProfile
 
     init(shelf: LengthShelf, pace: PlayPace = .default,
          playStyle: PlayStyle = .default, completionist: Bool = false,
-         paceFactor: Double = 1.0) {
+         paceFactor: PaceProfile = .neutral) {
         self.shelf = shelf
         self.pace = pace
         self.playStyle = playStyle
@@ -43,7 +45,7 @@ struct TimeBracket: Hashable, Sendable, Codable {
     }
 
     init(budgetSeconds: Int, playStyle: PlayStyle = .default, completionist: Bool = false,
-         paceFactor: Double = 1.0) {
+         paceFactor: PaceProfile = .neutral) {
         self.shelf = nil
         self.pace = .default
         self.playStyle = playStyle

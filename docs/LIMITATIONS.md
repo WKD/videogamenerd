@@ -715,8 +715,8 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   relevant change (a deduplicated observation over finished games); only the manual override is a
   preference. Samples need a play time *and* a main estimate; 100 % games are measured against the
   completionist time (main when absent). Suspicious estimates (not HLTB, not dismissed) are left out.
-- **One factor for every length [watch].** Not per genre or per length band (the filed refinement —
-  long RPGs may drift more than short games). A 100 % game's ratio (vs completionist) and a finished
+- ~~**One factor for every length [watch].**~~ **Per genre since W22-C** (below). Still not per length
+  band (long RPGs may drift more than short games). A 100 % game's ratio (vs completionist) and a finished
   game's (vs main) are pooled into one median.
 - **The factor also scales the Playtime filter's unplayed fallback [expected].** That band uses the
   personal length (the one shared SQL expression), so an unplayed game can move band with the factor;
@@ -748,6 +748,32 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   `ttb_source` (or any value other than `hltb`) counts as IGDB; an `hltb`-tagged row with no time is None.
 - **Sample library [info].** The `-VGNSampleData` library has no play times or time estimates, so the
   factor reads "finish 5 more games…", neither extra row shows, and Estimate Source ▸ None matches all 11.
+
+## 5l. Per-genre pace (wave 22, W22-C) — as built
+- **Implausible ratios are set aside everywhere [expected].** A sample < 0.3× or > 5× (inclusive bounds
+  kept) enters no median — global or per genre — and is only counted ("12 set aside as incomplete").
+  The global factor now rests on the plausible samples only, so it can move slightly from W22-A's.
+- **Genre factors [expected].** ≥ 10 plausible samples → `(n·median + 5·global)/(n + 5)`, clamped
+  0.8–2.0, then quantized to 1/1024 (so SQLite's `AVG` and the Swift mean agree to the bit — invisible at
+  the one-decimal display). A multi-genre game counts once in each of its genres. Per game: the mean of
+  its qualifying genres' factors, else the global factor. Genres are IGDB genres (`game_genres`); themes
+  and keywords are not used.
+- **Keyed by id in SQL, by name in Swift [expected].** The grid/Stats SQL resolves the factor from
+  `game_genres.genre_id`; Play Next and the Vault resolve it from the candidates' `.genre` trait values
+  (genre names, unique in `genres`). A Vault entry's IGDB/gamelist genre names match only when they are
+  spelled like the library's IGDB genres (ROMs have no length, so they never use it).
+- **Per-row subquery cost [info].** A non-uniform profile adds a bounded correlated subquery
+  (`COALESCE((SELECT AVG(CASE genre_id WHEN … END) FROM game_genres WHERE game_id = g.id AND genre_id
+  IN (…)), global)`) to the personal length. At 2 000 games (10 genre factors, 2 genres per game, DEBUG):
+  Length sort ≈ 85 → 90 ms, a length shelf ≈ 29 → 37 ms, shelf counts ≈ 1.3 → 3.9 ms (the counts query is
+  now a `MATERIALIZED` CTE — it was ≈ 5.6 ms before this lane even uniform, 40 ms with genres when
+  flattened). Uniform profiles (override, no qualifying genre) emit a plain literal as before.
+- **A finished game re-measures [expected].** The profile carries each genre's sample count, so a new
+  finished game in a qualifying genre re-runs the grid + counts once even if no factor moved (rare).
+- **Override replaces everything [expected].** "Set by hand" is one number for every game; the By-genre
+  line is hidden while it is on.
+- **Stats window override limit [watch]** — unchanged from W22-A (reads the preference; measured
+  genres come from the same read).
 
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.

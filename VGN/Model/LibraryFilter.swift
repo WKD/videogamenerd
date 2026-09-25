@@ -162,8 +162,8 @@ struct LibraryFilter: Hashable, Sendable {
     /// multiplies the personal length wherever time is used for *planning* (the "By Length"
     /// scopes, the Length sort, the Playtime filter's unplayed fallback), carried here like
     /// ``playStyle`` so a factor change re-runs the grid like a filter change. Not a facet;
-    /// "Clear all" keeps it.
-    var paceFactor: Double
+    /// "Clear all" keeps it. Per genre since the "Per-genre pace" (PLAN §7b): a ``PaceProfile``.
+    var paceFactor: PaceProfile
 
     var sort: LibrarySort
     var ascending: Bool
@@ -193,7 +193,7 @@ struct LibraryFilter: Hashable, Sendable {
         scope: SidebarSelection = .all,
         playPace: PlayPace = .default,
         playStyle: PlayStyle = .storyFirst,
-        paceFactor: Double = 1.0,
+        paceFactor: PaceProfile = .neutral,
         sort: LibrarySort = .title,
         ascending: Bool = true
     ) {

@@ -101,7 +101,7 @@ import Testing
     @Test @MainActor func modelOverrideRoundTripsAndNotifies() {
         let prefs = InMemoryPlayPacePreferences()
         let model = PlayPaceModel(store: prefs)
-        var seen: [Double] = []
+        var seen: [PaceProfile] = []
         model.onPaceFactorChange = { seen.append($0) }
         model.setMeasuredPace(PaceFactor(measured: 1.3, sampleCount: 109, rawMedian: 1.3))
         #expect(model.paceFactor == 1.3)
@@ -151,7 +151,7 @@ import Testing
         func run(_ factor: Double) -> PlayNextResult {
             RecommendationEngine.recommend(RecommendationInput(
                 ranked: ranked, candidates: [c],
-                bracket: TimeBracket(shelf: .fewWeeks, playStyle: .storyFirst, paceFactor: factor)))
+                bracket: TimeBracket(shelf: .fewWeeks, playStyle: .storyFirst, paceFactor: .uniform(factor))))
         }
         #expect(run(1.0).hero?.estimateSeconds == 35 * h)
         #expect(run(1.5).hero?.estimateSeconds == Int(52.5 * 3600))

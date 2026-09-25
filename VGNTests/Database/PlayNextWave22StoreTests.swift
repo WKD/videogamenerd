@@ -58,7 +58,7 @@ struct PlayNextWave22StoreTests {
         }
         for factor in [0.8, 1.0, 1.3, 1.37, 2.0] {
             for style in PlayStyle.allCases {
-                let expr = LibraryQuery.lengthEstimateExpr(style: style, paceFactor: factor)
+                let expr = LibraryQuery.lengthEstimateExpr(style: style, paceFactor: .uniform(factor))
                 let sql: [Int64: Int?] = try await db.dbWriter.read { db in
                     var out: [Int64: Int?] = [:]
                     for row in try Row.fetchAll(db, sql: "SELECT id, \(expr) AS est FROM games g") {
@@ -83,7 +83,7 @@ struct PlayNextWave22StoreTests {
         let g = try await store.addGame(GameDraft(title: "RPG", igdbID: 1, platformIDs: ["pc"], owned: true))
         try await store.updateMetadata(gameID: g.gameID, MetadataPatch(ttbNormallyS: 35 * h))
         func inShelf(_ shelf: LengthShelf, _ factor: Double) async throws -> Bool {
-            let rows = try await store.gamesOnce(filter: LibraryFilter(scope: .length(shelf), paceFactor: factor))
+            let rows = try await store.gamesOnce(filter: LibraryFilter(scope: .length(shelf), paceFactor: .uniform(factor)))
             return rows.contains { $0.id == g.gameID }
         }
         #expect(try await inShelf(.fewWeeks, 1.0))

@@ -25,7 +25,7 @@ struct GRDBLibraryDataSource: LibraryDataSource {
         sidebarCounts(pace: pace, style: style, paceFactor: 1.0)
     }
 
-    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: Double) -> AsyncStream<SidebarCounts> {
+    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: PaceProfile) -> AsyncStream<SidebarCounts> {
         // ONE observation: the existing scalar + per-platform aggregate
         // (`LibraryStore.fetchSidebarCounts`, unchanged) plus the pace-derived
         // "By Length" shelf counts over each game's personal length, composed here

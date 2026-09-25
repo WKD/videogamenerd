@@ -24,12 +24,13 @@ final class PlayPaceModel {
     private(set) var measuredPace: PaceFactor = .unmeasured
     /// The owner's manual override (persisted), or nil to use the measured factor.
     private(set) var paceOverride: Double?
-    /// The factor everything plans with: the override, else the measured one.
-    var paceFactor: Double { measuredPace.effective(override: paceOverride) }
+    /// The factor(s) everything plans with: the override (one number), else the measured global
+    /// + per-genre factors (PLAN §7b "Per-genre pace").
+    var paceFactor: PaceProfile { measuredPace.effective(override: paceOverride) }
 
     /// Invoked with the new effective pace factor whenever it changes (a new measurement or
     /// an override edit). Wired like ``onStyleCommit`` so the grid + counts re-run once.
-    var onPaceFactorChange: (Double) -> Void = { _ in }
+    var onPaceFactorChange: (PaceProfile) -> Void = { _ in }
 
     /// Invoked with the committed pace after `commit`/`reset`. The app wires this so a
     /// pace change re-runs the grid + counts (treated like a filter change).
@@ -94,6 +95,7 @@ final class PlayPaceModel {
     nonisolated static func paceFactorSummary(measured: PaceFactor, override: Double?) -> String {
         let games = measured.sampleCount == 1 ? "finished game" : "finished games"
         if let override {
+            // The override replaces the genre factors too — one number for every game.
             let base = measured.isMeasured
                 ? "measured \(PaceFactor.text(measured.measured)) on \(measured.sampleCount) \(games)"
                 : "not enough finished games to measure yet"
@@ -103,7 +105,20 @@ final class PlayPaceModel {
             let more = PaceFactor.minSamples - measured.sampleCount
             return "Planning with the advertised times (1.0×) · finish \(more) more game\(more == 1 ? "" : "s") with a play time and an estimate to measure your pace"
         }
-        return "You take about \(PaceFactor.text(measured.measured)) the advertised time · based on \(measured.sampleCount) \(games)"
+        let aside = measured.setAsideCount > 0
+            ? " (\(measured.setAsideCount) set aside as incomplete)" : ""
+        return "You take about \(PaceFactor.text(measured.measured)) the advertised time · based on \(measured.sampleCount) \(games)\(aside)"
+    }
+
+    /// Settings' per-genre line (PLAN §7b "Per-genre pace"), or nil when no genre qualifies or the
+    /// manual override replaces everything.
+    var genrePaceSummary: String? {
+        Self.genrePaceSummary(measured: measuredPace, override: paceOverride)
+    }
+
+    nonisolated static func genrePaceSummary(measured: PaceFactor, override: Double?) -> String? {
+        guard override == nil, measured.isMeasured else { return nil }
+        return measured.genreSummary.map { "By genre: \($0)" }
     }
 
     /// Commit a new play style, persist, notify (so the grid + counts re-run once, and any
