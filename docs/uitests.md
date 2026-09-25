@@ -11,6 +11,8 @@ It is **on demand only**. It is NOT in the everyday `VGN` scheme's Test action a
 NOT part of any agent gate: `xcodebuild -scheme VGN test` still runs only the unit
 tests. The UI suite has its **own** shared scheme, `VGN-UITests`.
 
+**Run status 2026-09-26 00:38 (main `6dea446`, orchestrator): all 12 classes PASS** — 1 intended skip (Tier Board drag). The launch-with-stale-saved-state test now passes with the W23-B guard. No screen recordings saved.
+
 ## Prerequisites (owner, one time)
 
 Running XCUITest **takes over the keyboard and mouse** in the live login session
