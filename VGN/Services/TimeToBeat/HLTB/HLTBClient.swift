@@ -183,6 +183,8 @@ actor HLTBClient: HLTBSearching {
     /// fully-cached run makes zero requests. The auth token embeds the caller IP + UA
     /// and expires; a lapse later surfaces as a 403 reject on the search (we stop, the
     /// owner re-runs) — no in-run refresh (PLAN §5.3: no retries, no variants).
+    /// A token-only `/init` (the site's shape since 2026-09-24) is a valid session; a reply
+    /// without a string `token` is a schemaMismatch reject on `hltb/auth`.
     private func ensureSession() async throws -> (HLTBEndpoint.Discovery, HLTBEndpoint.Auth) {
         let discovery = try await ensureDiscovery()
         if let a = auth { return (discovery, a) }
@@ -239,14 +241,17 @@ actor HLTBClient: HLTBSearching {
 
     // MARK: - Reject
 
-    /// Record a reject (never any credentials exist for HLTB, but never log a full
-    /// body — cap the excerpt at 4 KB) and stop.
+    /// Record a reject and stop. Never logs a full body (the excerpt is capped at 4 KB),
+    /// and the excerpt goes through ``ImportRedactor`` first: HowLongToBeat's `/init`
+    /// token embeds the caller's **public IP** and User-Agent (base64), so a stored
+    /// `{"token":"…"}` excerpt keeps its shape but not the value (wave 21 E).
     private func recordAndThrow(reason: ImportRejectReason, endpoint: String,
                                 status: Int?, body: Data) async throws -> Never {
-        let excerpt = String(String(decoding: body.prefix(4096), as: UTF8.self))
+        let excerpt = ImportRedactor.structural.redact(
+            String(String(decoding: body.prefix(4096), as: UTF8.self)))
         let reject = ImportReject(source: HLTBSource.id, endpoint: endpoint, status: status,
                                   reason: reason, redactedExcerpt: excerpt, receivedAt: wallClock())
-        try? await cache.recordReject(reject)
+        try? await cache.recordReject(reject, redact: ImportRedactor.structural.closure)
         throw ImportError.rejected(reject)
     }
 

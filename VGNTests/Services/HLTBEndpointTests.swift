@@ -59,8 +59,9 @@ import Testing
     @Test func parseAuthRejectsNonTokenEnvelope() {
         #expect(HLTBEndpoint.parseAuth(Data(#"{"nope":true}"#.utf8)) == nil)
         #expect(HLTBEndpoint.parseAuth(Data(#"<html/>"#.utf8)) == nil)
-        // token present but no key/val pair → not usable.
-        #expect(HLTBEndpoint.parseAuth(Data(#"{"token":"t"}"#.utf8)) == nil)
+        // Since 2026-09-24 a token-only /init is a valid session (HLTBTokenOnlyAuthTests);
+        // half a key/val pair is still an unknown shape.
+        #expect(HLTBEndpoint.parseAuth(Data(#"{"token":"t","hpVal":"v"}"#.utf8)) == nil)
     }
 
     // MARK: - Payload

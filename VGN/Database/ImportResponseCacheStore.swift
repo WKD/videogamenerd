@@ -137,6 +137,18 @@ struct ImportResponseCacheStore: Sendable {
         }
     }
 
+    /// Delete this source's rejected-response log — the owner's explicit, confirmed
+    /// "Clear rejected-response log (N)" action (wave 21 E). Existing rows are never
+    /// rewritten by a background repair (PLAN §4 inv. 5); they only go away through this.
+    /// One transaction; the cache itself is untouched. Returns the number of rows removed.
+    @discardableResult
+    func clearRejects(source: String) async throws -> Int {
+        try await dbWriter.write { db in
+            try db.execute(sql: "DELETE FROM import_cache_rejects WHERE source = ?", arguments: [source])
+            return db.changesCount
+        }
+    }
+
     /// Count of reject rows for a source (diagnostics / tests).
     func rejectCount(source: String) async throws -> Int {
         try await dbWriter.read { db in
