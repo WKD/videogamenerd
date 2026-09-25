@@ -653,10 +653,14 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   Only a played game carries one (`LibraryStore.setHoldsUp` refuses unplayed games with an outcome; setPlayed(false),
   Triage's un-play and the Start-playing undo that restores played = 0 all clear it). A merge keeps the target's
   mark, else the source's.
-- **Keys, by design:** the ⌃⌥⌘1/2/3/0 key equivalents live on the menu-bar Game ▸ Holds Up Today? items (so they
-  act on the grid selection with or without the inspector); the inspector segments only *name* them in tooltips —
-  registering them twice would make SwiftUI pick one arbitrarily. They are therefore disabled outside a library
-  grid destination (Tier Board / The Top / Duel), where Triage's own 1/2/3 apply.
+- **Keys, by design (wave 22 — replaced ⌃⌥⌘1/2/3/0, "too complex"):** grid keys routed by the pure
+  `GridKeyRouter`, never menu key equivalents (a ⇧-digit / bare-digit equivalent would steal typing in the search
+  field and Quick Add): **⇧1 ⇧2 ⇧3** rate and **⇧0** clears in every grid scope; in **Needs a "Holds Up" Rating**
+  the plain **1 2 3** rate and plain **0 clears the Holds Up mark — not the tier** (elsewhere plain 0 still clears
+  the tier; plain 4…9 still type-select there, 1/2/3 no longer do). The Game / context menus name the keys as text
+  ("Holds Up   ⇧1"), like ⇧M. The digit is read from the physical top-row key code, so ⇧1 works on US ("!") and
+  AZERTY ("1") alike; on AZERTY the plain top-row keys in the rating list rate too. Keys act while the grid has
+  focus (like every grid key). Triage keeps its own plain 1/2/3.
 - **Unrated means "played, no mark"** in the filter and the smart list (mirrors Tier ▸ Unrated); an unplayed game
   is not "unrated" — it cannot be rated at all.
 - **Play Next numbers:** Holds Up +0.04, Of Its Time −0.04 (the size of the PS Plus / Batocera nudges — they only
@@ -678,6 +682,19 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
 - The undo restores keys only onto games still in the same tier, still unplaced, and whose key no game has taken
   since; a game moved after the reset keeps its new place. Redo re-runs the reset (with a new snapshot).
 - A tier reset deletes every comparison touching one of the tier's games — including cross-tier border duels.
+- **Bug fixed (wave 22): "Reset All Duels" did nothing.** The alert's confirm button ran
+  `Task { await presenter.confirm() }`; SwiftUI dismisses the alert first — its `isPresented` setter called
+  `cancel()`, clearing `confirmation` — so when the Task ran, `confirm()` found nil and returned silently: no
+  snapshot, no reset, no banner (the owner's library still had its 126 comparisons + the `ranking.duel` row and no
+  `before-duel-reset-*` file). The button now hands the presented confirmation value to `confirm(_:)`. The
+  snapshot path itself (`VACUUM INTO` via `writeWithoutTransaction` on the WAL pool) was fine; it is now async and
+  covered by file-backed WAL-pool tests. Any failure (snapshot unwritable, no backups folder, DB error) shows an
+  error banner with the reason and changes nothing (`DuelResetPresenter.lastError`).
+- The earlier "34 → 1 placed" drop was not caused by the reset (it never ran — inferred from the code, the DB was
+  not opened). Every path that clears a
+  `rank_key` outside a reset is an explicit owner action: a tier change (⇧S…⇧F / Triage / inspector / drag to
+  another tier's unplaced tail) un-places the game by design, as do "Re-place" in Duel, un-playing a game, and
+  clearing its tier.
 
 ## "PS Plus Only" smart list (owner, 2026-09-25) — built (wave 21, lane A)
 - Same set as Format ▸ PS Plus (one predicate). Shown right after Owned only while N > 0. The header's leave date

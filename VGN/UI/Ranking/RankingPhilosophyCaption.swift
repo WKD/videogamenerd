@@ -34,7 +34,7 @@ struct RankingPhilosophyCaption: View {
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-        .frame(maxWidth: 560)
+        .frame(maxWidth: 720)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(style == .duel ? "duel.philosophy" : "triage.philosophy")
     }
