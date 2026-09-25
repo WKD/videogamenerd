@@ -56,6 +56,9 @@ enum DiscoverScorer {
         var bracket: TimeBracket?
         /// The owner's play style, for the personal length behind the time-fit + finishability.
         var playStyle: PlayStyle = .default
+        /// The owner's personal pace factor (PLAN §7b "Scheduled 2026-09-25") — multiplies the
+        /// personal length behind the Vault time fit + finishability. 1.0 = advertised times.
+        var paceFactor: Double = 1.0
         /// The owner's weekly pace, for the deadline finishability (§15).
         var pace: PlayPace = .default
         /// Months until the owner plans to leave PS Plus (nil ⇒ no date; the constant fallback
@@ -71,7 +74,7 @@ enum DiscoverScorer {
              maxPinnedFavourites: Int = Int.max,
              bracket: TimeBracket? = nil, playStyle: PlayStyle = .default,
              pace: PlayPace = .default, psPlusMonthsLeft: Double? = nil,
-             prioritisePSPlus: Bool = true) {
+             prioritisePSPlus: Bool = true, paceFactor: Double = 1.0) {
             self.seed = seed
             self.playedSystems = playedSystems
             self.weights = weights
@@ -83,6 +86,7 @@ enum DiscoverScorer {
             self.pace = pace
             self.psPlusMonthsLeft = psPlusMonthsLeft
             self.prioritisePSPlus = prioritisePSPlus
+            self.paceFactor = paceFactor
         }
     }
 
@@ -158,7 +162,8 @@ enum DiscoverScorer {
             rushed: nil, main: entry.lengthMainSeconds, completionist: entry.lengthCompleteSeconds,
             sourceIsHLTB: false, dismissed: false)
         let personal = PersonalLength.compute(
-            normallyS: vaultLength.main, completelyS: vaultLength.completionist, style: options.playStyle)
+            normallyS: vaultLength.main, completelyS: vaultLength.completionist, style: options.playStyle,
+            paceFactor: options.paceFactor)
         var timeTerm = 0.0
         var timeFit: TimeFit.Result?
         if let bracket = options.bracket, let personal {

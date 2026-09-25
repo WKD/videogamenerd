@@ -52,6 +52,11 @@ final class PlayNextModel {
     /// (``completionist``) overrides it per session. A change recomputes once.
     private(set) var playStyle: PlayStyle
 
+    /// The owner's personal pace factor (PLAN §7b "Scheduled 2026-09-25") — the *same* value
+    /// the sidebar shelves use (``PlayPaceModel/paceFactor``). Every candidate's personal
+    /// length is multiplied by it for the time fit. A change recomputes once.
+    private(set) var paceFactor: Double
+
     /// A one-shot hint (consumed at ``start()``): the "By Length" shelf last selected
     /// in the sidebar, so opening Play Next preselects the matching bracket.
     private let bracketHint: (@MainActor () -> LengthShelf?)?
@@ -129,6 +134,7 @@ final class PlayNextModel {
         defaults: UserDefaults = AppPreferences.defaults,
         pace: PlayPace = .default,
         playStyle: PlayStyle = .default,
+        paceFactor: Double = 1.0,
         bracketHint: (@MainActor () -> LengthShelf?)? = nil,
         deadlineMonthsLeft: @escaping @MainActor () -> Double? = { PSPlusDeadlinePreferences().monthsLeft() },
         recomputeDebounce: Duration = .milliseconds(250),
@@ -141,6 +147,7 @@ final class PlayNextModel {
         self.deadlineMonthsLeft = deadlineMonthsLeft
         self.pace = pace
         self.playStyle = playStyle
+        self.paceFactor = paceFactor
         self.bracketHint = bracketHint
         self.recomputeDebounce = recomputeDebounce
         self.toastDuration = toastDuration
@@ -169,10 +176,12 @@ final class PlayNextModel {
         if usesCustom {
             let seconds = Int((customHoursPerWeek * customWeeks * 3600).rounded())
             return TimeBracket(budgetSeconds: max(3600, seconds),
-                               playStyle: playStyle, completionist: completionist)
+                               playStyle: playStyle, completionist: completionist,
+                               paceFactor: paceFactor)
         }
         return TimeBracket(shelf: bracketShelf, pace: pace,
-                           playStyle: playStyle, completionist: completionist)
+                           playStyle: playStyle, completionist: completionist,
+                           paceFactor: paceFactor)
     }
 
     /// The "plan for 100%" toggle is forced on and disabled when the owner already
@@ -299,6 +308,14 @@ final class PlayNextModel {
         recompute(debounce: false)
     }
 
+    /// Adopt a new personal pace factor (from the shared ``PlayPaceModel``). Recomputes once —
+    /// every candidate's planning length moves with it (PLAN §7b "Scheduled 2026-09-25").
+    func setPaceFactor(_ newFactor: Double) {
+        guard newFactor != paceFactor else { return }
+        paceFactor = newFactor
+        recompute(debounce: false)
+    }
+
     func useCustom(hoursPerWeek: Double, weeks: Double) {
         usesCustom = true
         customHoursSet = true
@@ -379,9 +396,11 @@ final class PlayNextModel {
     /// Exemplar ids cited by any suggestion's reasons, for the sentence lookups.
     static func exemplarIDs(in result: PlayNextResult) -> [Int64] {
         var ids = Set<Int64>()
-        for suggestion in result.shortlist + result.unknownLength {
+        for suggestion in result.shortlist + result.unknownLength
+                + result.finishWhatYouStarted + result.replay {
             for reason in suggestion.reasons {
                 switch reason {
+                case let .droppedEarly(_, loved?): ids.insert(loved)
                 case let .sharedFranchise(_, with): ids.insert(with)
                 case let .sharedSeries(_, with): ids.insert(with)
                 case let .sameDeveloper(_, exemplar): ids.insert(exemplar)
@@ -608,12 +627,15 @@ struct SecondOpinionCacheKey: Hashable {
     /// The play style shapes the personal lengths sent to Claude, so it is part of the
     /// bracket's identity here (two equal shortlists at different styles differ).
     var style: PlayStyle
+    /// The personal pace factor scales the lengths sent to Claude too (wave 22).
+    var paceFactor: Double
 
     init(result: PlayNextResult) {
         self.shortlist = result.shortlist.map(\.id)
         self.bracketLabel = result.bracket.label
         self.completionist = result.bracket.completionist
         self.style = result.bracket.resolvedStyle
+        self.paceFactor = result.bracket.paceFactor
     }
 }
 

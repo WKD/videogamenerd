@@ -26,22 +26,30 @@ struct TimeBracket: Hashable, Sendable, Codable {
     /// Per-session "plan for 100%" override: estimate to `.completionist` (t = 1)
     /// regardless of the owner's usual play style.
     var completionist: Bool
+    /// The owner's **personal pace factor** (PLAN §7b "Scheduled 2026-09-25"): every
+    /// candidate's personal length is multiplied by it for the time fit ("≈ 52 h for you").
+    /// 1.0 = the advertised times. Shared with the sidebar (``PlayPaceModel/paceFactor``).
+    var paceFactor: Double
 
     init(shelf: LengthShelf, pace: PlayPace = .default,
-         playStyle: PlayStyle = .default, completionist: Bool = false) {
+         playStyle: PlayStyle = .default, completionist: Bool = false,
+         paceFactor: Double = 1.0) {
         self.shelf = shelf
         self.pace = pace
         self.playStyle = playStyle
         self.customBudgetSeconds = nil
         self.completionist = completionist
+        self.paceFactor = paceFactor
     }
 
-    init(budgetSeconds: Int, playStyle: PlayStyle = .default, completionist: Bool = false) {
+    init(budgetSeconds: Int, playStyle: PlayStyle = .default, completionist: Bool = false,
+         paceFactor: Double = 1.0) {
         self.shelf = nil
         self.pace = .default
         self.playStyle = playStyle
         self.customBudgetSeconds = budgetSeconds
         self.completionist = completionist
+        self.paceFactor = paceFactor
     }
 
     /// The style the time fit actually uses: the "plan for 100%" toggle forces
@@ -148,6 +156,18 @@ enum PlayNextReason: Hashable, Sendable {
     /// about H h for you" (PLAN §16). `monthsLeft` / `personalLengthSeconds` are nil when
     /// unknown, and the formatter omits those clauses.
     case leavesWithSubscriptionDeadline(monthsLeft: Int?, personalLengthSeconds: Int?)
+    /// "Finish what you started" ▸ **Almost there** (PLAN §7b, wave 22): a Playing / To Revisit
+    /// game with ≥ 70 % of its (pace-adjusted) personal length already played — "about 4 h
+    /// left", or, once past the estimate, "past the estimate — maybe finish it?".
+    case almostThere(remainingSeconds: Int, pastEstimate: Bool)
+    /// "Finish what you started" ▸ **Worth another try** (PLAN §7b, wave 22): an abandoned game
+    /// dropped early that still matches the owner's taste strongly. `lovedExemplar` is the S/A
+    /// game it is directly linked to when that link is what qualified it ("you dropped it after
+    /// 3 h — you loved **Dark Souls** (S)"); nil when a top-quartile score qualified it.
+    case droppedEarly(playedSeconds: Int, lovedExemplar: GameID?)
+    /// "Play it again" ▸ **Worth replaying** (PLAN §7b, wave 22): "you gave it S · last played
+    /// 2019" — a finished S/A game marked *Holds Up*, last played (importer date) years ago.
+    case replayWorthy(tierLetter: String, lastPlayedYear: Int)
 }
 
 // MARK: - Suggestion + result
@@ -236,7 +256,8 @@ struct RecommendationExclusions: Hashable, Sendable {
 }
 
 /// The engine's answer (PLAN §7b): a hero pick, up to four alternatives, the
-/// unknown-length lane, and what was excluded.
+/// unknown-length lane, what was excluded — and (wave 22) the two extra rows,
+/// "Finish what you started" and "Play it again", which never repeat a regular pick.
 struct PlayNextResult: Hashable, Sendable {
     var hero: PlayNextSuggestion?
     var alternatives: [PlayNextSuggestion]
@@ -244,19 +265,39 @@ struct PlayNextResult: Hashable, Sendable {
     var exclusions: RecommendationExclusions
     /// The bracket this result was computed for (echoed for the UI).
     var bracket: TimeBracket
+    /// "Finish what you started" (PLAN §7b): *Almost there* then *Worth another try*, at most
+    /// ``RecommendationOptions/maxFinishRow`` cards. Empty ⇒ the row is hidden.
+    var finishWhatYouStarted: [PlayNextSuggestion]
+    /// "Play it again" ▸ *Worth replaying* (PLAN §7b). Empty ⇒ the row is hidden.
+    var replay: [PlayNextSuggestion]
+    /// Finished S/A *Holds Up* games that would be replay candidates but carry no
+    /// importer-filled last-played date — the row's quiet footer ("12 more have no
+    /// last-played date"). A count only.
+    var replayUndatedCount: Int
 
     init(
         hero: PlayNextSuggestion? = nil,
         alternatives: [PlayNextSuggestion] = [],
         unknownLength: [PlayNextSuggestion] = [],
         exclusions: RecommendationExclusions = RecommendationExclusions(),
-        bracket: TimeBracket
+        bracket: TimeBracket,
+        finishWhatYouStarted: [PlayNextSuggestion] = [],
+        replay: [PlayNextSuggestion] = [],
+        replayUndatedCount: Int = 0
     ) {
         self.hero = hero
         self.alternatives = alternatives
         self.unknownLength = unknownLength
         self.exclusions = exclusions
         self.bracket = bracket
+        self.finishWhatYouStarted = finishWhatYouStarted
+        self.replay = replay
+        self.replayUndatedCount = replayUndatedCount
+    }
+
+    /// True when there is nothing at all to show — no regular pick and neither extra row.
+    var isEmpty: Bool {
+        hero == nil && alternatives.isEmpty && finishWhatYouStarted.isEmpty && replay.isEmpty
     }
 
     /// The shortlist that drove the pick (hero + alternatives), in engine order —

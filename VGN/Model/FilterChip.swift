@@ -16,7 +16,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
         case status, notPlayed, noStatus
         case holdsUp
         case format, notOwned, multipleCopies, duplicateCopies, subscriptionOnly
-        case playtime, noEstimate, suspiciousEstimate, platform
+        case playtime, noEstimate, suspiciousEstimate, estimateSource, platform
 
         var label: String {
             switch self {
@@ -37,6 +37,7 @@ struct FilterChip: Identifiable, Hashable, Sendable {
             case .playtime: return "Playtime"
             case .noEstimate: return "No Estimate"
             case .suspiciousEstimate: return "Suspicious Estimate"
+            case .estimateSource: return "Estimate Source"
             case .platform: return "Platform"
             }
         }
@@ -135,6 +136,9 @@ enum LibraryFilterChips {
         add(.playtime, playtimePairs)
         if filter.includeNoTimeEstimate { add(.noEstimate, [("true", "No Estimate")]) }
         if filter.includeSuspiciousEstimate { add(.suspiciousEstimate, [("true", "Suspicious Estimate")]) }
+        add(.estimateSource, EstimateSource.allCases
+            .filter { filter.estimateSources.contains($0) }
+            .map { ($0.rawValue, $0.label) })
 
         add(.platform, filter.platforms.sorted().map { ($0, platformShort($0)) })
 
@@ -168,6 +172,7 @@ enum LibraryFilterChips {
         case .playtime: if let b = PlaytimeBucket(rawValue: chip.value) { f.playtimes.remove(b) }
         case .noEstimate: f.includeNoTimeEstimate = false
         case .suspiciousEstimate: f.includeSuspiciousEstimate = false
+        case .estimateSource: if let v = EstimateSource(rawValue: chip.value) { f.estimateSources.remove(v) }
         case .platform: f.platforms.remove(chip.value)
         }
         return f
@@ -178,6 +183,6 @@ enum LibraryFilterChips {
     /// not a facet, so clearing filters must not reset the "By Length" shelf bounds.
     static func cleared(_ filter: LibraryFilter) -> LibraryFilter {
         LibraryFilter(scope: filter.scope, playPace: filter.playPace, playStyle: filter.playStyle,
-                      sort: filter.sort, ascending: filter.ascending)
+                      paceFactor: filter.paceFactor, sort: filter.sort, ascending: filter.ascending)
     }
 }

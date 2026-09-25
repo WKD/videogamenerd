@@ -66,6 +66,9 @@ struct GameSummary: Hashable, Sendable, Identifiable {
     /// True when the game owns **several** reformat-able copies (≥ 2 non-subscription
     /// single copies) — the ambiguous set "Change Copy Format" skips (banner footer).
     var hasSeveralChangeableCopies: Bool
+    /// Where the game's time estimates come from (Playtime ▸ Estimate Source, wave 22) — so
+    /// the in-memory evaluator agrees with the SQL facet. Default `.none` (no estimate).
+    var estimateSource: EstimateSource
 
     /// A really-owned physical copy exists.
     var hasPhysical: Bool { !physicalPlatformIDs.isEmpty }
@@ -99,7 +102,8 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         romPlatformIDs: [String] = [],
         subscriptionPlatformIDs: [String] = [],
         singleCopyFormat: ProductFormat? = nil,
-        hasSeveralChangeableCopies: Bool = false
+        hasSeveralChangeableCopies: Bool = false,
+        estimateSource: EstimateSource = .none
     ) {
         self.id = id
         self.title = title
@@ -125,6 +129,7 @@ struct GameSummary: Hashable, Sendable, Identifiable {
         self.subscriptionPlatformIDs = subscriptionPlatformIDs
         self.singleCopyFormat = singleCopyFormat
         self.hasSeveralChangeableCopies = hasSeveralChangeableCopies
+        self.estimateSource = estimateSource
     }
 
     /// Derived Backlog membership (PLAN §4 invariant 2): owned but not played.

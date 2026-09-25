@@ -573,6 +573,23 @@ Fixes the 2026-09-20 report ("I clicked Sync and got this UI, no match window").
     unexpectedly (…)") — nothing else was changed, and the redacted excerpt in `import_cache_rejects` no longer
     contains the token or your IP.
 
+## Play Next: pace factor · Finish what you started · Play it again · Estimate Source (wave 22, W22-A) [owner]
+- **Settings ▸ General ▸ Your pace** reads "You take about N× the advertised time · based on M finished
+  games" (M should be about 109 on your library). Tick **Set by hand**, step to 1.5×: the BY LENGTH counts
+  move at once, a 30 h game's inspector shows "≈ 45 h for you · 30 h advertised", Play Next re-plans and
+  Library Stats ▸ "Backlog to beat" grows. **Use measured** puts it back. The advertised Main /
+  Completionist / Rushed rows never change.
+- **Almost there**: a *Playing* game you are near the end of (≥ 70 % of its length for you) appears in
+  **Finish what you started** above the hero with "About N h left" (or "Past the estimate — maybe finish
+  it?"), and not again in the picks below. A 60 h game with 50 h played shows up even under "A Weekend".
+- **Worth another try**: an *Abandoned* game you dropped early that belongs to a series you ranked S/A
+  reads "You dropped it after 3 h — you loved **X** (S)". Not this one / Never remove it from the row.
+- **Worth replaying**: an S/A game you marked **Holds Up**, finished, and last played (per PSN) years
+  ago appears with "You gave it S · last played 2019"; the footer counts the S/A Holds-Up games that
+  have no last-played date. **Start playing** marks it Playing; Undo puts it back to Finished / 100 %.
+- **Playtime ▸ Estimate Source** ▸ IGDB / HowLongToBeat / None narrows the grid and shows its own chip
+  ("Estimate Source: HowLongToBeat"); it combines with the other filters.
+
 ## Known issues / watch list
 - ~~**Title normaliser over-strips budget labels**~~ **Fixed (wave 6, lane C):** budget-line
   labels strip only at `.core` now; *Pokémon Platinum* survives at the fuzzy-matching level.

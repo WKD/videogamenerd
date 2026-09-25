@@ -14,9 +14,10 @@ extension RecommendationStore {
     ) throws -> RecommendationInput {
         let ranked = try loadRankedGames(db: db)
         let candidates = try loadCandidates(db: db)
+        let replay = try loadReplayCandidates(db: db)
         let feedback = try loadFeedback(weights: weights, db: db)
-        return RecommendationInput(ranked: ranked, candidates: candidates, bracket: bracket,
-                                   feedback: feedback, options: options, weights: weights)
+        return RecommendationInput(ranked: ranked, candidates: candidates, replayCandidates: replay,
+                                   bracket: bracket, feedback: feedback, options: options, weights: weights)
     }
 
     // MARK: - Ranked games (taste profile)
@@ -32,10 +33,12 @@ extension RecommendationStore {
         let igdbByID = try igdbIDs(for: ids, db: db)
         let features = try loadFeatures(ids: ids, db: db)
         let firstYears = try firstPlayedYears(for: ids, db: db)
+        let letters = try tierLetters(for: ids, db: db)
 
         return ids.map { id in
             RankedGame(id: id, igdbID: igdbByID[id] ?? nil, score: scores[id] ?? 0.5,
-                       traits: features[id]?.traits ?? [], firstPlayedYear: firstYears[id])
+                       traits: features[id]?.traits ?? [], firstPlayedYear: firstYears[id],
+                       tierLetter: letters[id])
         }
     }
 
@@ -113,6 +116,66 @@ extension RecommendationStore {
                 firstPlayedAt: row["first_played_at"]
             )
         }
+    }
+
+    /// The "Play it again" pool (PLAN §7b, wave 22): **owned** finished / 100 % games marked
+    /// *Holds Up* in tier S or A — the engine re-checks every rule (pure, tested) and applies
+    /// the last-played gap, the time fit and the feedback. Loaded in the same read as the
+    /// regular candidates; never mixed into them (status ``RecCandidateStatus/finished``).
+    static func loadReplayCandidates(db: Database) throws -> [Candidate] {
+        let rows = try Row.fetchAll(db, sql: """
+            SELECT g.id, g.igdb_id, g.title, g.year, g.status, g.revisit, g.holds_up,
+                   g.first_played_at, g.last_played_at, g.cover_file, t.letter AS tier_letter,
+                   g.ttb_hastily_s, g.ttb_normally_s, g.ttb_completely_s, g.ttb_source,
+                   \(LibraryQuery.effectivePlaytimeSQL()) AS effective_playtime_s
+            FROM games g JOIN tiers t ON t.id = g.tier_id
+            WHERE g.status IN ('finished','completed') AND g.played = 1
+              AND g.holds_up = ? AND t.letter IN ('S','A')
+              AND EXISTS (SELECT 1 FROM product_games pg WHERE pg.game_id = g.id)
+            """, arguments: [HoldsUp.holdsUp.rawValue])
+        guard !rows.isEmpty else { return [] }
+        let ids = rows.map { $0["id"] as Int64 }
+        let features = try loadFeatures(ids: ids, db: db)
+        let formats = try loadFormats(ids: ids, db: db)
+        let dismissedEstimates = try LibraryStore.readDismissedEstimateIDs(db)
+        return rows.map { row in
+            let id: Int64 = row["id"]
+            let igdbID: Int64? = row["igdb_id"]
+            let statusRaw: String? = row["status"]
+            let length = EstimateSanity.lengthInputs(
+                rushed: row["ttb_hastily_s"], main: row["ttb_normally_s"],
+                completionist: row["ttb_completely_s"],
+                sourceIsHLTB: (row["ttb_source"] as String?) == HLTBSource.id,
+                dismissed: dismissedEstimates.contains(id))
+            return Candidate(
+                id: id, igdbID: igdbID, traits: features[id]?.traits ?? [],
+                estimateSeconds: length.main, completionistSeconds: length.completionist,
+                myPlaytimeSeconds: row["effective_playtime_s"],
+                status: .finished,
+                hasMetadata: igdbID != nil,
+                title: row["title"], year: row["year"], coverFile: row["cover_file"],
+                platformIDs: features[id]?.platformSlugs ?? [],
+                formats: formats[id] ?? [],
+                playStatus: PlayStatus.from(dbStatus: statusRaw, revisit: (row["revisit"] as Int64?) == 1),
+                holdsUp: HoldsUp(dbValue: row["holds_up"]),
+                firstPlayedAt: row["first_played_at"],
+                lastPlayedAt: row["last_played_at"],
+                tierLetter: row["tier_letter"])
+        }
+    }
+
+    /// Tier letter per game id (the ranked games' "S"/"A" for *Worth another try*).
+    static func tierLetters(for ids: [Int64], db: Database) throws -> [Int64: String] {
+        guard !ids.isEmpty else { return [:] }
+        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
+        var out: [Int64: String] = [:]
+        for row in try Row.fetchAll(db, sql: """
+            SELECT g.id, t.letter FROM games g JOIN tiers t ON t.id = g.tier_id
+            WHERE g.id IN (\(placeholders))
+            """, arguments: StatementArguments(ids)) {
+            out[row["id"]] = row["letter"]
+        }
+        return out
     }
 
     /// Map the stored `(status, revisit)` pair to the engine's candidate status. A

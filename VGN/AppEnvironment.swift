@@ -173,6 +173,9 @@ final class AppEnvironment {
                     if mode == .live { Task { await coordinator?.notifyLibraryChanged() } }
                 })
             settings.gogAccount = gogWiring.account
+            // Settings ▸ General edits the SAME pace controller the sidebar uses, so a pace /
+            // style / pace-factor change there re-runs the grid + counts live (wave 22).
+            settings.paceModel = vm.paceModel
             // "Show in the Vault" from the GOG review sheet selects the GOG Vault row (PLAN §16).
             gogWiring.presenter.onShowInVault = { [weak vm] in vm?.select(.vault(.gog)) }
 

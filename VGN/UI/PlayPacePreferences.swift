@@ -13,6 +13,16 @@ protocol PlayPacePreferenceStoring: Sendable {
     /// 2026-09-19). Persisted next to the pace and edited in the same editor.
     func playStyle() -> PlayStyle
     func setPlayStyle(_ style: PlayStyle)
+    /// The owner's manual **pace factor override** (PLAN §7b "Scheduled 2026-09-25"), or nil
+    /// to use the measured one. The measured factor itself is never stored.
+    func paceFactorOverride() -> Double?
+    func setPaceFactorOverride(_ factor: Double?)
+}
+
+extension PlayPacePreferenceStoring {
+    /// Default for conformers that predate the pace factor (test doubles): no override.
+    func paceFactorOverride() -> Double? { nil }
+    func setPaceFactorOverride(_ factor: Double?) {}
 }
 
 /// `UserDefaults`-backed persistence over ``AppPreferences/defaults`` (a throw-away
@@ -23,6 +33,7 @@ struct UserDefaultsPlayPacePreferences: PlayPacePreferenceStoring {
     private let hoursKey = "VGNPlayPaceHours"
     private let chosenKey = "VGNPlayPaceChosen"
     private let styleKey = "VGNPlayStyle"
+    private let paceFactorKey = "VGNPaceFactorOverride"
 
     init(defaults: UserDefaults = AppPreferences.defaults) { self.defaults = defaults }
 
@@ -43,6 +54,16 @@ struct UserDefaultsPlayPacePreferences: PlayPacePreferenceStoring {
     }
 
     func setPlayStyle(_ style: PlayStyle) { defaults.set(style.rawValue, forKey: styleKey) }
+
+    func paceFactorOverride() -> Double? {
+        guard defaults.object(forKey: paceFactorKey) != nil else { return nil }
+        return PaceFactor.clamp(defaults.double(forKey: paceFactorKey))
+    }
+
+    func setPaceFactorOverride(_ factor: Double?) {
+        if let factor { defaults.set(PaceFactor.clamp(factor), forKey: paceFactorKey) }
+        else { defaults.removeObject(forKey: paceFactorKey) }
+    }
 }
 
 /// In-memory persistence (tests / sample mode; also a safe default with no defaults).
@@ -51,12 +72,19 @@ final class InMemoryPlayPacePreferences: PlayPacePreferenceStoring, @unchecked S
     private var pace: PlayPace
     private var chosen: Bool
     private var style: PlayStyle
-    init(pace: PlayPace = .default, chosen: Bool = false, style: PlayStyle = .default) {
+    private var factorOverride: Double?
+    init(pace: PlayPace = .default, chosen: Bool = false, style: PlayStyle = .default,
+         paceFactorOverride: Double? = nil) {
         self.pace = pace; self.chosen = chosen; self.style = style
+        self.factorOverride = paceFactorOverride
     }
     func playPace() -> PlayPace { lock.withLock { pace } }
     func setPlayPace(_ new: PlayPace) { lock.withLock { pace = new; chosen = true } }
     func hasChosenPace() -> Bool { lock.withLock { chosen } }
     func playStyle() -> PlayStyle { lock.withLock { style } }
     func setPlayStyle(_ new: PlayStyle) { lock.withLock { style = new } }
+    func paceFactorOverride() -> Double? { lock.withLock { factorOverride } }
+    func setPaceFactorOverride(_ factor: Double?) {
+        lock.withLock { factorOverride = factor.map(PaceFactor.clamp) }
+    }
 }

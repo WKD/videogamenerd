@@ -450,7 +450,9 @@ private struct SingleGameInspector: View {
                 mainS: detail.ttbNormallyS, completionistS: detail.ttbCompletelyS,
                 rushedS: detail.ttbHastilyS,
                 sourceLabel: Self.sourceLabel(detail.ttbSource), showEstimates: hasAverages,
-                sourceIsHLTB: detail.ttbSource == HLTBSource.id)
+                sourceIsHLTB: detail.ttbSource == HLTBSource.id,
+                playStyle: vm.paceModel.style, paceFactor: vm.paceModel.paceFactor,
+                estimateDismissed: hltbFetch?.isEstimateDismissed(detail.id) ?? false)
             estimateWarning
             if hasAverages {
                 MeVsAverageBar(bar: bar)
@@ -802,6 +804,12 @@ struct PlaytimeEstimatesTable: View {
     /// The times come from HowLongToBeat (`ttb_source = 'hltb'`) — enables the wave-21
     /// Main-Story-only read rule for the Main row (``EstimateSanity/effectiveMain``).
     var sourceIsHLTB: Bool = false
+    /// The owner's play style + personal pace factor (PLAN §7b "Scheduled 2026-09-25"): when the
+    /// factor is not 1.0 the table adds one line "≈ 38 h for you · 30 h advertised".
+    var playStyle: PlayStyle = .default
+    var paceFactor: Double = 1.0
+    /// "Estimate Looks Right" was chosen (the suspicious-completionist fallback is then off).
+    var estimateDismissed: Bool = false
 
     private var hasPSN: Bool { (psnSeconds ?? 0) > 0 }
     private var hasBatocera: Bool { (batoceraSeconds ?? 0) > 0 }
@@ -839,6 +847,18 @@ struct PlaytimeEstimatesTable: View {
                     .font(.caption2).foregroundStyle(.tertiary)
                     .lineLimit(1).minimumScaleFactor(0.85)
             }
+            if showEstimates, let forYou = Self.forYouLine(
+                rushed: rushedS, main: mainS, completionist: completionistS,
+                sourceIsHLTB: sourceIsHLTB, dismissed: estimateDismissed,
+                style: playStyle, paceFactor: paceFactor) {
+                // One bounded line (fits the 300 pt inspector — `InspectorLayoutTests`).
+                Text(forYou)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.85)
+                    .accessibilityIdentifier("inspector.playtime.forYou")
+                    .appKitTooltip("Your personal length at your play style × your pace factor (\(PaceFactor.text(paceFactor))) — what the By Length shelves and Play Next plan with. The estimates above are unchanged.")
+            }
             if showEstimates, let sourceLabel {
                 Text("Source: \(sourceLabel)").font(.caption2).foregroundStyle(.tertiary)
             }
@@ -853,6 +873,30 @@ struct PlaytimeEstimatesTable: View {
 
     private func estimate(_ s: Int?) -> String {
         s.map { PlaytimeParser.formatApprox(seconds: $0) } ?? "—"
+    }
+
+    /// "≈ 38 h for you · 30 h advertised" — the personal length at the owner's play style with
+    /// and without the pace factor (PLAN §7b "Scheduled 2026-09-25"). nil when the factor is
+    /// 1.0 (nothing to add) or the game has no personal length. Pure (tested).
+    static func forYouLine(rushed: Int?, main: Int?, completionist: Int?,
+                           sourceIsHLTB: Bool, dismissed: Bool,
+                           style: PlayStyle, paceFactor: Double) -> String? {
+        guard paceFactor != 1.0 else { return nil }
+        let inputs = EstimateSanity.lengthInputs(rushed: rushed, main: main, completionist: completionist,
+                                                 sourceIsHLTB: sourceIsHLTB, dismissed: dismissed)
+        guard let advertised = PersonalLength.compute(normallyS: inputs.main, completelyS: inputs.completionist,
+                                                      style: style),
+              let forYou = PersonalLength.compute(normallyS: inputs.main, completelyS: inputs.completionist,
+                                                  style: style, paceFactor: paceFactor)
+        else { return nil }
+        return "\(PlaytimeParser.formatApprox(seconds: forYou.seconds)) for you · "
+            + "\(Self.plainHours(advertised.seconds)) advertised"
+    }
+
+    /// "30 h" (no "≈", the line already leads with one).
+    private static func plainHours(_ seconds: Int) -> String {
+        let text = PlaytimeParser.formatApprox(seconds: seconds)
+        return text.hasPrefix("≈ ") ? String(text.dropFirst(2)) : text
     }
 
     @ViewBuilder

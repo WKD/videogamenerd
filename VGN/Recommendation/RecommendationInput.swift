@@ -11,14 +11,18 @@ struct RankedGame: Hashable, Sendable {
     /// The importer-filled first-played year (v9), or nil when unknown — used ONLY by the
     /// backtest's optional cutoff (PLAN §7b "Helping me judge"); never a taste signal.
     var firstPlayedYear: Int?
+    /// The tier letter ("S", "A", …) — used ONLY by "Worth another try" to recognise a
+    /// direct link to an S/A game (PLAN §7b, wave 22); never a taste signal (the score is).
+    var tierLetter: String?
 
     init(id: GameID, igdbID: Int64? = nil, score: Double, traits: [GameTrait] = [],
-         firstPlayedYear: Int? = nil) {
+         firstPlayedYear: Int? = nil, tierLetter: String? = nil) {
         self.id = id
         self.igdbID = igdbID
         self.score = score
         self.traits = traits
         self.firstPlayedYear = firstPlayedYear
+        self.tierLetter = tierLetter
     }
 
     /// The IGDB ids listed in this game's `similar_games`.
@@ -68,6 +72,10 @@ struct Candidate: Hashable, Sendable {
     var holdsUp: HoldsUp?
     /// Importer-filled first-played date (v9), echoed to the card as "first played in 1991".
     var firstPlayedAt: Date?
+    /// Importer-filled last-played date (v9 — never typed), the "Play it again" gap test.
+    var lastPlayedAt: Date?
+    /// The game's own tier letter (only loaded for the replay pool — "you gave it S").
+    var tierLetter: String?
 
     init(
         id: GameID,
@@ -89,7 +97,9 @@ struct Candidate: Hashable, Sendable {
         ownedOnlyViaSubscription: Bool = false,
         isBatoceraFavourite: Bool = false,
         holdsUp: HoldsUp? = nil,
-        firstPlayedAt: Date? = nil
+        firstPlayedAt: Date? = nil,
+        lastPlayedAt: Date? = nil,
+        tierLetter: String? = nil
     ) {
         self.id = id
         self.igdbID = igdbID
@@ -111,6 +121,8 @@ struct Candidate: Hashable, Sendable {
         self.isBatoceraFavourite = isBatoceraFavourite
         self.holdsUp = holdsUp
         self.firstPlayedAt = firstPlayedAt
+        self.lastPlayedAt = lastPlayedAt
+        self.tierLetter = tierLetter
     }
 
     var similarIGDBIDs: [Int64] { traits.compactMap(\.similarGameID) }
@@ -119,20 +131,24 @@ struct Candidate: Hashable, Sendable {
     /// (`estimateSeconds`) and completionist (`completionistSeconds`) estimates (owner
     /// request 2026-09-19). The rushed estimate is never loaded, so a rushed-only game
     /// has neither and lands in the unknown-length lane.
-    func personalLength(style: PlayStyle) -> PersonalLength? {
-        PersonalLength.compute(normallyS: estimateSeconds, completelyS: completionistSeconds, style: style)
+    ///
+    /// `paceFactor` is the owner's personal pace factor (PLAN §7b "Scheduled 2026-09-25"):
+    /// the planning length is the advertised blend × factor.
+    func personalLength(style: PlayStyle, paceFactor: Double = 1.0) -> PersonalLength? {
+        PersonalLength.compute(normallyS: estimateSeconds, completelyS: completionistSeconds,
+                               style: style, paceFactor: paceFactor)
     }
 
     /// The full personal length before subtracting playtime (the me-vs-estimate bar).
-    func fullEstimate(style: PlayStyle) -> Int? {
-        personalLength(style: style)?.seconds
+    func fullEstimate(style: PlayStyle, paceFactor: Double = 1.0) -> Int? {
+        personalLength(style: style, paceFactor: paceFactor)?.seconds
     }
 
     /// The estimate the bracket is tested against: the personal length, minus the
     /// user's playtime when the game is already `playing` — or `toRevisit`, where I've
     /// already put hours in and only the rest remains (PLAN §7b remaining time).
-    func bracketEstimate(style: PlayStyle) -> Int? {
-        guard let full = fullEstimate(style: style) else { return nil }
+    func bracketEstimate(style: PlayStyle, paceFactor: Double = 1.0) -> Int? {
+        guard let full = fullEstimate(style: style, paceFactor: paceFactor) else { return nil }
         if (status == .playing || status == .toRevisit), let played = myPlaytimeSeconds {
             return max(0, full - played)
         }
@@ -148,6 +164,9 @@ enum RecCandidateStatus: Hashable, Sendable {
     case abandoned      // opt-in
     case toRevisit      // dropped but flagged "come back to it" — a candidate by default (PLAN §7b)
     case playedUnknown  // played, no status — excluded by default (toggle)
+    /// Finished or 100 % — **never** a regular candidate; only the "Play it again" pool
+    /// (``RecommendationInput/replayCandidates``) carries these (PLAN §7b, wave 22).
+    case finished
 }
 
 /// The "not this one" memory (PLAN §7b `rec_feedback`), as engine values.
@@ -186,6 +205,10 @@ struct RecommendationOptions: Hashable, Sendable {
     var maxAlternatives: Int
     /// Max entries in the unknown-length lane.
     var maxUnknownLength: Int
+    /// Max cards in the "Finish what you started" row (PLAN §7b: "~5").
+    var maxFinishRow: Int = 5
+    /// Max cards in the "Play it again" row.
+    var maxReplayRow: Int = 5
     /// Prefer games owned only via PS Plus (a small, backtest-neutral nudge that only
     /// reorders near-ties, PLAN §13.3 — the "Prioritise PS Plus games" fallback when no
     /// cancellation date is set). Off by default so the taste backtest stays neutral; the UI
@@ -227,6 +250,9 @@ struct RecommendationOptions: Hashable, Sendable {
 struct RecommendationInput: Sendable {
     var ranked: [RankedGame]
     var candidates: [Candidate]
+    /// The "Play it again" pool (PLAN §7b, wave 22): finished / 100 % games (status
+    /// ``RecCandidateStatus/finished``). Never mixed into the regular picks. Default empty.
+    var replayCandidates: [Candidate]
     var bracket: TimeBracket
     var feedback: RecFeedbackState
     var options: RecommendationOptions
@@ -235,6 +261,7 @@ struct RecommendationInput: Sendable {
     init(
         ranked: [RankedGame],
         candidates: [Candidate],
+        replayCandidates: [Candidate] = [],
         bracket: TimeBracket,
         feedback: RecFeedbackState = RecFeedbackState(),
         options: RecommendationOptions = RecommendationOptions(),
@@ -242,6 +269,7 @@ struct RecommendationInput: Sendable {
     ) {
         self.ranked = ranked
         self.candidates = candidates
+        self.replayCandidates = replayCandidates
         self.bracket = bracket
         self.feedback = feedback
         self.options = options

@@ -710,6 +710,45 @@ No schema change (v10's `favorite` / `promoted_game_id` / `dismissed_at` suffice
   shown only when an importer recorded a whole-collection time not routed to a single member (PSN
   only today; the label says "(PSN)").
 
+## 5k. Play Next: pace factor · Finish what you started · Play it again · Estimate Source (wave 22, W22-A) — as built
+- **The pace factor is measured, never stored [expected].** Recomputed from the library on every
+  relevant change (a deduplicated observation over finished games); only the manual override is a
+  preference. Samples need a play time *and* a main estimate; 100 % games are measured against the
+  completionist time (main when absent). Suspicious estimates (not HLTB, not dismissed) are left out.
+- **One factor for every length [watch].** Not per genre or per length band (the filed refinement —
+  long RPGs may drift more than short games). A 100 % game's ratio (vs completionist) and a finished
+  game's (vs main) are pooled into one median.
+- **The factor also scales the Playtime filter's unplayed fallback [expected].** That band uses the
+  personal length (the one shared SQL expression), so an unplayed game can move band with the factor;
+  played games band on their own play time as before.
+- **Stats window reads the override from the preference [watch].** In a sample / seeded run the
+  library uses in-memory pace preferences, so an override typed in Settings there does not reach an
+  open Stats window (same pre-existing limit as the play style). Live runs share the one preference.
+- **Settings ▸ General now edits the sidebar's own pace model [expected].** A pace / style change made
+  in Settings re-runs the grid and counts immediately (before it applied on the next reload). In the
+  test host the pane falls back to a standalone model.
+- **"Worth another try" top quartile includes the rotation jitter [expected].** The engine score is
+  the regular blend (jitter + picked penalty included), so a re-roll can move a borderline dropped
+  game in or out; a direct link to an S/A game qualifies it regardless.
+- **"Worth another try" needs a play time [expected].** An abandoned game with no play time (manual /
+  PSN / Batocera) has no "dropped after N h" and is not considered; it stays under "Include abandoned".
+  It is fitted on the full length (a restart), not the remainder.
+- **Almost there takes the game out of the regular picks [expected].** A Playing / To Revisit game past
+  70 % moves to "Finish what you started"; below 70 % it stays a regular candidate with its remaining time.
+- **Too Archaic never appears in the extra rows [expected]**, even with "Include too archaic" on.
+- **"Play it again" is owned games only [watch].** A finished game with no owned copy cannot be
+  replayed from the library, so it is not a candidate (and not counted in the undated footer). The
+  filed "Not interested for a year" retirement is not built — "Not this one" snoozes for the usual
+  3 weeks; "Never" works. No genre/keyword replay prior, no remaster detection.
+- **Replay order is tier then fit [expected].** S before A, then the usual time-fit term, jitter and
+  picked penalty; no taste re-scoring (the game is itself part of the taste profile).
+- **The replay footer only shows with cards [expected].** When every S/A Holds-Up game lacks a
+  last-played date, the whole row stays hidden (the footer never appears alone).
+- **Estimate Source "IGDB" includes untagged legacy rows [expected].** A stored time with no
+  `ttb_source` (or any value other than `hltb`) counts as IGDB; an `hltb`-tagged row with no time is None.
+- **Sample library [info].** The `-VGNSampleData` library has no play times or time estimates, so the
+  factor reads "finish 5 more games…", neither extra row shows, and Estimate Source ▸ None matches all 11.
+
 ## 6. Owner to glance at [owner]
 - `VGN/Resources/platforms.json` — 61 platforms; **slugs are permanent database keys**.
 - Tier palette and derived-score bands (`VGN/Ranking/DerivedScore.swift`) — constants.

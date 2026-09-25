@@ -22,6 +22,10 @@ struct GRDBLibraryDataSource: LibraryDataSource {
     }
 
     func sidebarCounts(pace: PlayPace, style: PlayStyle) -> AsyncStream<SidebarCounts> {
+        sidebarCounts(pace: pace, style: style, paceFactor: 1.0)
+    }
+
+    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: Double) -> AsyncStream<SidebarCounts> {
         // ONE observation: the existing scalar + per-platform aggregate
         // (`LibraryStore.fetchSidebarCounts`, unchanged) plus the pace-derived
         // "By Length" shelf counts over each game's personal length, composed here
@@ -31,7 +35,8 @@ struct GRDBLibraryDataSource: LibraryDataSource {
         let observation = ValueObservation
             .tracking { db -> SidebarCounts in
                 var counts = try LibraryStore.fetchSidebarCounts(db)
-                let lengths = try LibraryQuery.fetchLengthShelfCounts(db, bounds: bounds, style: style)
+                let lengths = try LibraryQuery.fetchLengthShelfCounts(
+                    db, bounds: bounds, style: style, paceFactor: paceFactor)
                 counts.lengthShelves = lengths.shelves
                 counts.unmeasured = lengths.unmeasured
                 counts.unlinked = try LibraryQuery.fetchUnlinkedCount(db)
@@ -52,6 +57,12 @@ struct GRDBLibraryDataSource: LibraryDataSource {
             }
             .values(in: store.dbReader)
         return Self.bridge(observation)
+    }
+
+    /// The live measured personal pace factor (PLAN §7b) — a separate, deduplicated
+    /// observation over the finished games (never part of the counts stream).
+    func paceFactorStream() -> AsyncStream<PaceFactor> {
+        Self.bridge(RecommendationStore(store.database).paceFactorObservation())
     }
 
     func platformsInUse() -> AsyncStream<[PlatformInfo]> {

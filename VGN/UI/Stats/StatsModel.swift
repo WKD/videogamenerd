@@ -19,6 +19,10 @@ final class StatsModel {
     /// same persisted preference the BY LENGTH shelves use, and re-read when it changes so
     /// the Stats window reacts like the shelves do (D4, owner request 2026-09-20).
     private let playStyleProvider: @MainActor () -> PlayStyle
+    /// The owner's manual pace-factor override (nil = use the factor measured from the
+    /// library, which the store computes in the same read). Re-read on each reload.
+    private let paceOverrideProvider: @MainActor () -> Double?
+    private var paceObserver: (any NSObjectProtocol)?
     private var liveTask: Task<Void, Never>?
     private var styleObserver: (any NSObjectProtocol)?
     /// Bumped per reload so an out-of-order finish never overwrites a newer one.
@@ -26,10 +30,13 @@ final class StatsModel {
 
     init(store: LibraryStatsStore, scope: StatsScope = .all,
          playStyleProvider: @escaping @MainActor () -> PlayStyle
-            = { UserDefaultsPlayPacePreferences().playStyle() }) {
+            = { UserDefaultsPlayPacePreferences().playStyle() },
+         paceOverrideProvider: @escaping @MainActor () -> Double?
+            = { UserDefaultsPlayPacePreferences().paceFactorOverride() }) {
         self.store = store
         self.scope = scope
         self.playStyleProvider = playStyleProvider
+        self.paceOverrideProvider = paceOverrideProvider
         self.report = .empty(scope: scope)
     }
 
@@ -47,6 +54,10 @@ final class StatsModel {
         if let styleObserver {
             NotificationCenter.default.removeObserver(styleObserver)
             self.styleObserver = nil
+        }
+        if let paceObserver {
+            NotificationCenter.default.removeObserver(paceObserver)
+            self.paceObserver = nil
         }
     }
 
@@ -67,7 +78,8 @@ final class StatsModel {
         let token = loadToken
         let scope = self.scope
         let style = playStyleProvider()
-        let fresh = try? await store.report(scope: scope, playStyle: style)
+        let override = paceOverrideProvider()
+        let fresh = try? await store.report(scope: scope, playStyle: style, paceFactorOverride: override)
         // Only apply if this is still the latest request and the scope is current.
         guard token == loadToken, let fresh, fresh.scope == self.scope else { return }
         report = fresh
@@ -86,6 +98,14 @@ final class StatsModel {
     /// Re-query when the owner changes their play style (the backlog estimate depends on
     /// it), mirroring how the BY LENGTH shelves react (D4).
     private func subscribeStyle() {
+        // The personal pace factor (PLAN §7b) moves the backlog estimate too.
+        if paceObserver == nil {
+            paceObserver = NotificationCenter.default.addObserver(
+                forName: .vgnPaceFactorDidChange, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in await self?.reload() }
+            }
+        }
         guard styleObserver == nil else { return }
         styleObserver = NotificationCenter.default.addObserver(
             forName: .vgnPlayStyleDidChange, object: nil, queue: .main

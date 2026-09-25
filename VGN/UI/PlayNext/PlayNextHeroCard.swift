@@ -276,7 +276,7 @@ struct PlayNextAlternativeCard: View {
                 Text(caption).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
             }
             if let estimate = suggestion.estimateSeconds {
-                Text(suggestion.status == .playing
+                Text(suggestion.status == .playing || suggestion.status == .toRevisit
                      ? "\(PlaytimeParser.formatApprox(seconds: estimate)) left"
                      : PlaytimeParser.formatApprox(seconds: estimate))
                     .font(.caption).foregroundStyle(.secondary)

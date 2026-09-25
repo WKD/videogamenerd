@@ -35,15 +35,16 @@ import GRDB
     // MARK: - Reason + remaining time
 
     @Test func toRevisitCarriesReasonAndRemainingTime() throws {
-        // 20 h game, 15 h already played → 5 h remaining, like a Playing game.
-        let candidate = Rec.candidate(100, status: .toRevisit, estimateHours: 20, playedHours: 15,
+        // 20 h game, 8 h already played → 12 h remaining, like a Playing game. (Under 70 % —
+        // past it the game moves to "Finish what you started", wave 22.)
+        let candidate = Rec.candidate(100, status: .toRevisit, estimateHours: 20, playedHours: 8,
                                       traits: [Rec.trait(.genre, "RPG")], title: "Revisit", playStatus: .toRevisit)
         let result = RecommendationEngine.recommend(
             RecommendationInput(ranked: profile(), candidates: [candidate], bracket: Rec.month()))
         let hero = try #require(result.hero)
 
         // Bracket estimate is the *remaining* time (full − played).
-        #expect(hero.estimateSeconds == Rec.hours(5))
+        #expect(hero.estimateSeconds == Rec.hours(12))
         #expect(hero.fullEstimateSeconds == Rec.hours(20))
         // The reasons include remaining-time AND the revisit reason.
         #expect(hero.reasons.contains { if case .remainingTime = $0 { true } else { false } })

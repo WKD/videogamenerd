@@ -16,6 +16,15 @@ protocol LibraryDataSource: Sendable {
     /// the shelf counts update.
     func sidebarCounts(pace: PlayPace, style: PlayStyle) -> AsyncStream<SidebarCounts>
 
+    /// Same, with the owner's **personal pace factor** multiplying each game's personal
+    /// length (PLAN §7b/§8). Defaults to the factor-less stream (preview / test sources).
+    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: Double) -> AsyncStream<SidebarCounts>
+
+    /// The live measured personal pace factor (PLAN §7b "Scheduled 2026-09-25"): re-yields
+    /// when a finished game's play time / estimate / status changes. Preview / test sources
+    /// report ``PaceFactor/unmeasured`` once.
+    func paceFactorStream() -> AsyncStream<PaceFactor>
+
     /// Platforms with ≥ 1 game, full `PlatformInfo` for grouping/labels.
     func platformsInUse() -> AsyncStream<[PlatformInfo]>
 
@@ -69,6 +78,10 @@ extension LibraryDataSource {
     func libraryStats() async -> LibraryStats { .empty }
     /// Preview / non-Vault sources report an empty Vault (both THE VAULT rows hide).
     func vaultSourceCounts() -> AsyncStream<VaultSourceCounts> { onceStream(VaultSourceCounts()) }
+    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: Double) -> AsyncStream<SidebarCounts> {
+        sidebarCounts(pace: pace, style: style)
+    }
+    func paceFactorStream() -> AsyncStream<PaceFactor> { onceStream(.unmeasured) }
 }
 
 /// Emits a single value then finishes — the shape a static/preview source uses.
@@ -161,6 +174,10 @@ enum LibraryFilterEvaluator {
         // values are not carried on the summary and stay SQL-only, so a selected
         // format leaves this facet unconstrained here (matches prior behaviour).
         if filter.includeNotOwned, filter.formats.isEmpty, game.owned {
+            return false
+        }
+        // Playtime ▸ Estimate Source (wave 22): OR within the kind, from the row's classified source.
+        if !filter.estimateSources.isEmpty, !filter.estimateSources.contains(game.estimateSource) {
             return false
         }
         // Explicit platform facet (independent of scope)

@@ -130,5 +130,29 @@ struct RecommendationWeights: Sendable, Hashable {
     /// **Too Archaic** one when the owner opts to include those. Same size as the bonus.
     var ofItsTimePenalty: Double = 0.04
 
+    // MARK: "Finish what you started" / "Play it again" (PLAN §7b, wave 22)
+
+    /// *Almost there*: a Playing / To Revisit game whose effective play time is at least this
+    /// fraction of its (pace-adjusted) personal length.
+    var almostThereFraction: Double = 0.70
+    /// The remaining time an *Almost there* game is fitted on never drops below this (30 min),
+    /// so a game already past its estimate still reads "about 30 min left" and fits an evening.
+    var remainingFloorSeconds: Int = 30 * 60
+    /// *Worth another try*: an abandoned game dropped before this fraction of its length…
+    var droppedEarlyFraction: Double = 0.25
+    /// …whose engine score is in the top quartile of every candidate fitting the bracket
+    /// (this quantile), or that is directly linked to one of ``lovedTierLetters``.
+    var worthAnotherTryQuantile: Double = 0.75
+    /// The tiers a "you loved it" direct link must point at (S/A).
+    var lovedTierLetters: Set<String> = ["S", "A"]
+    /// *Worth replaying*: only these tiers of a finished game.
+    var replayTierLetters: Set<String> = ["S", "A"]
+    /// *Worth replaying*: last played (importer date) at least this long ago — 3 years.
+    var replayMinGapSeconds: TimeInterval = 3 * 365.2425 * 24 * 3600
+    /// *Worth replaying* order: an S ranks above an A by this base score (then time fit,
+    /// rotation jitter, and the picked penalty — the regular shape, no taste re-scoring of a
+    /// game that is itself in the taste profile).
+    var replayTierScore: [String: Double] = ["S": 0.9, "A": 0.75]
+
     init() {}
 }

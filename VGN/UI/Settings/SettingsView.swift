@@ -29,6 +29,10 @@ final class SettingsModel {
     /// Batocera ROM-collection pane state (PLAN §15), injected once the app has built
     /// services. Nil in the test host / DB-failure path (the tab is omitted).
     var batoceraAccount: BatoceraSettingsModel?
+    /// The library's shared weekly-pace / play-style / pace-factor controller (the one the
+    /// sidebar "By Length" header edits), injected by the app. Nil in the test host, where
+    /// General falls back to a standalone model over the (isolated) preferences.
+    var paceModel: PlayPaceModel?
     /// Called after credentials are saved or cleared so the enrichment coordinator
     /// can resume / idle (`coordinator.credentialsDidChange()`).
     var onCredentialsChanged: () -> Void = {}
@@ -122,7 +126,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            GeneralTab()
+            GeneralTab(shared: model.paceModel)
                 .settingsPane()
                 .accessibilityIdentifier(A11yID.settingsTabGeneral)
                 .tabItem { Label("General", systemImage: "gearshape") }
@@ -269,9 +273,16 @@ struct IGDBAccountTab: View {
 }
 
 struct GeneralTab: View {
+    /// The library's shared pace controller when the app injected one (live wiring), else a
+    /// standalone model over the same persisted preferences (test host / previews).
+    private let shared: PlayPaceModel?
     /// The same weekly-play-pace store the sidebar "By Length" header edits, so both
     /// stay in sync (PLAN §8). Reloads on appear to pick up a change made there.
-    @State private var pace = PlayPaceModel(store: UserDefaultsPlayPacePreferences())
+    @State private var fallback = PlayPaceModel(store: UserDefaultsPlayPacePreferences())
+
+    init(shared: PlayPaceModel? = nil) { self.shared = shared }
+
+    private var pace: PlayPaceModel { shared ?? fallback }
 
     var body: some View {
         Form {
@@ -281,6 +292,15 @@ struct GeneralTab: View {
                 Text("Weekly play time")
             } footer: {
                 Text("Sets the hour ranges of the sidebar’s “By Length” shelves — the same control lives in the sidebar’s BY LENGTH header. A short game is one you can finish in an evening at this pace.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                PaceFactorRow(model: pace)
+            } header: {
+                Text("Your pace")
+            } footer: {
+                Text("Multiplies every advertised time when planning — the By Length shelves, Play Next, the Vault and “Backlog to beat”. The stored and displayed estimates never change.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
