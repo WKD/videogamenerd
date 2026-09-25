@@ -163,8 +163,8 @@ final class HLTBFindModel: Identifiable {
     }
 
     static func stopMessage(_ error: ImportError) -> String {
-        if case .rejected(let reject) = error {
-            return "\(reject.reason.message) VGN stopped and made no further requests."
+        if case .rejected = error {
+            return "\(HLTBBulkFetchModel.reason(from: error)). VGN stopped and made no further requests."
         }
         return "HowLongToBeat request stopped. VGN made no further requests."
     }

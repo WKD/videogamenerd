@@ -126,6 +126,31 @@ final class HLTBFetchPresenter {
 
     func dismissBulk() { bulk?.cancel(); bulk = nil }
 
+    // MARK: - Rejected-response log (wave 21 E)
+
+    /// How many HowLongToBeat rows the rejected-response log (`import_cache_rejects`)
+    /// holds — the "Clear rejected-response log (N)" button's N.
+    private(set) var rejectLogCount = 0
+
+    func reloadRejectLogCount() async {
+        rejectLogCount = (try? await ImportResponseCacheStore(store.database)
+            .rejectCount(source: HLTBSource.id)) ?? 0
+    }
+
+    /// The owner's explicit, confirmed action (the sheet asks first): delete HowLongToBeat's
+    /// rows from the rejected-response log in one transaction. Older excerpts may hold the
+    /// `/init` token, which embeds the owner's IP — they are never rewritten in the
+    /// background (PLAN §4 inv. 5), only removed here. The response cache is untouched.
+    func clearRejectLog() async {
+        let removed = (try? await ImportResponseCacheStore(store.database)
+            .clearRejects(source: HLTBSource.id)) ?? 0
+        await reloadRejectLogCount()
+        if removed > 0 {
+            library?.showBanner("Cleared \(removed) rejected HowLongToBeat response\(removed == 1 ? "" : "s").",
+                                kind: .info)
+        }
+    }
+
     // MARK: - Single game (inspector ▸ Fetch from HowLongToBeat)
 
     func fetchOne(gameID: Int64) { fetchOne(gameID: gameID, mode: .fillGaps) }
@@ -280,8 +305,8 @@ final class HLTBFetchPresenter {
     }
 
     static func stopMessage(_ error: ImportError) -> String {
-        if case .rejected(let reject) = error {
-            return "\(reject.reason.message) VGN stopped and made no further requests."
+        if case .rejected = error {
+            return "\(HLTBBulkFetchModel.reason(from: error)). VGN stopped and made no further requests."
         }
         return "HowLongToBeat request stopped."
     }
