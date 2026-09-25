@@ -4,6 +4,20 @@ Things machines can't judge (or that need the owner's data/eyes). Updated by the
 
 ## To verify by hand
 
+### UI smoke suite — what the machine now drives (wave 22, 2026-09-25)
+`scripts/uitests.sh` passes (22 + 1 intended skip) against the real app in sample mode, so these
+keyboard/focus paths are machine-checked and need no hand check any more: launch → sidebar lists →
+grid; ⌘F focuses search, typing narrows, esc clears, ↓/↩ open the inspector, ⇧S/⇧A/⇧B typed in the
+search field never re-tier; grid ⇧A / ⇧C (multi-select) / ⇧P and ⌘Z; filter chips appear / remove /
+Clear all; inspector played toggle + play-time field (valid and rejected input); Quick Add ⌘N opens
+focused, ⌘O/⌘P/⌘D flip their chips, Tab/↑↓ keep focus in the field, manual add keeps the palette open;
+Duel ←/→ answer + ⌘Z, arrows don't leak to the sidebar; Triage tier key advances + ←; Tier Board ⌥→;
+The Top ⌘E save panel cancels; Play Next brackets 1–4 + R (Ask Claude present, never pressed); Scan
+sheet opens with the usage notice and closes from its input state; Settings tabs + Photo Scan detection.
+Still by hand below: drag feel, the look of things, anything with the owner's real data or network.
+- [ ] **⌘F in your real library** (fixed wave 22 — it used to do nothing): from the sidebar or the grid,
+  ⌘F puts the caret in the toolbar search field; esc clears, a second esc leaves it.
+
 ### Wave 0 / M0
 - [x] `docs/shelf-truth-draft.json` — **owner-reviewed 2026-09-18.** Items per photo: 3683: 59 · 3684: 20 · 3685: 27 · 3686: 1 · 3687: 93. It is now the answer key for the M6 accuracy run.
   - Owner corrections applied: MGS V = *The Phantom Pain* (special vendor SteelBook); one Elden Ring (the second spine was an empty sleeve); PS5 *Death Stranding* is *Death Stranding 2*; *Deponia* is *Goodbye Deponia*; *Catherine* (PS3) added after *Darksiders* in 3684/3685; *Alice: Madness Returns* is Xbox 360; the *L.A. Noire* in 3684 is the Xbox 360 copy; IMG_3683 rebuilt (the draft had 30 of ~59 spines and two games that are not in that photo).

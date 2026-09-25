@@ -64,11 +64,13 @@ machine), then runs, then exports every attached window screenshot to
 `.build/uitests/<timestamp>/attachments/` and writes an `index.html` gallery —
 **look at the screenshots** after a run. `.build/` is git-ignored.
 
-### `--per-class` / `--per-test` (the frontmost-window workaround)
+### `--per-class` / `--per-test` (isolation; no longer required)
 
-On this macOS only the **first** test of an `xcodebuild` invocation gets a
-frontmost, queryable window (see "The remaining blocker" below), so every flow
-after the first in a single run is blocked. `--per-class` runs one
+Written as the workaround for the old "only the first test gets a window" blocker —
+which turned out to be saved-window-state restoration, fixed in wave 22 (see Run
+status — 2026-09-25). The **whole-suite run now passes in one invocation**; the
+per-class mode stays useful to isolate one class and to get one gallery per class.
+`--per-class` runs one
 `build-for-testing` up front, then **one `test-without-building` invocation per
 test class** so each class is the "first" test of its own run — each with its own
 `.xcresult` and screenshot gallery under `.build/uitests/<timestamp>/<Class>/`, a
@@ -92,6 +94,18 @@ Screenshots are always `app.windows.firstMatch.screenshot()` (the VGN window onl
 those capture the whole desktop, i.e. the owner's other windows. If the VGN window
 can't be resolved at that instant, `VGNUITestCase.attachWindowScreenshot` (and the
 Settings variant) attach **nothing** rather than fall back to a desktop capture.
+
+**XCTest's own captures are off (wave 22).** Xcode 26 records a full-screen **video**
+of every UI test by default and keeps automatic full-screen screenshots — i.e. the
+owner's whole desktop. The `VGN-UITests` scheme's Test action therefore sets
+`systemAttachmentLifetime = "keepNever"` and `preferredScreenCaptureFormat =
+"screenshots"` (no recordings), and `scripts/uitests.sh` passes
+`-collect-test-diagnostics never` (no ~100 MB log archive per failure). On a failure
+`VGNUITestCase.record(_:)` attaches the **windows' and dialogs'** accessibility tree
+as text instead (never `app.debugDescription`: its menu bar includes Apple ▸ Recent
+Items, i.e. the owner's recent file names). XCTest still keeps its own failure-triage
+text dumps (whole app tree, menu bar included) *inside* the local `.xcresult`; the
+export script deletes them from the exported gallery.
 
 ## The project wiring (for future agents — do not break)
 
@@ -190,6 +204,39 @@ Each app-side fix is a separate commit `Fix: … (found by UI test …)`.
 
 **Fixed**
 
+- **No window at all under XCUITest — saved-state restoration** (wave 22 root cause of
+  "Expected main window / grid to exist" in 9 classes, and of the old "only the first
+  test gets a window" blocker). XCUITest launches the app *without* making it
+  frontmost; AppKit then restores the persisted main window
+  (`hasPersistentStateToRestore=1`), SwiftUI's `AppWindowsController` returns
+  `window=0x0`, and because a restoration ran, SwiftUI opens no default `WindowGroup`
+  window: menu bar, no window, no AX `Window`. Reproduced outside XCUITest with
+  `open -g` (no window) vs `open -g … -ApplePersistenceIgnoreState YES` (window).
+  Fix (test-side): `launchSample` passes `-ApplePersistenceIgnoreState YES`. The same
+  thing can happen to a real background launch — see "Open" below.
+- **Grid cell lost its state value once it had a tier chip** (found by
+  `GridKeyTests`). `TierChip`'s `appKitTooltip` overlay is an `NSView`; inside the
+  cell's `.accessibilityElement(children: .combine)` it turned the combined element
+  into `AXUnknown` with **no** `AXValue`, so every tiered cell read nothing ("Tier A,
+  Physical, Played" gone for XCUITest *and* VoiceOver). Fix: the tooltip overlay is
+  `accessibilityHidden` and its `TooltipPassthroughView` is not an accessibility
+  element (the text is still the view's hint; the AppKit tooltip is unchanged).
+- **⌘F / View ▸ Find never focused the search field** (found by `SearchFlowTests`).
+  `RootView` owned the `@FocusState` and passed it to the field hosted in the window
+  toolbar; writing it never moved focus there — typed text went to the sidebar.
+  Fix: `LibrarySearchField` owns its focus, takes `focusRequests` (the vm's ⌘F
+  counter) and reports changes via `onFocusChange`; a click-through, AX-hidden
+  `SearchFieldFocusAnchor` also makes the field's `NSTextField` first responder,
+  which is what actually works in the toolbar. esc / clear behave as before.
+- **Identifier on a plain container overrode its children's identifiers** (found by
+  `ScanSheetTests`, `FilterChipsTests`). `.accessibilityIdentifier` on a non-element
+  `Group`/stack is pushed down onto every child, so in the scan sheet the usage notice,
+  Cancel, "Scan 0 Photos"… all read `scan.sheet`. Fix: `.accessibilityElement(children:
+  .contain)` before the identifier on `PhotoScanView` and `FilterChipsBar`.
+- **Sample mode could not show a Play Next pick** (found by `PlayNextTests`): no sample
+  game had a time-to-beat, so every candidate fell in the unknown-length lane and the
+  page showed its empty state. `SampleLibrarySeeder` now writes rough `igdb` times for
+  the owned backlog (Disco Elysium, Silksong, MGS4) through `updateMetadata`.
 - **UI-test bundle failed to load — code-signing / library validation** (found on
   the first real run). The `VGNUITests.xctest` bundle would not `dlopen` into the
   runner: *"code signature … not valid for use in process: mapping process and
@@ -236,7 +283,59 @@ Each app-side fix is a separate commit `Fix: … (found by UI test …)`.
   segmented `Picker`, so there are no per-bracket elements. The flow switches
   brackets with the `1`–`4` keys instead.
 
-### Run status — 2026-09-20 (wave 18, `--per-class` attempt) — BLOCKED at init
+### Run status — 2026-09-25 (wave 22) — ALL GREEN, whole suite in one run
+
+Owner away; run by the W22-B lane, one class at a time (`--per-class <Class>`, a `pgrep
+-x VGN` check before each), then the whole suite once. Every launch used
+`-VGNSampleData YES` (verified in the launched process's arguments).
+
+**Why the 2026-09-25 02:23 orchestrator run failed everywhere:** every
+"App UI hierarchy" dump in its `.xcresult`s shows only `MenuBar` + `TouchBar` under
+the application — **no window at all** (Window menu: Minimize/Zoom/Bring All to Front
+disabled). The app's unified log shows AppKit restoring saved state and SwiftUI's
+restorer returning `window=0x0`, then no default window (see Fixed ▸ "No window at
+all"). The three "PASS" classes had only skipped for the same reason.
+
+| Class | 02:23 run (main `d17e6a6`) | After (wave 22) |
+|---|---|---|
+| DuelFlowTests (2) | "PASS" = 2 skips | **2 pass** |
+| FilterChipsTests (1) | FAIL (no grid) | **pass** (menu item pick scoped to its pop-up) |
+| GridKeyTests (3) | FAIL ×3 (no grid) | **3 pass** (⇧-keys; played game for tiers; cell value fix) |
+| InspectorEditTests (3) | FAIL ×3 (no grid) | **3 pass** |
+| LaunchSmokeTests (1) | FAIL (no window) | **pass** |
+| PlayNextTests (1) | "PASS" = skip | **pass**, hero pick asserted (sample estimates) |
+| QuickAddFlowTests (3) | FAIL ×3 (no grid) | **3 pass** (format = selected segment) |
+| RankingViewsTests (3) | FAIL ×2 (no window) + skip | **2 pass + 1 intended skip** (drag) |
+| ScanSheetTests (1) | FAIL (no grid) | **pass** (container identifier fix) |
+| SearchFlowTests (3) | FAIL ×3 (no grid) | **3 pass** (⌘F focus fix; polled narrowing) |
+| SettingsTests (1) | FAIL (no grid) | **pass** (tab "IGDB", matched by title) |
+| TriageFlowTests (1) | "PASS" = skip | **pass** (opens Triage after the seed; empty = fail) |
+
+Whole suite, one `xcodebuild` (`scripts/uitests.sh`): **23 tests, 22 pass, 1 intended
+skip, 0 failures, ≈ 3 min.** The "later tests stay behind the runner" limitation is gone.
+
+**Test-side updates for waves 7–22** (stale expectations, not app bugs): grid action
+keys are ⇧-letters; only played games take a tier (Broken Sword instead of the unplayed
+Disco Elysium); Quick Add's format is a 3-segment control; the Settings account tab is
+"IGDB"; The Top's save panel has a Touch Bar "Cancel" mirror (query scoped to the
+`save-panel` dialog); the search narrows asynchronously (poll); the filter menu's first
+item must be read from the pop-up, not `app.menuItems` (menu bar first → 45 s stall).
+
+**Open (app, written up — not fixed here):**
+- *Background launch shows no window.* Steps: quit VGN with its window open; launch it
+  without activating (`open -g "Video Game Nerd.app"`, a login item, a script). Expected:
+  the library window. Actual: menu bar only, no window (restoration yields nil; SwiftUI
+  skips the default window). Clicking the Dock icon/reopen brings one. Low impact for a
+  normal Finder/Dock launch (that one activates and gets a window).
+- *Play Next hides the unknown-length lane behind "Nothing to play here yet".* Steps: a
+  library whose owned backlog has no time-to-beat (sample mode before this wave, a fresh
+  import before enrichment). Expected: the unknown-length games listed. Actual:
+  `PlayNextResult.isEmpty` ignores `unknownLength`, so the page says "There are no owned,
+  unfinished games" although there are.
+- *Triage snapshots its queue on appear* and does not refresh while shown (a game marked
+  played elsewhere, or data landing just after, appears only when Triage is re-opened).
+
+### Run status — 2026-09-20 (wave 18, `--per-class` attempt) — BLOCKED at init (superseded)
 
 `--per-class` was attempted (owner away, authorised window). It **could not be
 evaluated** — the runner never reached any flow. `build-for-testing VGN-UITests`
@@ -266,7 +365,7 @@ below — that remains untested. **Not run: all 12 classes** (Duel, FilterChips,
 InspectorEdit, LaunchSmoke, PlayNext, QuickAddFlow, RankingViews, ScanSheet, SearchFlow,
 Settings, TriageFlow).
 
-### Run status — 2026-09-19 (full run ≈ 5m 20s, 23 tests)
+### Run status — 2026-09-19 (full run ≈ 5m 20s, 23 tests) (superseded — see 2026-09-25)
 
 The suite builds, signs, loads and **executes** against the real app (Accessibility/
 Automation are granted here — the runner drives the session). The quiescence blocker
