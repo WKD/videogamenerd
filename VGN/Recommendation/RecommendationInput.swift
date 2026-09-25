@@ -133,21 +133,22 @@ struct Candidate: Hashable, Sendable {
     /// has neither and lands in the unknown-length lane.
     ///
     /// `paceFactor` is the owner's personal pace factor (PLAN §7b "Scheduled 2026-09-25"):
-    /// the planning length is the advertised blend × factor.
-    func personalLength(style: PlayStyle, paceFactor: Double = 1.0) -> PersonalLength? {
+    /// the planning length is the advertised blend × factor — the candidate's own factor, resolved
+    /// from its genre traits (PLAN §7b "Per-genre pace", ``PaceProfile/factor(traits:)``).
+    func personalLength(style: PlayStyle, paceFactor: PaceProfile = .neutral) -> PersonalLength? {
         PersonalLength.compute(normallyS: estimateSeconds, completelyS: completionistSeconds,
-                               style: style, paceFactor: paceFactor)
+                               style: style, paceFactor: paceFactor.factor(traits: traits))
     }
 
     /// The full personal length before subtracting playtime (the me-vs-estimate bar).
-    func fullEstimate(style: PlayStyle, paceFactor: Double = 1.0) -> Int? {
+    func fullEstimate(style: PlayStyle, paceFactor: PaceProfile = .neutral) -> Int? {
         personalLength(style: style, paceFactor: paceFactor)?.seconds
     }
 
     /// The estimate the bracket is tested against: the personal length, minus the
     /// user's playtime when the game is already `playing` — or `toRevisit`, where I've
     /// already put hours in and only the rest remains (PLAN §7b remaining time).
-    func bracketEstimate(style: PlayStyle, paceFactor: Double = 1.0) -> Int? {
+    func bracketEstimate(style: PlayStyle, paceFactor: PaceProfile = .neutral) -> Int? {
         guard let full = fullEstimate(style: style, paceFactor: paceFactor) else { return nil }
         if (status == .playing || status == .toRevisit), let played = myPlaytimeSeconds {
             return max(0, full - played)

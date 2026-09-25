@@ -176,7 +176,7 @@ enum LibraryQuery {
     // MARK: - Scope
 
     private static func appendScope(
-        _ scope: SidebarSelection, bounds: LengthBounds, style: PlayStyle, paceFactor: Double,
+        _ scope: SidebarSelection, bounds: LengthBounds, style: PlayStyle, paceFactor: PaceProfile,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         switch scope {
@@ -233,7 +233,7 @@ enum LibraryQuery {
     /// fall in the shelf's `[lower, upper)` seconds window (bounds derived from the
     /// pace; length derived from the play style).
     private static func appendLengthScope(
-        _ shelf: LengthShelf, bounds: LengthBounds, style: PlayStyle, paceFactor: Double,
+        _ shelf: LengthShelf, bounds: LengthBounds, style: PlayStyle, paceFactor: PaceProfile,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         let expr = lengthEstimateExpr(style: style, paceFactor: paceFactor)
@@ -418,10 +418,14 @@ enum LibraryQuery {
     /// text from the user) — so every consumer (shelves + counts, Unmeasured, Length sort,
     /// Playtime filter fallback, Stats "Backlog to beat") shares one definition. A factor never
     /// turns a measured game into an unmeasured one (NULL × f is NULL, a length × f is a length).
+    ///
+    /// **Per-genre pace** (PLAN §7b): the factor is per game — ``paceFactorSQL(_:)``, the mean of
+    /// the game's qualifying genres' factors, else the global one (a plain literal when the
+    /// profile is uniform, e.g. under the manual override).
     static func lengthEstimateExpr(style: PlayStyle, r: Double = PlayStyle.sidesRatio,
-                                   paceFactor: Double = 1.0) -> String {
+                                   paceFactor: PaceProfile = .neutral) -> String {
         let t = sqlLiteral(style.t)
-        let f = sqlLiteral(paceFactor)
+        let f = paceFactorSQL(paceFactor)
         let rl = sqlLiteral(r)
         let ratio = sqlLiteral(EstimateSanity.completionistRatio)
         let m = effectiveMainSQL
@@ -446,6 +450,21 @@ enum LibraryQuery {
             + " WHEN g.ttb_completely_s IS NOT NULL"
             + " THEN g.ttb_completely_s * (1 + \(t) * (\(rl) - 1)) / \(rl)"
             + " ELSE NULL END) * \(f)) AS INTEGER)"
+    }
+
+    /// A game's (`g`) **pace factor** in SQL (PLAN §7b "Per-genre pace") — the SQL mirror of
+    /// ``PaceProfile/factor(genreNames:)``: the mean of the game's qualifying genres' factors,
+    /// else the global factor. A uniform profile is just the global literal (no subquery). The
+    /// genre table is bounded (only genres with ≥ 10 plausible samples) and inlined as
+    /// `CASE genre_id WHEN … THEN <factor>` literals — app-computed numbers, never user text;
+    /// factors are quantized to 1/1024 so `AVG` equals the Swift mean bit-for-bit.
+    static func paceFactorSQL(_ profile: PaceProfile) -> String {
+        let global = sqlLiteral(profile.global)
+        guard !profile.genres.isEmpty else { return global }
+        let whens = profile.genres.map { "WHEN \($0.id) THEN \(sqlLiteral($0.factor))" }.joined(separator: " ")
+        let ids = profile.genres.map { String($0.id) }.joined(separator: ",")
+        return "COALESCE((SELECT AVG(CASE gpf.genre_id \(whens) END) FROM game_genres gpf"
+            + " WHERE gpf.game_id = g.id AND gpf.genre_id IN (\(ids))), \(global))"
     }
 
     /// A game's **effective main-story time** in SQL (wave 21 D1 read rule): the stored
@@ -518,7 +537,7 @@ enum LibraryQuery {
     /// expression `IS NULL`) means exactly "no time info to fetch" (an IGDB rushed-only game
     /// counts as No Estimate, since rushed is never used for length — but an HLTB row whose
     /// only time is the Main Story in the rushed slot is measured, wave 21 D1).
-    static func playtimeBucketExpr(style: PlayStyle, paceFactor: Double = 1.0) -> String {
+    static func playtimeBucketExpr(style: PlayStyle, paceFactor: PaceProfile = .neutral) -> String {
         "COALESCE(\(effectivePlaytimeSQL()), \(lengthEstimateExpr(style: style, paceFactor: paceFactor)))"
     }
 
@@ -528,7 +547,7 @@ enum LibraryQuery {
     /// changing the pace or style only re-runs this query. Personal length only — see
     /// ``lengthEstimateExpr(style:r:)``.
     static func lengthShelfCountsSQL(
-        bounds: LengthBounds, style: PlayStyle, paceFactor: Double = 1.0
+        bounds: LengthBounds, style: PlayStyle, paceFactor: PaceProfile = .neutral
     ) -> (sql: String, arguments: StatementArguments) {
         var cols: [String] = []
         var args: [DatabaseValueConvertible] = []
@@ -540,9 +559,13 @@ enum LibraryQuery {
             cols.append("COALESCE(SUM(\(conds.joined(separator: " AND "))), 0) AS \(shelf.rawValue)")
         }
         cols.append("COALESCE(SUM(est IS NULL), 0) AS unmeasured")
+        // MATERIALIZED: the personal length is computed once per game (with a per-genre pace
+        // it holds a per-row subquery) instead of being flattened into each of the six SUMs.
         let sql = """
+            WITH lengths AS MATERIALIZED (
+                SELECT \(lengthEstimateExpr(style: style, paceFactor: paceFactor)) AS est FROM games g)
             SELECT \(cols.joined(separator: ",\n                   "))
-            FROM (SELECT \(lengthEstimateExpr(style: style, paceFactor: paceFactor)) AS est FROM games g)
+            FROM lengths
             """
         return (sql, StatementArguments(args))
     }
@@ -550,7 +573,7 @@ enum LibraryQuery {
     /// Fetch the per-shelf + "Unmeasured" counts. Composed into the single sidebar
     /// observation alongside the scalar/per-platform counts (never a second one).
     static func fetchLengthShelfCounts(
-        _ db: Database, bounds: LengthBounds, style: PlayStyle, paceFactor: Double = 1.0
+        _ db: Database, bounds: LengthBounds, style: PlayStyle, paceFactor: PaceProfile = .neutral
     ) throws -> (shelves: [LengthShelf: Int], unmeasured: Int) {
         let (sql, arguments) = lengthShelfCountsSQL(bounds: bounds, style: style, paceFactor: paceFactor)
         let row = try Row.fetchOne(db, sql: sql, arguments: arguments)!
@@ -645,7 +668,7 @@ enum LibraryQuery {
     /// (no effective playtime and no IGDB estimate of any kind). Buckets are emitted
     /// in canonical (ascending) order so the SQL is deterministic.
     private static func appendPlaytimeFacet(
-        _ buckets: Set<PlaytimeBucket>, includeNoEstimate: Bool, style: PlayStyle, paceFactor: Double,
+        _ buckets: Set<PlaytimeBucket>, includeNoEstimate: Bool, style: PlayStyle, paceFactor: PaceProfile,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         guard !buckets.isEmpty || includeNoEstimate else { return }

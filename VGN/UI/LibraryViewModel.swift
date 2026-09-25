@@ -326,7 +326,7 @@ final class LibraryViewModel {
     /// Adopt a new personal pace factor (a fresh measurement or an override edit, PLAN §7b
     /// "Scheduled 2026-09-25"): like a style change — one grid restart, one counts
     /// re-subscribe — because every personal length moves with it.
-    func applyPaceFactor(_ factor: Double) {
+    func applyPaceFactor(_ factor: PaceProfile) {
         guard factor != filter.paceFactor else { return }
         var f = filter
         f.paceFactor = factor

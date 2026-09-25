@@ -43,7 +43,7 @@ enum DiscoverSecondOpinion {
         let style: PlayStyle = (bracket?.completionist ?? false) ? .completionist : playStyle
         guard let personal = PersonalLength.compute(
             normallyS: inputs.main, completelyS: inputs.completionist, style: style,
-            paceFactor: bracket?.paceFactor ?? 1.0) else { return nil }
+            paceFactor: (bracket?.paceFactor ?? .neutral).factor(traits: entry.traits)) else { return nil }
         return (Double(personal.seconds) / 360).rounded() / 10
     }
 

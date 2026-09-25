@@ -1,7 +1,9 @@
 import SwiftUI
 
 /// Settings ▸ General ▸ **Your pace** (PLAN §7b "Scheduled 2026-09-25"): the measured personal
-/// pace factor with the number of finished games it rests on, and a manual override — a
+/// pace factor with the number of finished games it rests on (and how many were set aside as
+/// incomplete), the per-genre factors with their sample counts (PLAN §7b "Per-genre pace"), and a
+/// manual override — a
 /// 0.8–2.0 stepper with "Use measured" to go back. Every write goes through the shared
 /// ``PlayPaceModel`` (so the shelves, Play Next and Stats re-plan once); nothing is written
 /// from `body`.
@@ -14,6 +16,15 @@ struct PaceFactorRow: View {
                 .font(.callout)
                 .lineLimit(3)
                 .accessibilityIdentifier("settings.paceFactor.summary")
+            if let genres = model.genrePaceSummary {
+                // Bounded, wrapping inside the Settings pane (not the main window's detail column).
+                Text(genres)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("settings.paceFactor.genres")
+            }
             HStack(spacing: 12) {
                 Toggle("Set by hand", isOn: Binding(
                     get: { model.paceOverride != nil },

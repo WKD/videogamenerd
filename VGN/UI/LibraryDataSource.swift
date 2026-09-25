@@ -18,7 +18,7 @@ protocol LibraryDataSource: Sendable {
 
     /// Same, with the owner's **personal pace factor** multiplying each game's personal
     /// length (PLAN §7b/§8). Defaults to the factor-less stream (preview / test sources).
-    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: Double) -> AsyncStream<SidebarCounts>
+    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: PaceProfile) -> AsyncStream<SidebarCounts>
 
     /// The live measured personal pace factor (PLAN §7b "Scheduled 2026-09-25"): re-yields
     /// when a finished game's play time / estimate / status changes. Preview / test sources
@@ -78,7 +78,7 @@ extension LibraryDataSource {
     func libraryStats() async -> LibraryStats { .empty }
     /// Preview / non-Vault sources report an empty Vault (both THE VAULT rows hide).
     func vaultSourceCounts() -> AsyncStream<VaultSourceCounts> { onceStream(VaultSourceCounts()) }
-    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: Double) -> AsyncStream<SidebarCounts> {
+    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: PaceProfile) -> AsyncStream<SidebarCounts> {
         sidebarCounts(pace: pace, style: style)
     }
     func paceFactorStream() -> AsyncStream<PaceFactor> { onceStream(.unmeasured) }

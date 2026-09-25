@@ -452,6 +452,7 @@ private struct SingleGameInspector: View {
                 sourceLabel: Self.sourceLabel(detail.ttbSource), showEstimates: hasAverages,
                 sourceIsHLTB: detail.ttbSource == HLTBSource.id,
                 playStyle: vm.paceModel.style, paceFactor: vm.paceModel.paceFactor,
+                genres: detail.genres,
                 estimateDismissed: hltbFetch?.isEstimateDismissed(detail.id) ?? false)
             estimateWarning
             if hasAverages {
@@ -805,9 +806,12 @@ struct PlaytimeEstimatesTable: View {
     /// Main-Story-only read rule for the Main row (``EstimateSanity/effectiveMain``).
     var sourceIsHLTB: Bool = false
     /// The owner's play style + personal pace factor (PLAN §7b "Scheduled 2026-09-25"): when the
-    /// factor is not 1.0 the table adds one line "≈ 38 h for you · 30 h advertised".
+    /// game's factor is not 1.0 the table adds one line naming its basis — "≈ 28 h for you ·
+    /// point-and-click pace 2.8×" or "· your pace 1.8×" (PLAN §7b "Per-genre pace").
     var playStyle: PlayStyle = .default
-    var paceFactor: Double = 1.0
+    var paceFactor: PaceProfile = .neutral
+    /// The game's genre names (resolve its per-genre factor).
+    var genres: [String] = []
     /// "Estimate Looks Right" was chosen (the suspicious-completionist fallback is then off).
     var estimateDismissed: Bool = false
 
@@ -850,14 +854,14 @@ struct PlaytimeEstimatesTable: View {
             if showEstimates, let forYou = Self.forYouLine(
                 rushed: rushedS, main: mainS, completionist: completionistS,
                 sourceIsHLTB: sourceIsHLTB, dismissed: estimateDismissed,
-                style: playStyle, paceFactor: paceFactor) {
+                style: playStyle, paceFactor: paceFactor, genres: genres) {
                 // One bounded line (fits the 300 pt inspector — `InspectorLayoutTests`).
                 Text(forYou)
                     .font(.caption).foregroundStyle(.secondary)
                     .monospacedDigit()
                     .lineLimit(1).minimumScaleFactor(0.85)
                     .accessibilityIdentifier("inspector.playtime.forYou")
-                    .appKitTooltip("Your personal length at your play style × your pace factor (\(PaceFactor.text(paceFactor))) — what the By Length shelves and Play Next plan with. The estimates above are unchanged.")
+                    .appKitTooltip("Your personal length at your play style × your pace factor for this game (\(PaceFactor.text(paceFactor.factor(genreNames: genres)))) — what the By Length shelves and Play Next plan with. The estimates above are unchanged.")
             }
             if showEstimates, let sourceLabel {
                 Text("Source: \(sourceLabel)").font(.caption2).foregroundStyle(.tertiary)
@@ -875,28 +879,35 @@ struct PlaytimeEstimatesTable: View {
         s.map { PlaytimeParser.formatApprox(seconds: $0) } ?? "—"
     }
 
-    /// "≈ 38 h for you · 30 h advertised" — the personal length at the owner's play style with
-    /// and without the pace factor (PLAN §7b "Scheduled 2026-09-25"). nil when the factor is
-    /// 1.0 (nothing to add) or the game has no personal length. Pure (tested).
+    /// "≈ 28 h for you · point-and-click pace 2.8×" — the personal length at the owner's play
+    /// style × this game's pace factor, naming what the factor rests on (PLAN §7b "Per-genre
+    /// pace"): one qualifying genre, several ("adventure + puzzle pace 2.2×"), or the global
+    /// factor ("your pace 1.8×" — also every game under the manual override). nil when the game's
+    /// factor is 1.0 (nothing to add) or it has no personal length. Pure (tested).
     static func forYouLine(rushed: Int?, main: Int?, completionist: Int?,
                            sourceIsHLTB: Bool, dismissed: Bool,
-                           style: PlayStyle, paceFactor: Double) -> String? {
-        guard paceFactor != 1.0 else { return nil }
+                           style: PlayStyle, paceFactor: PaceProfile, genres: [String] = []) -> String? {
+        let factor = paceFactor.factor(genreNames: genres)
+        guard factor != 1.0 else { return nil }
         let inputs = EstimateSanity.lengthInputs(rushed: rushed, main: main, completionist: completionist,
                                                  sourceIsHLTB: sourceIsHLTB, dismissed: dismissed)
-        guard let advertised = PersonalLength.compute(normallyS: inputs.main, completelyS: inputs.completionist,
-                                                      style: style),
-              let forYou = PersonalLength.compute(normallyS: inputs.main, completelyS: inputs.completionist,
-                                                  style: style, paceFactor: paceFactor)
+        guard let forYou = PersonalLength.compute(normallyS: inputs.main, completelyS: inputs.completionist,
+                                                  style: style, paceFactor: factor)
         else { return nil }
         return "\(PlaytimeParser.formatApprox(seconds: forYou.seconds)) for you · "
-            + "\(Self.plainHours(advertised.seconds)) advertised"
+            + "\(basisLabel(paceFactor.basis(genreNames: genres))) \(PaceFactor.text(factor))"
     }
 
-    /// "30 h" (no "≈", the line already leads with one).
-    private static func plainHours(_ seconds: Int) -> String {
-        let text = PlaytimeParser.formatApprox(seconds: seconds)
-        return text.hasPrefix("≈ ") ? String(text.dropFirst(2)) : text
+    /// "point-and-click pace", "adventure + puzzle pace", "your pace" — kept short so the line
+    /// fits the 300 pt inspector (a long genre mix reads "genre mix pace").
+    static func basisLabel(_ basis: PaceProfile.Basis) -> String {
+        switch basis {
+        case .global: return "your pace"
+        case .genre(let name): return "\(PaceFactor.genreLabel(name)) pace"
+        case .genres(let names):
+            let joined = names.map(PaceFactor.genreLabel).joined(separator: " + ")
+            return joined.count <= 24 ? "\(joined) pace" : "genre mix pace"
+        }
     }
 
     @ViewBuilder

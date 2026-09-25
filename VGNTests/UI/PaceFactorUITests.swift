@@ -10,14 +10,14 @@ private final class PaceSpyDataSource: LibraryDataSource, @unchecked Sendable {
     let base: PreviewLibraryDataSource
     let measured: PaceFactor
     private let lock = NSLock()
-    private var _factors: [Double] = []
-    var countFactors: [Double] { lock.withLock { _factors } }
+    private var _factors: [PaceProfile] = []
+    var countFactors: [PaceProfile] { lock.withLock { _factors } }
     init(_ base: PreviewLibraryDataSource, measured: PaceFactor) { self.base = base; self.measured = measured }
 
     func sidebarCounts(pace: PlayPace, style: PlayStyle) -> AsyncStream<SidebarCounts> {
         base.sidebarCounts(pace: pace, style: style)
     }
-    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: Double) -> AsyncStream<SidebarCounts> {
+    func sidebarCounts(pace: PlayPace, style: PlayStyle, paceFactor: PaceProfile) -> AsyncStream<SidebarCounts> {
         lock.withLock { _factors.append(paceFactor) }
         return base.sidebarCounts(pace: pace, style: style)
     }
@@ -83,10 +83,10 @@ struct PaceFactorUITests {
 
     @Test func forYouLineText() {
         let h = 3600
-        // 30 h main, story first, 1.27× → "≈ 38 h for you · 30 h advertised".
+        // 30 h main, story first, 1.27× (uniform) → "≈ 38 h for you · your pace 1.3×".
         #expect(PlaytimeEstimatesTable.forYouLine(
             rushed: nil, main: 30 * h, completionist: nil, sourceIsHLTB: false, dismissed: false,
-            style: .storyFirst, paceFactor: 1.27) == "≈ 38 h for you · 30 h advertised")
+            style: .storyFirst, paceFactor: 1.27) == "≈ 38 h for you · your pace 1.3×")
         // Factor 1.0 → no line; no estimate → no line.
         #expect(PlaytimeEstimatesTable.forYouLine(
             rushed: nil, main: 30 * h, completionist: nil, sourceIsHLTB: false, dismissed: false,
@@ -97,16 +97,41 @@ struct PaceFactorUITests {
         // It follows the play style (30 / 90 at lots of side quests = 60 h advertised).
         #expect(PlaytimeEstimatesTable.forYouLine(
             rushed: nil, main: 30 * h, completionist: 90 * h, sourceIsHLTB: false, dismissed: false,
-            style: .lotsOfSideQuests, paceFactor: 1.5) == "≈ 90 h for you · 60 h advertised")
+            style: .lotsOfSideQuests, paceFactor: 1.5) == "≈ 90 h for you · your pace 1.5×")
+    }
+
+    @Test func forYouLineNamesTheGenreBasis() {
+        let h = 3600
+        let profile = PaceProfile(global: 1.8, genres: [
+            .init(id: 1, name: "Point-and-click", factor: PaceProfile.quantize(2.78), sampleCount: 32),
+            .init(id: 2, name: "Puzzle", factor: PaceProfile.quantize(2.41), sampleCount: 58),
+            .init(id: 3, name: "Role-playing (RPG)", factor: PaceProfile.quantize(1.6), sampleCount: 25),
+        ])
+        func line(_ genres: [String]) -> String? {
+            PlaytimeEstimatesTable.forYouLine(
+                rushed: nil, main: 10 * h, completionist: nil, sourceIsHLTB: false, dismissed: false,
+                style: .storyFirst, paceFactor: profile, genres: genres)
+        }
+        #expect(line(["Point-and-click", "Adventure"]) == "≈ 28 h for you · point-and-click pace 2.8×")
+        #expect(line(["Role-playing (RPG)"]) == "≈ 16 h for you · RPG pace 1.6×")
+        #expect(line(["Adventure"]) == "≈ 18 h for you · your pace 1.8×")
+        #expect(line([]) == "≈ 18 h for you · your pace 1.8×")
+        // Two qualifying genres: their mean, both named.
+        #expect(line(["Puzzle", "Point-and-click"]) == "≈ 26 h for you · point-and-click + puzzle pace 2.6×")
+        // The override replaces everything: "your pace".
+        #expect(PlaytimeEstimatesTable.forYouLine(
+            rushed: nil, main: 10 * h, completionist: nil, sourceIsHLTB: false, dismissed: false,
+            style: .storyFirst, paceFactor: .uniform(1.5), genres: ["Point-and-click"])
+                == "≈ 15 h for you · your pace 1.5×")
     }
 
     @Test func forYouLineFitsTheMinimumColumn() {
-        func height(_ factor: Double, width: CGFloat) -> CGFloat {
+        func height(_ factor: PaceProfile, genres: [String] = [], width: CGFloat) -> CGFloat {
             let table = PlaytimeEstimatesTable(
                 psnSeconds: 2310 * 3600, manualWins: false,
                 mainS: 620 * 3600, completionistS: 1240 * 3600, rushedS: 410 * 3600,
                 sourceLabel: "HowLongToBeat", showEstimates: true,
-                playStyle: .lotsOfSideQuests, paceFactor: factor)
+                playStyle: .lotsOfSideQuests, paceFactor: factor, genres: genres)
             let host = NSHostingView(rootView: table.frame(width: width))
             host.layoutSubtreeIfNeeded()
             return host.fittingSize.height
@@ -115,5 +140,11 @@ struct PaceFactorUITests {
         let wide = height(1.9, width: 440 - 32)
         #expect(narrow == wide, "for-you line wrapped: \(narrow) vs \(wide)")
         #expect(height(1.9, width: 300 - 32) > height(1.0, width: 300 - 32))   // the line is there
+        // The longest basis label (a two-genre mix at the 24-character cap) stays on one line too.
+        let mix = PaceProfile(global: 1.8, genres: [
+            .init(id: 1, name: "Point-and-click", factor: 1.875, sampleCount: 32),
+            .init(id: 2, name: "Adventure", factor: 1.9375, sampleCount: 98)])
+        let mixGenres = ["Point-and-click", "Adventure"]
+        #expect(height(mix, genres: mixGenres, width: 300 - 32) == height(mix, genres: mixGenres, width: 440 - 32))
     }
 }

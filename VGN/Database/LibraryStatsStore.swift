@@ -80,7 +80,7 @@ struct LibraryStatsStore: Sendable {
     // MARK: - Report
 
     static func fetchReport(_ db: Database, scope: StatsScope, playStyle: PlayStyle = .default,
-                            paceFactor: Double = 1.0,
+                            paceFactor: PaceProfile = .neutral,
                             referenceDate: Date) throws -> LibraryStatsReport {
         let s = scopeClause(scope)
 
