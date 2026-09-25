@@ -152,6 +152,7 @@ run_one() {
     -destination 'platform=macOS' \
     -derivedDataPath "$DERIVED" \
     -resultBundlePath "$rb" \
+    -collect-test-diagnostics never \
     "${only[@]}" \
     test-without-building
   local st=$?
@@ -182,6 +183,7 @@ run_whole() {
     -destination 'platform=macOS' \
     -derivedDataPath "$DERIVED" \
     -resultBundlePath "$RESULT" \
+    -collect-test-diagnostics never \
     "${ONLY_ARGS[@]+"${ONLY_ARGS[@]}"}" \
     test-without-building
   local STATUS=$?
