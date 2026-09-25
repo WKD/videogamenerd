@@ -205,6 +205,30 @@ final class PlayNextModel {
     /// PLAN §7b: under ~15 ranked games, the view says so and leans on the crowd prior.
     var isSmallLibrary: Bool { rankedCount < TasteBacktest.minSamples }
 
+    /// Which top-level state the Play Next page shows (wave 23 — the unknown-length lane
+    /// must never hide behind "Nothing to play here yet").
+    enum ContentState: Equatable, Sendable {
+        case loading
+        case noRankings
+        /// Truly no candidate: no pick, no extra row, no unknown-length game.
+        case empty
+        /// The only candidates lack a length estimate — show that lane up front.
+        case onlyUnknownLength
+        case picks
+    }
+
+    var contentState: ContentState {
+        Self.contentState(rankedCount: rankedCount, result: result)
+    }
+
+    nonisolated static func contentState(rankedCount: Int, result: PlayNextResult?) -> ContentState {
+        if rankedCount == 0 { return .noRankings }
+        guard let result else { return .loading }
+        if result.isEmpty { return .empty }
+        if result.hasOnlyUnknownLength { return .onlyUnknownLength }
+        return .picks
+    }
+
     // MARK: - Lifecycle
 
     func start() async {

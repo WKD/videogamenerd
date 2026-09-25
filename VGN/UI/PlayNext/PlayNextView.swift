@@ -60,6 +60,8 @@ struct PlayNextBody: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.rankingActions) private var rankingActions
     @Environment(\.undoManager) private var undoManager
+    /// The HLTB bulk fetch (wave 23: offered when every candidate lacks a length).
+    @Environment(\.hltbFetchPresenter) private var hltbPresenter
     @State private var selectedIndex = 0
     @FocusState private var focused: Bool
 
@@ -111,16 +113,21 @@ struct PlayNextBody: View {
     private var scroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if model.rankedCount == 0 {
+                switch model.contentState {
+                case .noRankings:
                     noRankingsState
-                } else if let result = model.result, result.isEmpty {
-                    emptyState(for: result)
-                } else if let result = model.result {
-                    if model.isSmallLibrary { SmallLibraryBanner(count: model.rankedCount,
-                                                                 goToDuel: rankingActions.goToDuel) }
-                    picksSection(result)
-                    tasteModelLine
-                } else {
+                case .empty:
+                    if let result = model.result { emptyState(for: result) }
+                case .onlyUnknownLength:
+                    if let result = model.result { onlyUnknownLengthState(result) }
+                case .picks:
+                    if let result = model.result {
+                        if model.isSmallLibrary { SmallLibraryBanner(count: model.rankedCount,
+                                                                     goToDuel: rankingActions.goToDuel) }
+                        picksSection(result)
+                        tasteModelLine
+                    }
+                case .loading:
                     ProgressView().frame(maxWidth: .infinity, minHeight: 320)
                 }
             }
@@ -220,26 +227,63 @@ struct PlayNextBody: View {
     private func unknownLane(_ result: PlayNextResult) -> some View {
         if !result.unknownLength.isEmpty {
             DisclosureGroup {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(result.unknownLength) { game in
-                            PlayNextAlternativeCard(
-                                suggestion: game, sentences: model.reasonSentences(for: game),
-                                bracket: model.bracket, loader: loader,
-                                onStart: { act { await model.startPlaying(game) } },
-                                onNot: { act { await model.notThisOne(game) } },
-                                onNever: { act { await model.never(game) } },
-                                onInspect: { inspect?(game.id) },
-                                openURL: openURL)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
+                unknownLaneCards(result)
             } label: {
                 Text("Unknown length (\(result.unknownLength.count))")
                     .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The unknown-length cards; each leads with the "no time estimate" reason.
+    private func unknownLaneCards(_ result: PlayNextResult) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(result.unknownLength) { game in
+                    PlayNextAlternativeCard(
+                        suggestion: game,
+                        sentences: PlayNextEmptyCopy.unknownLengthSentences(model.reasonSentences(for: game)),
+                        bracket: model.bracket, loader: loader,
+                        onStart: { act { await model.startPlaying(game) } },
+                        onNot: { act { await model.notThisOne(game) } },
+                        onNever: { act { await model.never(game) } },
+                        onInspect: { inspect?(game.id) },
+                        openURL: openURL)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    /// Every candidate only lacks a length (wave 23): say so, offer the bulk fetch, and
+    /// show the unknown-length lane expanded instead of "Nothing to play here yet".
+    @ViewBuilder
+    private func onlyUnknownLengthState(_ result: PlayNextResult) -> some View {
+        let copy = result.exclusions.byTime > 0
+            ? PlayNextEmptyCopy.bracketTooLong(count: result.exclusions.byTime, bracket: result.bracket.label)
+            : PlayNextEmptyCopy.noLengthsYet(count: result.unknownLength.count)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(copy.title).font(.headline).lineLimit(2)
+            Text(copy.message)
+                .font(.callout).foregroundStyle(.secondary)
+                .lineLimit(3)
+                .frame(maxWidth: 560, alignment: .leading)
+            if let hltb = hltbPresenter {
+                Button {
+                    hltb.presentBulkForAllMissing()
+                } label: {
+                    Label("Fetch Missing Time Estimates…", systemImage: "clock.arrow.circlepath")
+                }
+                .accessibilityIdentifier("playnext.fetchMissingTimes")
+                .padding(.top, 4)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("playnext.onlyUnknownLength")
+        Text("Unknown length (\(result.unknownLength.count))")
+            .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+        unknownLaneCards(result)
+        exclusionsFootnote(result.exclusions)
     }
 
     @ViewBuilder
@@ -543,6 +587,23 @@ enum PlayNextEmptyCopy {
     static let nothingToPlay = (
         title: "Nothing to play here yet",
         message: "There are no owned, unfinished games to suggest. Add some to your library, or include abandoned games from the options menu.")
+
+    /// Every candidate lacks a length estimate (wave 23) — the unknown-length lane is shown
+    /// up front instead of "Nothing to play here yet".
+    static func noLengthsYet(count: Int) -> (title: String, message: String) {
+        let which = count == 1 ? "this game has" : "these \(count) games have"
+        return ("None of your unfinished games has a length yet",
+                "Play Next picks by length, and \(which) no time estimate. Fetch the missing estimates from HowLongToBeat, or pick one below.")
+    }
+
+    /// The reason every unknown-length card leads with.
+    static let noEstimateReason = "No time estimate — fetch from HowLongToBeat"
+
+    /// An unknown-length card's sentences: the no-estimate reason first, then the engine's
+    /// own reasons, capped at the usual three.
+    static func unknownLengthSentences(_ engine: [String]) -> [String] {
+        Array(([noEstimateReason] + engine).prefix(PlayNextReasonFormatter.maxReasons))
+    }
 
     /// The under-15-ranked banner's second line: how many more to trust the taste signal.
     static func smallLibraryHint(rankedCount: Int) -> String {
