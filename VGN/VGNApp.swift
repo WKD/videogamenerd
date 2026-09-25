@@ -3,13 +3,60 @@ import SwiftUI
 @main
 struct VGNApp: App {
     @State private var env: AppEnvironment
+    /// Launch / first-activation hooks for ``MainWindowGuard`` (wave 23: a
+    /// background launch that "restored" nothing used to leave no window at all).
+    @NSApplicationDelegateAdaptor(VGNAppDelegate.self) private var appDelegate
 
     init() {
         _env = State(initialValue: AppEnvironment.launch())
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: MainWindowID.id) {
+            mainWindowContent
+                .background(MainWindowMarker())
+        }
+        .defaultSize(width: 1200, height: 780)
+        .windowToolbarStyle(.unified)
+        .commands {
+            LibraryCommands()
+            PlayedMarkCommands()
+            ReconcileCommands()
+            StatsCommands()
+            PhotoScanCommands()
+            GOGImportCommands()
+            PSNImportCommands()
+            DeliciousImportCommands()
+            BatoceraImportCommands()
+            // Grouped: a `commands` builder takes at most ten direct children.
+            Group {
+                LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
+                RankingCommands(presenter: env.ranking?.duelReset)
+                MainWindowCommands()
+            }
+        }
+
+        // Library Stats — a separate window (PLAN §6.4 / §8) so the dashboard stays
+        // out of the main window and other lanes' files. Opened from the sidebar
+        // stats popover's "Show All Stats…" button and Window ▸ Library Stats (⌥⌘S).
+        Window("Library Stats", id: StatsWindowID.id) {
+            if let database = env.database {
+                StatsWindowRoot(store: LibraryStatsStore(database))
+            } else {
+                StatsUnavailableView()
+            }
+        }
+        .defaultSize(width: 980, height: 760)
+
+        Settings {
+            SettingsView(model: env.settings)
+        }
+    }
+
+    /// The main library window's content.
+    @ViewBuilder
+    private var mainWindowContent: some View {
+        Group {
             // When hosted by the XCTest runner, render a trivial view: the full
             // window (async observations + toolbar/inspector) otherwise starves
             // the runner's launch handshake and it "hangs before establishing
@@ -41,40 +88,6 @@ struct VGNApp: App {
             } else {
                 Color.clear
             }
-        }
-        .defaultSize(width: 1200, height: 780)
-        .windowToolbarStyle(.unified)
-        .commands {
-            LibraryCommands()
-            PlayedMarkCommands()
-            ReconcileCommands()
-            StatsCommands()
-            PhotoScanCommands()
-            GOGImportCommands()
-            PSNImportCommands()
-            DeliciousImportCommands()
-            BatoceraImportCommands()
-            // Grouped: a `commands` builder takes at most ten direct children.
-            Group {
-                LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
-                RankingCommands(presenter: env.ranking?.duelReset)
-            }
-        }
-
-        // Library Stats — a separate window (PLAN §6.4 / §8) so the dashboard stays
-        // out of the main window and other lanes' files. Opened from the sidebar
-        // stats popover's "Show All Stats…" button and Window ▸ Library Stats (⌥⌘S).
-        Window("Library Stats", id: StatsWindowID.id) {
-            if let database = env.database {
-                StatsWindowRoot(store: LibraryStatsStore(database))
-            } else {
-                StatsUnavailableView()
-            }
-        }
-        .defaultSize(width: 980, height: 760)
-
-        Settings {
-            SettingsView(model: env.settings)
         }
     }
 
