@@ -11,12 +11,11 @@ struct LibrarySearchFieldTests {
 
     private struct Harness: View {
         @Bindable var box: Box
-        @FocusState private var focused: Bool
         var body: some View {
             VStack {
-                LibrarySearchField(text: $box.text, focus: $focused,
+                LibrarySearchField(text: $box.text,
                                    onClear: { box.text = ""; box.cleared += 1 },
-                                   onDownArrow: {}, onEscape: {}, onSubmit: {})
+                                   onDownArrow: {}, onEscape: { false }, onSubmit: {})
                     .frame(width: 220)
                 Spacer()
             }
