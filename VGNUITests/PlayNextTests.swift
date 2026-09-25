@@ -15,6 +15,10 @@ final class PlayNextTests: VGNUITestCase {
             throw XCTSkip("Play Next showed neither a hero pick nor an empty state")
         }
         attachWindowScreenshot("j1-playnext")
+        // Sample mode seeds time-to-beat for its owned backlog (SampleLibrarySeeder), so the
+        // default bracket must produce a real pick, not only the empty state.
+        XCTAssertTrue(el(A11y.playNextHero).exists,
+            "Sample mode should give Play Next a hero pick in the default bracket")
 
         // Switch brackets with the number keys; each must leave a valid state.
         for n in ["1", "2", "3", "4"] {

@@ -26,7 +26,10 @@ final class RankingViewsTests: VGNUITestCase {
 
         // ⌘E presents the CSV NSSavePanel (built off an async export). Cancel it.
         shortcut("e", .command)
-        let cancel = app.buttons["Cancel"]
+        // Scoped to the save panel: `app.buttons["Cancel"]` also matches the Touch Bar's
+        // Cancel mirror, and an ambiguous query cannot be clicked.
+        let cancel = app.dialogs.matching(identifier: "save-panel").firstMatch
+            .buttons.matching(identifier: "CancelButton").firstMatch
         if cancel.waitForExistence(timeout: 6) {
             attachWindowScreenshot("g4-export-panel")
             cancel.click()

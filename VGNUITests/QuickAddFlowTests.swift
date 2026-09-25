@@ -50,10 +50,14 @@ final class QuickAddFlowTests: VGNUITestCase {
             shortcut("o", .command)
             _ = waitForChange(of: A11y.quickAddOwnedState, from: ownedAfter)
         }
-        let formatBefore = (require(el(A11y.quickAddFormatState), "format chip").value as? String) ?? ""
+        // The format is a 3-segment control since wave 17: the selected segment carries
+        // the `.isSelected` trait (the `.contain` group itself exposes no value).
+        require(el(A11y.quickAddFormatState), "format picker")
+        let formatBefore = selectedFormat()
+        XCTAssertNotNil(formatBefore, "One format segment should be selected while owned")
         shortcut("d", .command)
-        let formatAfter = waitForChange(of: A11y.quickAddFormatState, from: formatBefore)
-        XCTAssertNotEqual(formatBefore, formatAfter, "⌘D should cycle the format chip")
+        let formatAfter = waitForSelectedFormat(differentFrom: formatBefore)
+        XCTAssertNotEqual(formatBefore, formatAfter, "⌘D should cycle the format")
         attachWindowScreenshot("d2-flags")
 
         // Tab cycles the platform and ↑/↓ move the selection — neither may steal
@@ -107,6 +111,22 @@ final class QuickAddFlowTests: VGNUITestCase {
     }
 
     // MARK: helpers
+
+    /// The raw value of the selected Quick Add format segment (`quickadd.format.<raw>`).
+    private func selectedFormat() -> String? {
+        ["physical", "digital", "rom"].first { el("quickadd.format.\($0)").isSelected }
+    }
+
+    private func waitForSelectedFormat(differentFrom old: String?,
+                                       timeout: TimeInterval = 3) -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let now = selectedFormat()
+            if now != old { return now }
+            usleep(200_000)
+        }
+        return selectedFormat()
+    }
 
     private func waitForChange(of id: String, from old: String,
                                timeout: TimeInterval = 3) -> String {

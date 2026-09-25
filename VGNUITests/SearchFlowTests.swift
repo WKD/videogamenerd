@@ -12,12 +12,19 @@ final class SearchFlowTests: VGNUITestCase {
         // ⌘F focuses the toolbar search field.
         shortcut("f", .command)
         let field = require(el(A11y.toolbarSearch), "search field")
+        XCTAssertTrue(waitForKeyboardFocus(field), "⌘F should focus the search field")
 
         // Typing filters the grid to matching titles.
         app.typeText("shadow")
-        let filtered = elements(withPrefix: A11y.gridCellPrefix)
-        XCTAssertTrue(filtered.count >= 1 && filtered.count <= 3,
-            "Expected 'shadow' to narrow the grid, got \(filtered.count) cells")
+        // The search is debounced and re-queried asynchronously: poll, don't sample once.
+        var count = elements(withPrefix: A11y.gridCellPrefix).count
+        let deadline = Date().addingTimeInterval(5)
+        while !(1...3).contains(count), Date() < deadline {
+            usleep(200_000)
+            count = elements(withPrefix: A11y.gridCellPrefix).count
+        }
+        XCTAssertTrue((1...3).contains(count),
+            "Expected 'shadow' to narrow the grid, got \(count) cells")
         attachWindowScreenshot("b1-search-filtered")
 
         // esc clears the query (stays focused); a second esc unfocuses.
@@ -58,10 +65,13 @@ final class SearchFlowTests: VGNUITestCase {
         XCTAssertTrue(before.contains("Tier S"),
             "Sample Bloodborne should start in tier S, was \(before)")
 
-        // Focus search and type the tier letters. They must go to the text field.
+        // Focus search and type the tier keys — SHIFTED since wave 7 (⇧S/⇧A/⇧B tier a
+        // selected grid game). They must go to the text field instead.
         shortcut("f", .command)
-        require(el(A11y.toolbarSearch), "search field")
-        app.typeText("sab")
+        let field = require(el(A11y.toolbarSearch), "search field")
+        app.typeText("SAB")
+        XCTAssertEqual((field.value as? String) ?? "", "SAB",
+            "⌘F must focus the search field so the typed keys land in it")
 
         // Clear + unfocus, then re-read Bloodborne's tier: it must be unchanged.
         app.typeKey(.escape, modifierFlags: [])
@@ -70,5 +80,14 @@ final class SearchFlowTests: VGNUITestCase {
         XCTAssertTrue(after.contains("Tier S"),
             "Typing S/A/B in the search field must not re-tier Bloodborne (was \(after))")
         attachWindowScreenshot("b4-no-retier")
+    }
+
+    private func waitForKeyboardFocus(_ element: XCUIElement, timeout: TimeInterval = 3) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if (element.value(forKey: "hasKeyboardFocus") as? Bool) == true { return true }
+            usleep(150_000)
+        } while Date() < deadline
+        return false
     }
 }
