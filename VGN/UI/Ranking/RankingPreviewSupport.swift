@@ -20,6 +20,11 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
     var board: [TierBoardRow] = []
     var topRows: [TopRow] = []
     var unranked: [GameSummary] = []
+    /// When set, ``unrankedGamesStream()`` returns this hand-driven stream instead of a
+    /// one-shot of ``unranked`` (Triage live-queue tests, wave 23).
+    var liveUnranked: AsyncStream<[GameSummary]>?
+    /// Runs inside `setTier`, i.e. while the write is "in flight" (Triage tests).
+    var duringSetTier: (@Sendable () async -> Void)?
     var queueCount = 0
     var stats = RankingStats(perTier: [])
     var disputes: [Consistency.Dispute] = []
@@ -66,6 +71,7 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
     // MARK: Tiering
     func setTier(_ ids: [Int64], tierID: Int64?) async throws -> SetTierOutcome {
         tierCalls.append((ids, tierID))
+        if let duringSetTier { await duringSetTier() }
         return setTierResult ?? SetTierOutcome(applied: ids, skippedUnplayed: [])
     }
 
@@ -117,6 +123,7 @@ final class ScriptedRankingBackend: RankingBackend, @unchecked Sendable {
         let v = stats; return AsyncStream { $0.yield(v); $0.finish() }
     }
     func unrankedGamesStream() -> AsyncStream<[GameSummary]> {
+        if let liveUnranked { return liveUnranked }
         let v = unranked; return AsyncStream { $0.yield(v); $0.finish() }
     }
     func tierBoardStream() -> AsyncStream<[TierBoardRow]> {
