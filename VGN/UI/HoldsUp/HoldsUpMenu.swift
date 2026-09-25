@@ -11,24 +11,26 @@ struct HoldsUpMenuItems: View {
     let targets: [GameSummary]
     /// Whether the items are enabled (e.g. the Game menu's grid-destination check).
     var isEnabled: Bool = true
-    /// Register the ⌃⌥⌘1/2/3/0 key equivalents — ONLY on the menu-bar Game menu (the one place
-    /// they are registered; see ``HoldsUpInspectorRow``).
-    var registersShortcuts: Bool = false
+    /// Whether the titles name the grid keys ("Holds Up   ⇧1"). Text only — deliberately NO
+    /// key equivalent: a ⇧-digit (or bare-digit) menu equivalent would steal typing in the
+    /// search field / Quick Add, so the keys live in the grid router (``GridKeyRouter``),
+    /// exactly like ⇧M "Mark Played As" (wave 22).
+    var showsKeyHints: Bool = true
     let onPick: (HoldsUp?) -> Void
 
     var body: some View {
         let playedCount = targets.reduce(0) { $0 + ($1.played ? 1 : 0) }
         let enabled = isEnabled && playedCount > 0
         ForEach(HoldsUp.allCases) { value in
-            StateMenuButton(title: value.label, state: targets.holdsUpState(value)) { onPick(value) }
+            StateMenuButton(title: Self.title(value.label, value, hints: showsKeyHints),
+                            state: targets.holdsUpState(value)) { onPick(value) }
                 .disabled(!enabled)
                 .help(value.explanation)
-                .holdsUpShortcut(registersShortcuts ? HoldsUpInspectorRow.key(for: value) : nil)
         }
         Divider()
-        StateMenuButton(title: "Clear (Unrated)", state: targets.holdsUpState(nil)) { onPick(nil) }
+        StateMenuButton(title: Self.title("Clear (Unrated)", nil, hints: showsKeyHints),
+                        state: targets.holdsUpState(nil)) { onPick(nil) }
             .disabled(!enabled)
-            .holdsUpShortcut(registersShortcuts ? "0" : nil)
         let unplayed = targets.unplayedCount
         if unplayed > 0 {
             Divider()
@@ -44,12 +46,9 @@ struct HoldsUpMenuItems: View {
 
     /// The submenu title everywhere.
     static let title = "Holds Up Today?"
-}
 
-private extension View {
-    /// ⌃⌥⌘`key` when non-nil, else nothing.
-    @ViewBuilder
-    func holdsUpShortcut(_ key: KeyEquivalent?) -> some View {
-        if let key { keyboardShortcut(key, modifiers: HoldsUpInspectorRow.modifiers) } else { self }
+    /// "Holds Up   ⇧1" — an item title with its grid key as a text hint.
+    static func title(_ label: String, _ value: HoldsUp?, hints: Bool) -> String {
+        hints ? "\(label)   \(GridKeyRouter.holdsUpHint(for: value))" : label
     }
 }

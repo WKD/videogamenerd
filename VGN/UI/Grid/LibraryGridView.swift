@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The main library grid (PLAN §8): a `LazyVGrid` of fixed-size cells with
@@ -102,7 +103,8 @@ struct LibraryGridView: View {
     /// One handler for the grid: arrows (⇧ extends the selection), ↩/space open the
     /// inspector, ⌫ deletes the selection, ⌘A selects all, and any printable
     /// character routes through ``GridKeyRouter`` — plain letters type-to-select,
-    /// `⇧S…⇧F`/`⇧O`/`⇧P` act, plain `0` clears the tier.
+    /// `⇧S…⇧F`/`⇧O`/`⇧P` act, plain `0` clears the tier, `⇧1 ⇧2 ⇧3 ⇧0` rate "Holds up
+    /// today?" (plain `1 2 3 0` in the "Needs a 'Holds Up' Rating" list).
     private func handleKeyPress(_ press: KeyPress, proxy: ScrollViewProxy) -> KeyPress.Result {
         let shift = press.modifiers.contains(.shift)
         switch press.key {
@@ -129,11 +131,20 @@ struct LibraryGridView: View {
             return .ignored
         }
         guard let action = GridKeyRouter.route(characters: press.characters,
-                                               modifiers: press.modifiers) else {
+                                               modifiers: press.modifiers,
+                                               inHoldsUpList: vm.isNeedsHoldsUpRatingSelection,
+                                               digitKey: Self.currentTopRowDigit()) else {
             return .ignored
         }
         if let scrollID = vm.applyGridAction(action) { scroll(proxy, scrollID) }
         return .handled
+    }
+
+    /// The physical top-row digit of the key being handled (layout-independent — ⇧1 is "!"
+    /// on a US layout and "1" on AZERTY), read from the key-down event AppKit is dispatching.
+    private static func currentTopRowDigit() -> Int? {
+        guard let event = NSApp.currentEvent, event.type == .keyDown else { return nil }
+        return GridKeyRouter.topRowDigit(keyCode: event.keyCode)
     }
 
     // MARK: Context menu skeleton (closures wired next wave)

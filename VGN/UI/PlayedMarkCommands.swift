@@ -37,10 +37,11 @@ struct PlayedMarkCommands: Commands {
             .disabled(!enabled)
 
             // Holds Up Today? ▸ Holds Up / Of Its Time / Too Archaic / Clear (PLAN §7b). Acts on
-            // the selection's played games; unplayed ones are ignored (disabled footer).
+            // the selection's played games; unplayed ones are ignored (disabled footer). The
+            // titles name the grid keys (⇧1 ⇧2 ⇧3 ⇧0) as text — no key equivalent (see ⇧M).
             let canHoldsUp = library?.canSetSelectionHoldsUp ?? false
             Menu(HoldsUpMenuItems.title) {
-                HoldsUpMenuItems(targets: selection, isEnabled: canHoldsUp, registersShortcuts: true) { value in
+                HoldsUpMenuItems(targets: selection, isEnabled: canHoldsUp) { value in
                     library?.setHoldsUp(value)
                 }
             }

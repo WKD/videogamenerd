@@ -5,11 +5,10 @@ import SwiftUI
 /// explanation as its tooltip. Shown only for **played** games (the caller hides it
 /// otherwise — only a played game can be judged today).
 ///
-/// Keys mirror the inspector's status keys (⌃⌘1…5, ⌃⌘0 clears) with ⌥ added so they never
-/// collide: **⌃⌥⌘1** Holds Up, **⌃⌥⌘2** Of Its Time, **⌃⌥⌘3** Too Archaic, **⌃⌥⌘0** Clear.
-/// They are registered ONCE, on the menu-bar Game ▸ Holds Up Today? items (so they act on the
-/// grid selection whether or not the inspector is open — the rating pass); this control only
-/// names them in its tooltips, so no key equivalent is ever registered twice.
+/// Keys (wave 22 — one keystroke, ⇧ at most): **⇧1** Holds Up, **⇧2** Of Its Time, **⇧3** Too
+/// Archaic, **⇧0** Clear, handled by the grid (``GridKeyRouter``) on the grid selection — plain
+/// 1/2/3/0 in the "Needs a 'Holds Up' Rating" list. No menu key equivalent is registered (a
+/// ⇧-digit equivalent would steal typing); this control only names the keys in its tooltips.
 ///
 /// Every line is bounded (`lineLimit`) — never an unbounded ideal height in the detail column.
 struct HoldsUpInspectorRow: View {
@@ -20,20 +19,9 @@ struct HoldsUpInspectorRow: View {
     var firstPlayedAt: Date? = nil
     let onPick: (HoldsUp?) -> Void
 
-    static let modifiers: EventModifiers = [.control, .option, .command]
-
-    /// The key for each value (the Clear key is `0`).
-    static func key(for value: HoldsUp) -> KeyEquivalent {
-        switch value {
-        case .holdsUp: return "1"
-        case .ofItsTime: return "2"
-        case .tooArchaic: return "3"
-        }
-    }
-
-    /// "⌃⌥⌘1" — the shortcut hint shown in a tooltip.
+    /// "⇧1 in the grid" — the key hint shown in a tooltip.
     static func keyHint(for value: HoldsUp?) -> String {
-        "⌃⌥⌘" + (value.map { String(key(for: $0).character) } ?? "0")
+        GridKeyRouter.holdsUpHint(for: value) + " in the grid"
     }
 
     var body: some View {
