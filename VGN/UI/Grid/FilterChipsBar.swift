@@ -70,6 +70,10 @@ struct FilterChipsBar: View {
             } action: { layoutProbe?(.bar, $0) }
             .background(.bar)
             .overlay(alignment: .bottom) { Divider() }
+            // A plain stack is not an accessibility element, so without `.contain` the
+            // identifier had no element to land on (XCUITest could not find the bar).
+            // `.contain` keeps every chip / button its own element — no VoiceOver change.
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier(A11yID.filterChips)
         }
     }
