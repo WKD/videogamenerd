@@ -178,7 +178,9 @@ final class DiscoverModel {
                     seed: seed, playedSystems: played,
                     maxPinnedFavourites: max(1, cardCount / 2),
                     bracket: bracket, playStyle: playStyle, pace: pace,
-                    psPlusMonthsLeft: monthsLeft, prioritisePSPlus: prioritisePSPlus)
+                    psPlusMonthsLeft: monthsLeft, prioritisePSPlus: prioritisePSPlus,
+                    // The personal pace factor rides on the Play Next bracket (wave 22).
+                    paceFactor: bracket?.paceFactor ?? 1.0)
                 // Score off the main actor (pure, ~11 000 entries — PLAN §15 perf).
                 let scored = await Task.detached(priority: .userInitiated) {
                     Array(DiscoverScorer.score(entries: pool, ranked: ranked, options: options)

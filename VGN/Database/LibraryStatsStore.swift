@@ -19,10 +19,17 @@ struct LibraryStatsStore: Sendable {
     /// One-shot report for a scope. `playStyle` sets the owner's **personal length** — the
     /// single source of truth the BY LENGTH shelves use — for planning hours like the
     /// backlog estimate (D4, owner request 2026-09-20).
+    ///
+    /// "Backlog to beat" also carries the owner's **personal pace factor** (PLAN §7b
+    /// "Scheduled 2026-09-25"): measured from the library in the same read, unless the owner
+    /// set `paceFactorOverride` by hand.
     func report(scope: StatsScope, playStyle: PlayStyle = .default,
+                paceFactorOverride: Double? = nil,
                 referenceDate: Date = Date()) async throws -> LibraryStatsReport {
         try await dbReader.read { db in
-            try Self.fetchReport(db, scope: scope, playStyle: playStyle, referenceDate: referenceDate)
+            let factor = try RecommendationStore.fetchPaceFactor(db).effective(override: paceFactorOverride)
+            return try Self.fetchReport(db, scope: scope, playStyle: playStyle, paceFactor: factor,
+                                        referenceDate: referenceDate)
         }
     }
 
@@ -73,6 +80,7 @@ struct LibraryStatsStore: Sendable {
     // MARK: - Report
 
     static func fetchReport(_ db: Database, scope: StatsScope, playStyle: PlayStyle = .default,
+                            paceFactor: Double = 1.0,
                             referenceDate: Date) throws -> LibraryStatsReport {
         let s = scopeClause(scope)
 
@@ -196,7 +204,9 @@ struct LibraryStatsStore: Sendable {
         // the raw IGDB main story. A game with only a rushed estimate has no personal
         // length → it counts as *without an estimate* (D4). "Me vs. average" above keeps the
         // raw advertised `ttb_normally_s`, because that is what the comparison is against.
-        let lengthExpr = LibraryQuery.lengthEstimateExpr(style: playStyle)
+        // The personal pace factor (PLAN §7b) inflates it like the shelves; "me vs. average"
+        // keeps the raw advertised time.
+        let lengthExpr = LibraryQuery.lengthEstimateExpr(style: playStyle, paceFactor: paceFactor)
         let backlogEstRow = try Row.fetchOne(db, sql: """
             SELECT COALESCE(SUM(\(lengthExpr)), 0) AS est,
                    COALESCE(SUM(\(lengthExpr) IS NULL), 0) AS missing

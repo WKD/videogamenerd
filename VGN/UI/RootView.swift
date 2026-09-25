@@ -406,6 +406,12 @@ struct RootView: View {
                 .help("Games with no completion time at all — nothing to fetch — which impairs Play Next.")
             Toggle("Suspicious Estimate", isOn: flag(\.includeSuspiciousEstimate))
                 .help("Games whose completion times look wrong — out of order, or a completionist far longer than the main story — worth refreshing from HowLongToBeat.")
+            // Where the time estimates come from (wave 22) — its own facet + chip.
+            Menu("Estimate Source") {
+                ForEach(EstimateSource.allCases) { source in
+                    Toggle(source.label, isOn: membership(\.estimateSources, source))
+                }
+            }
             Divider()
             Text("Uses your time, or the IGDB estimate when unplayed.")
             if playtimeFacetActive {
@@ -420,6 +426,7 @@ struct RootView: View {
 
     private var playtimeFacetActive: Bool {
         !vm.filter.playtimes.isEmpty || vm.filter.includeNoTimeEstimate || vm.filter.includeSuspiciousEstimate
+            || !vm.filter.estimateSources.isEmpty
     }
 
     // Platform multi-filter, usable from any scope incl. "All" (in-use platforms).
@@ -519,6 +526,7 @@ struct RootView: View {
         f.playtimes.removeAll()
         f.includeNoTimeEstimate = false
         f.includeSuspiciousEstimate = false
+        f.estimateSources.removeAll()
         vm.setFilter(f)
     }
 }

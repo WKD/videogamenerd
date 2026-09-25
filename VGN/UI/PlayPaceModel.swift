@@ -18,6 +18,19 @@ final class PlayPaceModel {
     /// The committed play style (persisted), which sets each game's personal length.
     private(set) var style: PlayStyle
 
+    /// The measured personal pace factor (PLAN §7b "Scheduled 2026-09-25"): fed from the
+    /// library by the owner of this model (``LibraryViewModel`` observes it); ``PaceFactor/unmeasured``
+    /// until the first read. Never persisted.
+    private(set) var measuredPace: PaceFactor = .unmeasured
+    /// The owner's manual override (persisted), or nil to use the measured factor.
+    private(set) var paceOverride: Double?
+    /// The factor everything plans with: the override, else the measured one.
+    var paceFactor: Double { measuredPace.effective(override: paceOverride) }
+
+    /// Invoked with the new effective pace factor whenever it changes (a new measurement or
+    /// an override edit). Wired like ``onStyleCommit`` so the grid + counts re-run once.
+    var onPaceFactorChange: (Double) -> Void = { _ in }
+
     /// Invoked with the committed pace after `commit`/`reset`. The app wires this so a
     /// pace change re-runs the grid + counts (treated like a filter change).
     var onCommit: (PlayPace) -> Void = { _ in }
@@ -30,6 +43,7 @@ final class PlayPaceModel {
         self.pace = store.playPace()
         self.hasChosen = store.hasChosenPace()
         self.style = store.playStyle()
+        self.paceOverride = store.paceFactorOverride()
     }
 
     /// Re-read from the store — call when a popover/pane appears so a change made in
@@ -38,6 +52,58 @@ final class PlayPaceModel {
         pace = store.playPace()
         hasChosen = store.hasChosenPace()
         style = store.playStyle()
+        let before = paceFactor
+        paceOverride = store.paceFactorOverride()
+        if paceFactor != before { paceFactorChanged() }
+    }
+
+    // MARK: Pace factor
+
+    /// Adopt a fresh measurement (from the library observation). Notifies only when the
+    /// effective factor moves (an override hides measurement churn).
+    func setMeasuredPace(_ measured: PaceFactor) {
+        guard measured != measuredPace else { return }
+        let before = paceFactor
+        measuredPace = measured
+        if paceFactor != before { paceFactorChanged() }
+    }
+
+    /// Set (a value, clamped to ``PaceFactor/range``, rounded to 0.1) or clear (nil — "Use measured") the
+    /// manual override, persist it, and notify when the effective factor moves.
+    func commitPaceOverride(_ value: Double?) {
+        // One decimal, like the display ("1.3×") — so stepper steps never accumulate 1.2000000001.
+        let clamped = value.map { (PaceFactor.clamp($0) * 10).rounded() / 10 }
+        guard clamped != paceOverride else { return }
+        let before = paceFactor
+        store.setPaceFactorOverride(clamped)
+        paceOverride = clamped
+        if paceFactor != before { paceFactorChanged() }
+    }
+
+    private func paceFactorChanged() {
+        onPaceFactorChange(paceFactor)
+        NotificationCenter.default.post(name: .vgnPaceFactorDidChange, object: nil)
+    }
+
+    /// The Settings sentence: "You take about 1.3× the advertised time · based on 109
+    /// finished games", or why there is no measurement yet.
+    var paceFactorSummary: String {
+        Self.paceFactorSummary(measured: measuredPace, override: paceOverride)
+    }
+
+    nonisolated static func paceFactorSummary(measured: PaceFactor, override: Double?) -> String {
+        let games = measured.sampleCount == 1 ? "finished game" : "finished games"
+        if let override {
+            let base = measured.isMeasured
+                ? "measured \(PaceFactor.text(measured.measured)) on \(measured.sampleCount) \(games)"
+                : "not enough finished games to measure yet"
+            return "You plan with \(PaceFactor.text(override)) the advertised time (set by hand · \(base))"
+        }
+        guard measured.isMeasured else {
+            let more = PaceFactor.minSamples - measured.sampleCount
+            return "Planning with the advertised times (1.0×) · finish \(more) more game\(more == 1 ? "" : "s") with a play time and an estimate to measure your pace"
+        }
+        return "You take about \(PaceFactor.text(measured.measured)) the advertised time · based on \(measured.sampleCount) \(games)"
     }
 
     /// Commit a new play style, persist, notify (so the grid + counts re-run once, and any
@@ -87,4 +153,10 @@ final class PlayPaceModel {
             ? "\(headerLabel) · playing \(style.name.lowercased()) — click to change your pace and play style"
             : "Set how much you can play in a week and how you play — sets the ranges below"
     }
+}
+
+extension Notification.Name {
+    /// Posted when the effective personal pace factor changes (new measurement or override).
+    /// Other windows (Library Stats) re-read and re-query, like ``vgnPlayStyleDidChange``.
+    static let vgnPaceFactorDidChange = Notification.Name("vgn.paceFactorDidChange")
 }

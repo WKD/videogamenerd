@@ -157,13 +157,14 @@ struct RecommendationEngineTests {
 
     @Test func playingGameUsesRemainingTime() throws {
         let ranked = (1...20).map { Rec.ranked(GameID($0), score: 0.5) }
-        // 20 h game, 18 h played → 2 h remaining fits "an evening".
-        let playing = Rec.candidate(100, status: .playing, estimateHours: 20, playedHours: 18,
-                                    title: "Nearly Done", playStatus: .playing)
+        // 6 h game, 3 h played → 3 h remaining fits "an evening". (Under the 70 % "Almost
+        // there" line — a game past it moves to the "Finish what you started" row, wave 22.)
+        let playing = Rec.candidate(100, status: .playing, estimateHours: 6, playedHours: 3,
+                                    title: "Halfway", playStatus: .playing)
         let result = RecommendationEngine.recommend(RecommendationInput(
             ranked: ranked, candidates: [playing], bracket: Rec.evening()))
         #expect(result.hero?.id == 100)
-        #expect(result.hero?.estimateSeconds == Rec.hours(2))
+        #expect(result.hero?.estimateSeconds == Rec.hours(3))
         #expect(result.hero?.reasons.contains { if case .remainingTime = $0 { true } else { false } } == true)
     }
 

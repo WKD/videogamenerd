@@ -34,6 +34,7 @@ struct PlayNextScreen: View {
             secondOpinion: env.secondOpinion,
             pace: env.paceModel?.pace ?? .default,
             playStyle: env.paceModel?.style ?? .default,
+            paceFactor: env.paceModel?.paceFactor ?? 1.0,
             bracketHint: env.bracketHint))
     }
 
@@ -93,6 +94,10 @@ struct PlayNextBody: View {
         .onChange(of: paceModel?.style) { _, newStyle in
             if let newStyle { model.setPlayStyle(newStyle) }
         }
+        // …and so does a personal-pace-factor change (a new measurement or the override).
+        .onChange(of: paceModel?.paceFactor) { _, newFactor in
+            if let newFactor { model.setPaceFactor(newFactor) }
+        }
         .onChange(of: model.result?.hero?.id) { selectedIndex = 0 }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18),
                    value: model.result?.hero?.id)
@@ -108,7 +113,7 @@ struct PlayNextBody: View {
             VStack(alignment: .leading, spacing: 18) {
                 if model.rankedCount == 0 {
                     noRankingsState
-                } else if let result = model.result, result.hero == nil, shortlist.isEmpty {
+                } else if let result = model.result, result.isEmpty {
                     emptyState(for: result)
                 } else if let result = model.result {
                     if model.isSmallLibrary { SmallLibraryBanner(count: model.rankedCount,
@@ -133,6 +138,17 @@ struct PlayNextBody: View {
                 if secondOpinionActive {
                     Text("Engine").font(.headline).foregroundStyle(.secondary)
                 }
+                // "Finish what you started" (PLAN §7b, wave 22) — above the regular picks,
+                // hidden when empty; its games never repeat below.
+                if PlayNextExtraRowCopy.showsFinishRow(result) {
+                    PlayNextExtraRow(
+                        title: PlayNextExtraRowCopy.finishTitle,
+                        subtitle: PlayNextExtraRowCopy.finishSubtitle,
+                        systemImage: "flag.checkered",
+                        suggestions: result.finishWhatYouStarted,
+                        model: model, loader: loader, inspect: inspect, openURL: openURL,
+                        identifier: "playnext.finishRow")
+                }
                 if let hero = result.hero {
                     PlayNextHeroCard(
                         suggestion: hero, sentences: model.reasonSentences(for: hero),
@@ -146,6 +162,18 @@ struct PlayNextBody: View {
                         .accessibilityIdentifier(A11yID.playNextHero)
                 }
                 alternatives(result)
+                // "Play it again" ▸ Worth replaying (PLAN §7b, wave 22) — its own row, never
+                // mixed into the backlog picks; hidden when empty.
+                if PlayNextExtraRowCopy.showsReplayRow(result) {
+                    PlayNextExtraRow(
+                        title: PlayNextExtraRowCopy.replayTitle,
+                        subtitle: PlayNextExtraRowCopy.replaySubtitle,
+                        systemImage: "arrow.counterclockwise",
+                        suggestions: result.replay,
+                        footer: PlayNextExtraRowCopy.replayFooter(undatedCount: result.replayUndatedCount),
+                        model: model, loader: loader, inspect: inspect, openURL: openURL,
+                        identifier: "playnext.replayRow")
+                }
                 unknownLane(result)
                 // "Discover on your Batocera" (PLAN §15) — a separate pool below the picks,
                 // hidden when the catalogue is empty / Play Next has too little data.

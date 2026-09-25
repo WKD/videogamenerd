@@ -93,6 +93,18 @@ enum PlayNextReasonFormatter {
             return "★ a favourite on your Batocera"
         case .batoceraFavouritePinned:
             return "★ your favourite"
+        case let .almostThere(remainingSeconds, pastEstimate):
+            return pastEstimate
+                ? "Past the estimate — maybe finish it?"
+                : "About \(approxLeft(remainingSeconds)) left"
+        case let .droppedEarly(playedSeconds, lovedExemplar):
+            let after = "You dropped it after \(approxLeft(playedSeconds))"
+            if let lovedExemplar {
+                return "\(after) — you loved \(exemplar(lovedExemplar, exemplars))"
+            }
+            return "\(after) — a strong match for your taste"
+        case let .replayWorthy(tierLetter, lastPlayedYear):
+            return "You gave it \(tierLetter) · last played \(String(lastPlayedYear))"
         }
     }
 

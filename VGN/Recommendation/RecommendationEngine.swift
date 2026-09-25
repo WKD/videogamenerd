@@ -30,6 +30,9 @@ enum RecommendationEngine {
                 if !options.includeAbandoned { exclusions.byStatus += 1; continue }
             case .playedUnknown:
                 if !options.includePlayedWithoutStatus { exclusions.byStatus += 1; continue }
+            case .finished:
+                // Never a regular pick — finished games only reach "Play it again" (wave 22).
+                continue
             }
 
             // "Holds up today?" (PLAN §7b): a game the owner finds Too Archaic to play now is
@@ -45,8 +48,8 @@ enum RecommendationEngine {
             }
 
             let style = bracket.resolvedStyle
-            let fullEstimate = candidate.fullEstimate(style: style)
-            let bracketEstimate = candidate.bracketEstimate(style: style)
+            let fullEstimate = candidate.fullEstimate(style: style, paceFactor: bracket.paceFactor)
+            let bracketEstimate = candidate.bracketEstimate(style: style, paceFactor: bracket.paceFactor)
 
             guard let estimate = bracketEstimate else {
                 // No estimate → unknown-length lane (PLAN §7b).
@@ -70,6 +73,16 @@ enum RecommendationEngine {
         scored.sort(by: Self.rank)
         unknown.sort(by: Self.rank)
 
+        // "Finish what you started" + "Play it again" (PLAN §7b, wave 22) — their own rows. A
+        // game in the finish row is never repeated in the regular picks (replay games are
+        // finished, so never regular candidates in the first place).
+        let rows = extraRows(input, profile: profile, index: linkIndex, regular: scored)
+        let finishIDs = Set(rows.finish.map(\.id))
+        if !finishIDs.isEmpty {
+            scored.removeAll { finishIDs.contains($0.id) }
+            unknown.removeAll { finishIDs.contains($0.id) }
+        }
+
         let hero = scored.first?.suggestion
         let alternatives = scored.dropFirst().prefix(options.maxAlternatives).map(\.suggestion)
         let unknownLane = unknown.prefix(options.maxUnknownLength).map(\.suggestion)
@@ -79,14 +92,17 @@ enum RecommendationEngine {
             alternatives: Array(alternatives),
             unknownLength: Array(unknownLane),
             exclusions: exclusions,
-            bracket: bracket
+            bracket: bracket,
+            finishWhatYouStarted: rows.finish,
+            replay: rows.replay,
+            replayUndatedCount: rows.replayUndated
         )
     }
 
     // MARK: - Scoring one candidate
 
     /// A scored candidate plus the final suggestion (score already baked into it).
-    private struct Scored {
+    struct Scored {
         var id: GameID
         var finalScore: Double
         var suggestion: PlayNextSuggestion
@@ -94,11 +110,11 @@ enum RecommendationEngine {
 
     /// Deterministic order: score desc, then id asc (rotation jitter is already in
     /// the score, so near-ties reshuffle with the seed but clear winners are stable).
-    private static func rank(_ a: Scored, _ b: Scored) -> Bool {
+    static func rank(_ a: Scored, _ b: Scored) -> Bool {
         a.finalScore != b.finalScore ? a.finalScore > b.finalScore : a.id < b.id
     }
 
-    private static func score(
+    static func score(
         _ candidate: Candidate,
         profile: TraitProfile,
         index: DirectLinks.Index,
@@ -315,5 +331,5 @@ enum RecommendationEngine {
         return (unit * 2 - 1) * magnitude
     }
 
-    private static func clamp(_ x: Double) -> Double { min(max(x, 0), 1) }
+    static func clamp(_ x: Double) -> Double { min(max(x, 0), 1) }
 }

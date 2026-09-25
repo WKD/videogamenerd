@@ -118,6 +118,12 @@ struct LibraryFilter: Hashable, Sendable {
     /// ("Estimate Looks Right") is never flagged.
     var includeSuspiciousEstimate: Bool
 
+    /// Playtime ▸ **Estimate Source** facet (wave 22, deferred from W21-B): games whose
+    /// time estimates come from one of these sources (``EstimateSource`` — IGDB, HowLongToBeat,
+    /// or None = no estimate at all). OR within the kind, AND across kinds; empty = no
+    /// constraint. Its own facet and its own chip, next to *Suspicious Estimate*.
+    var estimateSources: Set<EstimateSource>
+
     /// A single explicit platform facet (slug), independent of the scope.
     /// (Legacy single facet; the multi-select facet below is `platforms`.)
     var platform: String?
@@ -151,6 +157,14 @@ struct LibraryFilter: Hashable, Sendable {
     /// through ``LibraryViewModel``, and "Clear all" preserves it.
     var playStyle: PlayStyle
 
+    /// The owner's **personal pace factor** (PLAN §7b "Scheduled 2026-09-25", §8) — the
+    /// measured median "my time ÷ advertised" (or the manual override), 1.0 by default. It
+    /// multiplies the personal length wherever time is used for *planning* (the "By Length"
+    /// scopes, the Length sort, the Playtime filter's unplayed fallback), carried here like
+    /// ``playStyle`` so a factor change re-runs the grid like a filter change. Not a facet;
+    /// "Clear all" keeps it.
+    var paceFactor: Double
+
     var sort: LibrarySort
     var ascending: Bool
 
@@ -173,11 +187,13 @@ struct LibraryFilter: Hashable, Sendable {
         playtimes: Set<PlaytimeBucket> = [],
         includeNoTimeEstimate: Bool = false,
         includeSuspiciousEstimate: Bool = false,
+        estimateSources: Set<EstimateSource> = [],
         platform: String? = nil,
         platforms: Set<String> = [],
         scope: SidebarSelection = .all,
         playPace: PlayPace = .default,
         playStyle: PlayStyle = .storyFirst,
+        paceFactor: Double = 1.0,
         sort: LibrarySort = .title,
         ascending: Bool = true
     ) {
@@ -199,11 +215,13 @@ struct LibraryFilter: Hashable, Sendable {
         self.playtimes = playtimes
         self.includeNoTimeEstimate = includeNoTimeEstimate
         self.includeSuspiciousEstimate = includeSuspiciousEstimate
+        self.estimateSources = estimateSources
         self.platform = platform
         self.platforms = platforms
         self.scope = scope
         self.playPace = playPace
         self.playStyle = playStyle
+        self.paceFactor = paceFactor
         self.sort = sort
         self.ascending = ascending
     }
@@ -217,6 +235,7 @@ struct LibraryFilter: Hashable, Sendable {
             || !holdsUp.isEmpty || includeHoldsUpUnrated
             || !formats.isEmpty || includeNotOwned || multipleCopies || duplicateCopies || includeSubscriptionOnly
             || !playtimes.isEmpty || includeNoTimeEstimate || includeSuspiciousEstimate
+            || !estimateSources.isEmpty
             || platform != nil || !platforms.isEmpty
     }
 }

@@ -95,23 +95,30 @@ struct PersonalLength: Hashable, Sendable {
     /// - neither: `nil` (Unmeasured).
     ///
     /// Linear throughout, so the SQL mirror is plain arithmetic (no SQLite math funcs).
+    ///
+    /// `paceFactor` is the owner's **personal pace factor** (PLAN §7b/§8 — "I usually take
+    /// longer than the advertised times"): the blend is multiplied by it *before* rounding,
+    /// exactly as the SQL mirror does (`ROUND((CASE … END) * factor)`), so a factor of 1.0
+    /// is the plain advertised personal length. The stored / displayed advertised times are
+    /// never touched — only this planning value moves.
     static func compute(
         normallyS: Int?, completelyS: Int?,
-        style: PlayStyle, r: Double = PlayStyle.sidesRatio
+        style: PlayStyle, r: Double = PlayStyle.sidesRatio,
+        paceFactor: Double = 1.0
     ) -> PersonalLength? {
         let t = style.t
+        func length(_ secs: Double, approximate: Bool) -> PersonalLength {
+            PersonalLength(seconds: Int((secs * paceFactor).rounded()), isApproximate: approximate)
+        }
         if let n = normallyS, let c0 = completelyS {
             let c = max(c0, n)                          // clamp dirty data up to `normally`
-            let secs = Double(n) + t * Double(c - n)
-            return PersonalLength(seconds: Int(secs.rounded()), isApproximate: false)
+            return length(Double(n) + t * Double(c - n), approximate: false)
         }
         if let n = normallyS {
-            let secs = Double(n) * (1 + t * (r - 1))
-            return PersonalLength(seconds: Int(secs.rounded()), isApproximate: true)
+            return length(Double(n) * (1 + t * (r - 1)), approximate: true)
         }
         if let c = completelyS {
-            let secs = Double(c) * (1 + t * (r - 1)) / r
-            return PersonalLength(seconds: Int(secs.rounded()), isApproximate: true)
+            return length(Double(c) * (1 + t * (r - 1)) / r, approximate: true)
         }
         return nil                                       // rushed-only or nothing → Unmeasured
     }

@@ -201,6 +201,7 @@ final class LibraryViewModel {
     private var genresTask: Task<Void, Never>?
     private var decadesTask: Task<Void, Never>?
     private var vaultCountsTask: Task<Void, Never>?
+    private var paceFactorTask: Task<Void, Never>?
     private var bannerDismissTask: Task<Void, Never>?
 
     /// Bumped on every `restartGames` so a stale observation task's emission is
@@ -243,6 +244,7 @@ final class LibraryViewModel {
             scope: selection,
             playPace: paceModel.pace,
             playStyle: paceModel.style,
+            paceFactor: paceModel.paceFactor,
             sort: initialSort?.sort ?? fallbackSort,
             ascending: initialSort?.ascending ?? (initialSort?.sort ?? fallbackSort).defaultAscending
         )
@@ -263,6 +265,7 @@ final class LibraryViewModel {
         // counts. Weak self so the model never keeps the view model alive.
         self.paceModel.onCommit = { [weak self] pace in self?.applyPace(pace) }
         self.paceModel.onStyleCommit = { [weak self] style in self?.applyStyle(style) }
+        self.paceModel.onPaceFactorChange = { [weak self] factor in self?.applyPaceFactor(factor) }
     }
 
     /// The default sort for a freshly-selected scope with no persisted choice: the
@@ -320,6 +323,17 @@ final class LibraryViewModel {
         restartCounts()
     }
 
+    /// Adopt a new personal pace factor (a fresh measurement or an override edit, PLAN §7b
+    /// "Scheduled 2026-09-25"): like a style change — one grid restart, one counts
+    /// re-subscribe — because every personal length moves with it.
+    func applyPaceFactor(_ factor: Double) {
+        guard factor != filter.paceFactor else { return }
+        var f = filter
+        f.paceFactor = factor
+        setFilter(f)
+        restartCounts()
+    }
+
     // MARK: Lifecycle
 
     /// Begin observing all four data streams. Idempotent — safe to call once
@@ -338,6 +352,11 @@ final class LibraryViewModel {
         }
         decadesTask = Task { [dataSource] in
             for await value in dataSource.decadesInUse() { self.decadesInUse = value }
+        }
+        // The measured personal pace factor (PLAN §7b): a new measurement reaches the model,
+        // which notifies ``applyPaceFactor`` only when the effective factor moves.
+        paceFactorTask = Task { [dataSource] in
+            for await value in dataSource.paceFactorStream() { self.paceModel.setMeasuredPace(value) }
         }
         vaultCountsTask = Task { [dataSource] in
             for await value in dataSource.vaultSourceCounts() {
@@ -365,6 +384,7 @@ final class LibraryViewModel {
         genresTask?.cancel(); genresTask = nil
         decadesTask?.cancel(); decadesTask = nil
         vaultCountsTask?.cancel(); vaultCountsTask = nil
+        paceFactorTask?.cancel(); paceFactorTask = nil
     }
 
     /// (Re)subscribe the single sidebar-counts observation with the current pace's
@@ -374,8 +394,11 @@ final class LibraryViewModel {
         countsTask?.cancel()
         let pace = paceModel.pace
         let style = paceModel.style
+        let factor = filter.paceFactor
         countsTask = Task { [dataSource] in
-            for await value in dataSource.sidebarCounts(pace: pace, style: style) { self.counts = value }
+            for await value in dataSource.sidebarCounts(pace: pace, style: style, paceFactor: factor) {
+                self.counts = value
+            }
         }
     }
 

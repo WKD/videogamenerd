@@ -105,6 +105,7 @@ enum LibraryQuery {
             g.status                                         AS status,
             g.revisit                                        AS revisit,
             g.holds_up                                       AS holds_up,
+            \(estimateSourceSQL)                              AS estimate_source,
             COALESCE(own.owned, 0)                           AS owned,
             COALESCE(own.is_comp, 0)                         AS is_comp,
             COALESCE(own.has_rom, 0)                         AS has_rom,
@@ -143,7 +144,7 @@ enum LibraryQuery {
         var wheres: [String] = []
         var args: [DatabaseValueConvertible] = []
         appendScope(filter.scope, bounds: LengthShelf.bounds(for: filter.playPace),
-                    style: filter.playStyle, into: &wheres, args: &args)
+                    style: filter.playStyle, paceFactor: filter.paceFactor, into: &wheres, args: &args)
         appendFacets(filter, into: &wheres, args: &args)
         if let ids = restrictToIDs {
             if ids.isEmpty {
@@ -175,7 +176,7 @@ enum LibraryQuery {
     // MARK: - Scope
 
     private static func appendScope(
-        _ scope: SidebarSelection, bounds: LengthBounds, style: PlayStyle,
+        _ scope: SidebarSelection, bounds: LengthBounds, style: PlayStyle, paceFactor: Double,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         switch scope {
@@ -215,9 +216,10 @@ enum LibraryQuery {
         case .duel:
             wheres.append("g.played = 1 AND g.tier_id IS NOT NULL AND g.rank_key IS NULL")
         case let .length(shelf):
-            appendLengthScope(shelf, bounds: bounds, style: style, into: &wheres, args: &args)
+            appendLengthScope(shelf, bounds: bounds, style: style, paceFactor: paceFactor,
+                              into: &wheres, args: &args)
         case .unmeasured:
-            wheres.append("\(lengthEstimateExpr(style: style)) IS NULL")
+            wheres.append("\(lengthEstimateExpr(style: style, paceFactor: paceFactor)) IS NULL")
         case .vault:
             // The Vault is a separate shelf that never routes to the library grid
             // (PLAN §15). Should a query ever reach here, match nothing rather than the library.
@@ -231,10 +233,10 @@ enum LibraryQuery {
     /// fall in the shelf's `[lower, upper)` seconds window (bounds derived from the
     /// pace; length derived from the play style).
     private static func appendLengthScope(
-        _ shelf: LengthShelf, bounds: LengthBounds, style: PlayStyle,
+        _ shelf: LengthShelf, bounds: LengthBounds, style: PlayStyle, paceFactor: Double,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
-        let expr = lengthEstimateExpr(style: style)
+        let expr = lengthEstimateExpr(style: style, paceFactor: paceFactor)
         let range = shelf.secondsRange(in: bounds)
         var conds = ["\(expr) IS NOT NULL"]
         if let lower = range.lower { conds.append("\(expr) >= ?"); args.append(lower) }
@@ -365,10 +367,17 @@ enum LibraryQuery {
             args.append(contentsOf: gs.map { $0 as DatabaseValueConvertible })
         }
         appendPlaytimeFacet(filter.playtimes, includeNoEstimate: filter.includeNoTimeEstimate,
-                            style: filter.playStyle, into: &wheres, args: &args)
+                            style: filter.playStyle, paceFactor: filter.paceFactor,
+                            into: &wheres, args: &args)
         // Playtime ▸ "Suspicious Estimate" — its own facet, ANDed across kinds (PLAN §5.3).
         if filter.includeSuspiciousEstimate {
             wheres.append(suspiciousEstimatePredicate())
+        }
+        // Playtime ▸ "Estimate Source" — its own facet (OR within, AND across; wave 22).
+        if !filter.estimateSources.isEmpty {
+            let values = EstimateSource.allCases.filter(filter.estimateSources.contains).map(\.rawValue)
+            wheres.append("\(estimateSourceSQL) IN (\(placeholders(values.count)))")
+            args.append(contentsOf: values.map { $0 as DatabaseValueConvertible })
         }
         if let match = ftsMatch(filter.searchText) {
             wheres.append("g.id IN (SELECT rowid FROM games_fts WHERE games_fts MATCH ?)")
@@ -400,8 +409,19 @@ enum LibraryQuery {
     /// an `ttb_source = 'hltb'` row whose main is empty, its `ttb_hastily_s` (HLTB's Main
     /// Story, written there by the pre-wave-21 mapping). IGDB-sourced rows keep
     /// "rushed-only ⇒ unmeasured". Swift mirror: ``EstimateSanity/effectiveMain``.
-    static func lengthEstimateExpr(style: PlayStyle, r: Double = PlayStyle.sidesRatio) -> String {
+    ///
+    /// **Personal pace factor** (PLAN §7b "Scheduled 2026-09-25", §8): the blend is multiplied
+    /// by `paceFactor` before the final `ROUND`, the exact mirror of
+    /// ``PersonalLength/compute(normallyS:completelyS:style:r:paceFactor:)``. It enters the SQL
+    /// the same way the play style's `t` does — a decimal literal built from a `Double`
+    /// (Swift's shortest round-tripping form, so SQLite parses the identical binary value; never
+    /// text from the user) — so every consumer (shelves + counts, Unmeasured, Length sort,
+    /// Playtime filter fallback, Stats "Backlog to beat") shares one definition. A factor never
+    /// turns a measured game into an unmeasured one (NULL × f is NULL, a length × f is a length).
+    static func lengthEstimateExpr(style: PlayStyle, r: Double = PlayStyle.sidesRatio,
+                                   paceFactor: Double = 1.0) -> String {
         let t = sqlLiteral(style.t)
+        let f = sqlLiteral(paceFactor)
         let rl = sqlLiteral(r)
         let ratio = sqlLiteral(EstimateSanity.completionistRatio)
         let m = effectiveMainSQL
@@ -414,7 +434,7 @@ enum LibraryQuery {
         // collapses a dirty completionist to the main story. `hltb`/dismissed games skip
         // the guard entirely.
         let guardSQL = suspiciousLengthGuardSQL()
-        return "CAST(ROUND(CASE"
+        return "CAST(ROUND((CASE"
             + " WHEN \(guardSQL) AND \(m) IS NOT NULL AND g.ttb_completely_s IS NOT NULL"
             + " AND g.ttb_completely_s >= \(ratio) * \(m)"
             + " THEN \(m) + \(t) * (ROUND(\(m) * \(rl)) - \(m))"
@@ -425,7 +445,7 @@ enum LibraryQuery {
             + " THEN \(m) * (1 + \(t) * (\(rl) - 1))"
             + " WHEN g.ttb_completely_s IS NOT NULL"
             + " THEN g.ttb_completely_s * (1 + \(t) * (\(rl) - 1)) / \(rl)"
-            + " ELSE NULL END) AS INTEGER)"
+            + " ELSE NULL END) * \(f)) AS INTEGER)"
     }
 
     /// A game's **effective main-story time** in SQL (wave 21 D1 read rule): the stored
@@ -436,6 +456,14 @@ enum LibraryQuery {
     /// ``EstimateSanity/effectiveMain(rushed:main:sourceIsHLTB:)``.
     static let effectiveMainSQL =
         "COALESCE(g.ttb_normally_s, CASE WHEN g.ttb_source = 'hltb' THEN g.ttb_hastily_s END)"
+
+    /// The SQL mirror of ``EstimateSource/classify(rushed:main:completionist:source:)``: `'none'`
+    /// when no time is stored, else `'hltb'` for an HLTB-sourced row, else `'igdb'` (wave 22 —
+    /// the Playtime ▸ Estimate Source facet and the grid row's ``GameSummary/estimateSource``).
+    static let estimateSourceSQL = """
+        (CASE WHEN g.ttb_hastily_s IS NULL AND g.ttb_normally_s IS NULL AND g.ttb_completely_s IS NULL \
+        THEN 'none' WHEN g.ttb_source = 'hltb' THEN 'hltb' ELSE 'igdb' END)
+        """
 
     // MARK: - Suspicious estimates (PLAN §5.3)
 
@@ -490,8 +518,8 @@ enum LibraryQuery {
     /// expression `IS NULL`) means exactly "no time info to fetch" (an IGDB rushed-only game
     /// counts as No Estimate, since rushed is never used for length — but an HLTB row whose
     /// only time is the Main Story in the rushed slot is measured, wave 21 D1).
-    static func playtimeBucketExpr(style: PlayStyle) -> String {
-        "COALESCE(\(effectivePlaytimeSQL()), \(lengthEstimateExpr(style: style)))"
+    static func playtimeBucketExpr(style: PlayStyle, paceFactor: Double = 1.0) -> String {
+        "COALESCE(\(effectivePlaytimeSQL()), \(lengthEstimateExpr(style: style, paceFactor: paceFactor)))"
     }
 
     /// One grouped pass computing the five "By Length" shelf counts plus the
@@ -500,7 +528,7 @@ enum LibraryQuery {
     /// changing the pace or style only re-runs this query. Personal length only — see
     /// ``lengthEstimateExpr(style:r:)``.
     static func lengthShelfCountsSQL(
-        bounds: LengthBounds, style: PlayStyle
+        bounds: LengthBounds, style: PlayStyle, paceFactor: Double = 1.0
     ) -> (sql: String, arguments: StatementArguments) {
         var cols: [String] = []
         var args: [DatabaseValueConvertible] = []
@@ -514,7 +542,7 @@ enum LibraryQuery {
         cols.append("COALESCE(SUM(est IS NULL), 0) AS unmeasured")
         let sql = """
             SELECT \(cols.joined(separator: ",\n                   "))
-            FROM (SELECT \(lengthEstimateExpr(style: style)) AS est FROM games g)
+            FROM (SELECT \(lengthEstimateExpr(style: style, paceFactor: paceFactor)) AS est FROM games g)
             """
         return (sql, StatementArguments(args))
     }
@@ -522,9 +550,9 @@ enum LibraryQuery {
     /// Fetch the per-shelf + "Unmeasured" counts. Composed into the single sidebar
     /// observation alongside the scalar/per-platform counts (never a second one).
     static func fetchLengthShelfCounts(
-        _ db: Database, bounds: LengthBounds, style: PlayStyle
+        _ db: Database, bounds: LengthBounds, style: PlayStyle, paceFactor: Double = 1.0
     ) throws -> (shelves: [LengthShelf: Int], unmeasured: Int) {
-        let (sql, arguments) = lengthShelfCountsSQL(bounds: bounds, style: style)
+        let (sql, arguments) = lengthShelfCountsSQL(bounds: bounds, style: style, paceFactor: paceFactor)
         let row = try Row.fetchOne(db, sql: sql, arguments: arguments)!
         var shelves: [LengthShelf: Int] = [:]
         for shelf in LengthShelf.allCases { shelves[shelf] = row[shelf.rawValue] }
@@ -617,11 +645,11 @@ enum LibraryQuery {
     /// (no effective playtime and no IGDB estimate of any kind). Buckets are emitted
     /// in canonical (ascending) order so the SQL is deterministic.
     private static func appendPlaytimeFacet(
-        _ buckets: Set<PlaytimeBucket>, includeNoEstimate: Bool, style: PlayStyle,
+        _ buckets: Set<PlaytimeBucket>, includeNoEstimate: Bool, style: PlayStyle, paceFactor: Double,
         into wheres: inout [String], args: inout [DatabaseValueConvertible]
     ) {
         guard !buckets.isEmpty || includeNoEstimate else { return }
-        let expr = playtimeBucketExpr(style: style)
+        let expr = playtimeBucketExpr(style: style, paceFactor: paceFactor)
         var ors: [String] = []
         for bucket in PlaytimeBucket.allCases where buckets.contains(bucket) {
             var conds: [String] = ["\(expr) IS NOT NULL"]
@@ -657,7 +685,7 @@ enum LibraryQuery {
             terms = ["(\(played) IS NULL)", "\(played) \(dir)"]
         case .length:
             // By the personal length (how long the game is for the owner), NULLs last.
-            let expr = lengthEstimateExpr(style: filter.playStyle)
+            let expr = lengthEstimateExpr(style: filter.playStyle, paceFactor: filter.paceFactor)
             terms = ["(\(expr) IS NULL)", "\(expr) \(dir)"]
         case .lastPlayed:
             // Most-recently-played first (importer-filled), NULLs (never played by an
@@ -734,7 +762,8 @@ enum LibraryQuery {
             romPlatformIDs: dedupedList(row["rom_plats"]),
             subscriptionPlatformIDs: dedupedList(row["sub_plats"]),
             singleCopyFormat: singleCopyFormat,
-            hasSeveralChangeableCopies: changeableCount >= 2
+            hasSeveralChangeableCopies: changeableCount >= 2,
+            estimateSource: (row["estimate_source"] as String?).flatMap(EstimateSource.init(rawValue:)) ?? .none
         )
     }
 
