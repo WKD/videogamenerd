@@ -50,6 +50,14 @@ class VGNUITestCase: XCTestCase {
             "-VGNSampleData", "YES",
             "-VGNDisableAnimations", "YES",
             "-AppleShowScrollBars", "Always",
+            // Never restore saved window state (wave 22 root cause). XCUITest
+            // launches the app WITHOUT making it frontmost; AppKit then "restores"
+            // the persisted main window, SwiftUI's restorer hands back nil, and
+            // because a restoration ran SwiftUI does not open the default
+            // WindowGroup window either — the app comes up with a menu bar and NO
+            // window, so every flow failed "Expected main window / grid to exist".
+            // Ignoring persistent state makes SwiftUI open its fresh default window.
+            "-ApplePersistenceIgnoreState", "YES",
         ] + extraArguments
         app.launch()
         self.app = app
@@ -107,6 +115,32 @@ class VGNUITestCase: XCTestCase {
         XCTAssertTrue(element.waitForExistence(timeout: timeout),
                       "Expected \(label) to exist", file: file, line: line)
         return element
+    }
+
+    /// Every failure carries the app's OWN accessibility tree as text (never a
+    /// screen capture). The `VGN-UITests` scheme discards XCTest's automatic system
+    /// attachments (`systemAttachmentLifetime = keepNever`,
+    /// `preferredScreenCaptureFormat = screenshots`) because on macOS those are
+    /// full-screen screenshots / screen recordings of the owner's desktop; this keeps
+    /// the one diagnostic that matters — what VGN's window exposed — scoped to VGN.
+    nonisolated override func record(_ issue: XCTIssue) {
+        var issue = issue
+        // XCTest records issues on the main thread (the test method's thread).
+        nonisolated(unsafe) let testCase = self
+        // Windows + dialogs only — NOT `app.debugDescription`, whose menu bar includes
+        // Apple ▸ Recent Items (the owner's recently opened file names).
+        let tree: String? = MainActor.assumeIsolated {
+            guard let app = testCase.app else { return nil }
+            let tops = app.windows.allElementsBoundByIndex + app.dialogs.allElementsBoundByIndex
+            return tops.map(\.debugDescription).joined(separator: "\n\n")
+        }
+        if let tree {
+            let attachment = XCTAttachment(string: tree)
+            attachment.name = "VGN windows a11y tree at failure"
+            attachment.lifetime = .keepAlways
+            issue.add(attachment)
+        }
+        super.record(issue)
     }
 
     /// Type a keyboard shortcut against the app (menu / global shortcuts).
