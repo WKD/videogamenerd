@@ -11,7 +11,9 @@ final class SettingsTests: VGNUITestCase {
         require(el(A11y.grid), "grid")
 
         shortcut(",", .command)
-        for tab in ["Accounts", "Photo Scan", "General"] {
+        // The account tab is labelled "IGDB" since the importer waves (GOG / PlayStation /
+        // Batocera tabs appear only when those accounts are wired — not in sample mode).
+        for tab in ["IGDB", "Photo Scan", "General"] {
             require(tabButton(tab), "\(tab) settings tab")
         }
 
@@ -31,8 +33,9 @@ final class SettingsTests: VGNUITestCase {
     /// on other releases — match on the label, whatever the element type.
     private func tabButton(_ label: String) -> XCUIElement {
         let predicate = NSPredicate(
-            format: "label == %@ AND (elementType == %d OR elementType == %d OR elementType == %d)",
-            label,
+            // macOS 15 exposes the toolbar tab buttons with a `title` and an empty label.
+            format: "(label == %@ OR title == %@) AND (elementType == %d OR elementType == %d OR elementType == %d)",
+            label, label,
             XCUIElement.ElementType.button.rawValue,
             XCUIElement.ElementType.radioButton.rawValue,
             XCUIElement.ElementType.tab.rawValue)

@@ -44,8 +44,10 @@ final class FilterChipsTests: VGNUITestCase {
             XCTFail("filter menu \(menuID) not found"); return
         }
         menu.click()
-        // The first menu item is the first toggle (a tier / a status).
-        let item = app.menuItems.element(boundBy: 0)
+        // The first item OF THIS pop-up's menu is its first toggle (a tier / a status).
+        // Scoped to the pop-up: `app.menuItems` would start with the menu BAR's items
+        // (Apple ▸ About …), which are not on screen — clicking one stalls ~45 s.
+        let item = menu.menuItems.element(boundBy: 0)
         if item.waitForExistence(timeout: 3) {
             item.click()
         } else {

@@ -1,26 +1,28 @@
 import XCTest
 
-/// Flow (c): grid keys — select a game, `A` sets tier A, `P` marks played,
-/// multi-select + tier, `⌘Z` undoes.
+/// Flow (c): grid keys — select a game, `⇧A` sets tier A, `⇧P` toggles played,
+/// multi-select + tier, `⌘Z` undoes. (Since wave 7 the grid's action keys are
+/// SHIFTED — plain letters type-to-select; see `GridKeyRouter`.)
 final class GridKeyTests: VGNUITestCase {
 
     func testTierKeySetsTierThenUndo() {
         launchSample()
         require(el(A11y.grid), "grid")
 
-        // Disco Elysium seeds as owned, unplayed, unranked.
-        let disco = require(gridCell(titled: "Disco Elysium"), "Disco Elysium cell")
-        disco.click()
-        XCTAssertFalse(((disco.value as? String) ?? "").contains("Tier"),
-            "Disco Elysium should start unranked")
+        // Broken Sword seeds as played + unranked. (Only PLAYED games take a tier —
+        // on an unplayed one the key is skipped with a banner, PLAN §4 inv. 2.)
+        let game = require(gridCell(titled: "Broken Sword"), "Broken Sword cell")
+        game.click()
+        XCTAssertFalse(((game.value as? String) ?? "").contains("Tier"),
+            "Broken Sword should start unranked")
 
-        app.typeText("a")   // over the focused grid → tier A
-        expectValue(of: "Disco Elysium", contains: "Tier A")
+        app.typeKey("a", modifierFlags: .shift)   // ⇧A over the focused grid → tier A
+        expectValue(of: "Broken Sword", contains: "Tier A")
         attachWindowScreenshot("c1-tier-A")
 
         // ⌘Z undoes the tier change.
         shortcut("z", .command)
-        expectValue(of: "Disco Elysium", notContains: "Tier A")
+        expectValue(of: "Broken Sword", notContains: "Tier A")
         attachWindowScreenshot("c2-undo")
     }
 
@@ -33,7 +35,7 @@ final class GridKeyTests: VGNUITestCase {
         XCTAssertFalse(((disco.value as? String) ?? "").contains("Played"),
             "Disco Elysium should start unplayed")
 
-        app.typeText("p")   // mark played
+        app.typeKey("p", modifierFlags: .shift)   // ⇧P toggles played
         expectValue(of: "Disco Elysium", contains: "Played")
         attachWindowScreenshot("c3-mark-played")
     }
@@ -42,12 +44,12 @@ final class GridKeyTests: VGNUITestCase {
         launchSample()
         require(el(A11y.grid), "grid")
 
-        let disco = require(gridCell(titled: "Disco Elysium"), "Disco Elysium cell")
-        disco.click()
+        let game = require(gridCell(titled: "Broken Sword"), "Broken Sword cell")
+        game.click()
         // Extend the selection into the next cell, then tier the set.
         app.typeKey(.rightArrow, modifierFlags: .shift)
-        app.typeText("c")
-        expectValue(of: "Disco Elysium", contains: "Tier C")
+        app.typeKey("c", modifierFlags: .shift)   // ⇧C → tier C for the set
+        expectValue(of: "Broken Sword", contains: "Tier C")
         attachWindowScreenshot("c4-multiselect-tier")
     }
 

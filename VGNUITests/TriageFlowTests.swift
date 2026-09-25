@@ -5,12 +5,21 @@ import XCTest
 final class TriageFlowTests: VGNUITestCase {
 
     func testTriageTierLetterAdvancesAndBack() throws {
-        launchSample(["-VGNOpen", "triage"])
+        // Not `-VGNOpen triage`: Triage snapshots its queue when it appears, and a launch
+        // deep-link can appear BEFORE the async sample seed has landed ("Triage complete,
+        // 0 games tiered"). Wait for the seeded grid, then open Duel ▸ Triage.
+        launchSample()
+        require(el(A11y.grid), "grid")
+        require(el(A11y.sidebarDuel), "Duel row").click()
+        let triageSegment = app.radioButtons["Triage"].firstMatch
+        require(triageSegment, "Triage mode segment").click()
 
         guard el(A11y.triageProgress).waitForExistence(timeout: 12) else {
-            // Nothing to triage (no played-but-unranked games) — record and skip.
+            // Sample mode seeds two played-but-unranked games (Broken Sword, MGS2), so an
+            // empty Triage here is a failure, not a skip.
             attachWindowScreenshot("f0-triage-empty")
-            throw XCTSkip("No unranked played games to triage in sample data")
+            XCTFail("Triage showed no card although sample mode has unranked played games")
+            return
         }
         attachWindowScreenshot("f1-triage")
 

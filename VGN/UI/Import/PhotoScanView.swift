@@ -26,6 +26,10 @@ struct PhotoScanView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 520)
+        // `.contain` makes the sheet its own element. On the bare `Group` the identifier
+        // was pushed down onto EVERY child, overriding theirs ("scan.usageNotice",
+        // "scan.close" all read "scan.sheet") — found by the UI smoke suite, wave 22.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(A11yID.scanSheet)
         .dropDestination(for: URL.self) { urls, _ in
             model.enqueue(urls)

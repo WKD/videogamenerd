@@ -26,6 +26,31 @@ xcrun xcresulttool export attachments \
     echo "xcresulttool export attachments failed; the bundle may have no attachments" >&2
   }
 
+# Drop XCTest's automatic failure-triage dumps from the export. They are the WHOLE
+# app accessibility tree including the menu bar, whose Apple ▸ Recent Items lists the
+# owner's recently opened file names. (They stay inside the local, git-ignored
+# .xcresult — XCTest keeps them on failure despite `systemAttachmentLifetime =
+# keepNever`.) Our own window-scoped tree ("VGN windows a11y tree …") is kept.
+python3 - "$ATT" <<'PY'
+import json, os, sys
+att = sys.argv[1]
+m = os.path.join(att, "manifest.json")
+if os.path.exists(m):
+    data = json.load(open(m))
+    drop = ("App UI hierarchy", "UI Snapshot", "Debug description", "Complete Issue Description")
+    for entry in data:
+        keep = []
+        for a in entry.get("attachments", []):
+            if a.get("suggestedHumanReadableName", "").startswith(drop):
+                fn = os.path.join(att, a.get("exportedFileName", ""))
+                if os.path.isfile(fn):
+                    os.remove(fn)
+            else:
+                keep.append(a)
+        entry["attachments"] = keep
+    json.dump(data, open(m, "w"), indent=2)
+PY
+
 # Build index.html from the manifest (falling back to a plain image glob).
 python3 - "$ATT" "$OUTDIR/index.html" <<'PY'
 import json, os, sys, html, glob

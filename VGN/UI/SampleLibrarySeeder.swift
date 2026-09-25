@@ -39,6 +39,17 @@ enum SampleLibrarySeeder {
         ("Metal Gear Solid 3: Snake Eater", .ofItsTime),
     ]
 
+    /// Sample time-to-beat estimates (hours: hastily / normally / completely), by title, for
+    /// the owned, unplayed backlog — so sample mode's Play Next has measured candidates and
+    /// shows a hero pick (with no estimate every candidate sits in the unknown-length lane
+    /// and the page shows its empty state). Rough public averages, written as `igdb` times
+    /// through the ordinary enrichment write path.
+    static let sampleTimeToBeat: [(String, hastily: Int, normally: Int, completely: Int)] = [
+        ("Disco Elysium", 21, 32, 45),
+        ("Hollow Knight: Silksong", 25, 35, 55),
+        ("Metal Gear Solid 4: Guns of the Patriots", 17, 22, 40),
+    ]
+
     /// The compilation used to demonstrate all-or-nothing ownership (PLAN §8).
     static var compilation: (product: ProductDraft, members: [CompilationMemberDraft]) {
         (
@@ -63,7 +74,17 @@ enum SampleLibrarySeeder {
                 if let id = ids[title] { try await store.setHoldsUp(mark, for: [id]) }
             }
             let comp = compilation
-            _ = try await store.addCompilation(product: comp.product, members: comp.members)
+            let added = try await store.addCompilation(product: comp.product, members: comp.members)
+            var allIDs = ids
+            for (member, outcome) in zip(comp.members, added.members) {
+                allIDs[member.title] = outcome.gameID
+            }
+            for (title, h, n, c) in sampleTimeToBeat {
+                guard let id = allIDs[title] else { continue }
+                try await store.updateMetadata(gameID: id, MetadataPatch(
+                    ttbHastilyS: h * 3600, ttbNormallyS: n * 3600, ttbCompletelyS: c * 3600,
+                    ttbSource: "igdb"))
+            }
         } catch {
             NSLog("VGN: sample library seed failed: \(error)")
         }

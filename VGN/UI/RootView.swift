@@ -9,7 +9,6 @@ struct RootView: View {
     var quickAdd: QuickAddModel?
     var quickAddController: QuickAddPanelController?
     var enrichment: EnrichmentStatusModel?
-    @FocusState private var searchFocused: Bool
     @Environment(\.undoManager) private var undoManager
 
     var body: some View {
@@ -31,8 +30,6 @@ struct RootView: View {
         .task { vm.start() }
         .task { enrichment?.start() }
         .onAppear { vm.undoManager = undoManager }
-        .onChange(of: vm.searchFocusRequests) { _, _ in searchFocused = true }
-        .onChange(of: searchFocused) { _, focused in vm.searchFieldFocused = focused }
         .onChange(of: vm.quickAddPresented) { _, presented in
             if presented { presentQuickAdd() } else { quickAddController?.hide() }
         }
@@ -197,10 +194,11 @@ struct RootView: View {
             ToolbarItemGroup(placement: .principal) {
                 LibrarySearchField(
                     text: $vm.searchText,
-                    focus: $searchFocused,
-                    onClear: { _ = vm.clearSearch(); searchFocused = true },
+                    focusRequests: vm.searchFocusRequests,
+                    onFocusChange: { vm.searchFieldFocused = $0 },
+                    onClear: { _ = vm.clearSearch() },
                     onDownArrow: { vm.focusGridFromSearch() },
-                    onEscape: { if !vm.clearSearch() { searchFocused = false } },
+                    onEscape: { vm.clearSearch() },
                     onSubmit: { vm.openFirstResult() }
                 )
                 .frame(minWidth: 160, idealWidth: 220)

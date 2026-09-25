@@ -11,7 +11,12 @@ import SwiftUI
 extension View {
     /// Shows `text` on hover (nothing when empty) and exposes it as the accessibility hint.
     func appKitTooltip(_ text: String) -> some View {
-        overlay { AppKitTooltipOverlay(text: text) }
+        // The overlay is hidden from accessibility: the text is already the view's
+        // hint, and an NSView inside an `.accessibilityElement(children: .combine)`
+        // parent (a grid cell's tier chip) turned the combined element into an
+        // AXUnknown with NO value — XCUITest/VoiceOver lost the cell's "Tier A,
+        // Played" state (found by the UI smoke suite, wave 22).
+        overlay { AppKitTooltipOverlay(text: text).accessibilityHidden(true) }
             .accessibilityHint(Text(text))
     }
 }
@@ -35,4 +40,5 @@ private struct AppKitTooltipOverlay: NSViewRepresentable {
 final class TooltipPassthroughView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override var acceptsFirstResponder: Bool { false }
+    override func isAccessibilityElement() -> Bool { false }
 }
