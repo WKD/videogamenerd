@@ -1,7 +1,11 @@
 import AppKit
+import OSLog
 import SwiftUI
 
-/// The main library `WindowGroup`'s scene id (so `openWindow(id:)` can reach it).
+private let guardLog = Logger(subsystem: "com.pomatelier.VideoGameNerd", category: "MainWindowGuard")
+
+/// The main library `WindowGroup`'s scene id — also its stable state-restoration identifier
+/// (`library-AppWindow-1`), which no longer changes when the root view's modifiers do.
 enum MainWindowID {
     static let id = "library"
 }
@@ -9,20 +13,27 @@ enum MainWindowID {
 /// Guarantees the main library window exists after launch (wave 23, bug "no window
 /// when launched in the background").
 ///
-/// Root cause: when the app is launched without being activated (`open -g`, a login
-/// item, XCUITest's `launch()`), AppKit finds saved state to restore
-/// (`hasPersistentStateToRestore`), asks SwiftUI's restorer for the main window, the
-/// restorer hands back `nil` — and because a restoration *ran*, SwiftUI does not open
-/// its default `WindowGroup` window either. The app comes up with a menu bar and no
-/// window until the Dock icon is clicked.
+/// Root cause (confirmed from the app's `StateRestoration` log, wave 23): AppKit
+/// restores the saved main window by its identifier. An id-less `WindowGroup`'s
+/// identifier was the **type name of its root view's modifier chain**
+/// (`SwiftUI._ConditionalContent<…RootView…>-1-AppWindow-1`), which changes whenever a
+/// build adds/removes a modifier there. After such a build SwiftUI's restorer cannot map
+/// the saved identifier to a scene and returns `window=0x0`, and because a restoration
+/// *ran*, SwiftUI opens no default window either. A launch that activates the app gets
+/// one anyway; a background launch (`open -g`, a login item, XCUITest) comes up with a
+/// menu bar and no window until the Dock icon is clicked.
 ///
-/// Fix: every main window registers itself here (``MainWindowMarker``). Shortly after
-/// launch — and again on the first activation — if no registered main window is on
-/// screen (visible or minimised), the guard opens one through the scene's
-/// `openWindow(id:)`. It never opens a second window when restoration did work: the
-/// restored window registers itself first, and absence has to be confirmed twice,
-/// one beat apart, before anything is opened. Window-frame persistence is untouched
-/// (state restoration stays on).
+/// Fix, two parts: (1) the main `WindowGroup` has a stable id (``MainWindowID``), so
+/// its saved identifier (`library-AppWindow-1`) survives rebuilds; (2) this guard, for
+/// state saved by an older build (or any other miss): every main window registers
+/// itself (``MainWindowMarker``); shortly after launch — and again on the first
+/// activation — if no registered main window is visible or minimised (confirmed twice,
+/// one beat apart, so a restored window is never doubled) it asks SwiftUI's own
+/// application delegate to open an untitled window (`applicationOpenUntitledFile(_:)`
+/// — what SwiftUI uses for its default window). NOTE: `openWindow` captured from the
+/// scene's `Commands` does NOT work here — with no window SwiftUI has not evaluated the
+/// commands yet (the first version of this fix relied on it and opened nothing).
+/// Window-frame persistence is untouched (state restoration stays on).
 @MainActor
 final class MainWindowGuard {
     static let shared = MainWindowGuard()
@@ -45,9 +56,16 @@ final class MainWindowGuard {
         return !windows.contains { $0.isVisible || $0.isMiniaturized }
     }
 
-    /// Set by ``MainWindowCommands`` (commands are built at launch even when no
-    /// window exists, so `openWindow` is reachable from there).
-    var openMainWindow: (() -> Void)?
+    /// Opens a main window. Default: SwiftUI's application delegate's
+    /// `applicationOpenUntitledFile(_:)` (injectable for tests).
+    var openMainWindow: @MainActor () -> Void = MainWindowGuard.openUntitledWindow
+
+    /// Ask SwiftUI's own `NSApplicationDelegate` for an untitled (default) window.
+    static func openUntitledWindow() {
+        guard let app = NSApp, let delegate = app.delegate else { return }
+        let opened = delegate.applicationOpenUntitledFile?(app) ?? false
+        guardLog.notice("no main window after launch — opened one: \(opened)")
+    }
 
     private let windows = NSHashTable<NSWindow>.weakObjects()
     private var didCheckOnActivation = false
@@ -97,7 +115,7 @@ final class MainWindowGuard {
             try? await Task.sleep(for: .milliseconds(400))
             self.checkScheduled = false
             guard self.needsWindowNow else { return }
-            self.openMainWindow?()
+            self.openMainWindow()
         }
     }
 }
@@ -113,17 +131,6 @@ struct MainWindowMarker: NSViewRepresentable {
             super.viewDidMoveToWindow()
             if let window { MainWindowGuard.shared.register(window) }
         }
-    }
-}
-
-/// Hands the main scene's `openWindow` to ``MainWindowGuard``. Adds no menu items.
-struct MainWindowCommands: Commands {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some Commands {
-        let open = openWindow
-        MainWindowGuard.shared.openMainWindow = { open(id: MainWindowID.id) }
-        return EmptyCommands()
     }
 }
 

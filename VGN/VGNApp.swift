@@ -32,7 +32,6 @@ struct VGNApp: App {
             Group {
                 LibraryDataCommands(database: env.ranking?.library.database, library: env.library)
                 RankingCommands(presenter: env.ranking?.duelReset)
-                MainWindowCommands()
             }
         }
 
