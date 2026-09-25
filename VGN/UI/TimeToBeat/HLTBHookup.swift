@@ -84,6 +84,20 @@ final class HLTBFetchPresenter {
         }
     }
 
+    /// Fill every game with no time estimate, whatever the current destination (wave 23:
+    /// Play Next's "None of your unfinished games has a length yet" state). Ignores the
+    /// grid selection — Play Next has none.
+    func presentBulkForAllMissing() {
+        guard bulk == nil else { return }
+        let model = HLTBBulkFetchModel(store: store, makeSearch: makeSearch, mode: .fillGaps)
+        bulk = model
+        let store = self.store
+        Task {
+            let scope = (try? await store.gameIDsWithNoTimeEstimate()) ?? []
+            model.start(gameIDs: scope)
+        }
+    }
+
     // MARK: - Bulk replace (Game / context ▸ Refresh Time Estimates from HowLongToBeat…)
 
     /// Present the **replace** bulk sheet for the selection, or — when nothing is

@@ -36,7 +36,8 @@ class VGNUITestCase: XCTestCase {
     /// (e.g. `["-VGNOpen", "duel"]`). Animations are disabled so focus/label
     /// assertions don't race transitions.
     @discardableResult
-    func launchSample(_ extraArguments: [String] = []) -> XCUIApplication {
+    func launchSample(_ extraArguments: [String] = [],
+                      ignorePersistentState: Bool = true) -> XCUIApplication {
         // NOTE (macOS foreground limitation): `launch()` reliably brings the app to
         // the foreground — and thus into XCUITest's query snapshot — only for the
         // FIRST test in the run's process. Later tests' apps render but stay behind
@@ -46,10 +47,13 @@ class VGNUITestCase: XCTestCase {
         // and did NOT help — and the app-side activation actually broke the first
         // test too — so we keep the plain, known-good launch here.
         let app = XCUIApplication()
-        app.launchArguments = [
+        var arguments = [
             "-VGNSampleData", "YES",
             "-VGNDisableAnimations", "YES",
             "-AppleShowScrollBars", "Always",
+        ]
+        if ignorePersistentState {
+            arguments += [
             // Never restore saved window state (wave 22 root cause). XCUITest
             // launches the app WITHOUT making it frontmost; AppKit then "restores"
             // the persisted main window, SwiftUI's restorer hands back nil, and
@@ -57,8 +61,13 @@ class VGNUITestCase: XCTestCase {
             // WindowGroup window either — the app comes up with a menu bar and NO
             // window, so every flow failed "Expected main window / grid to exist".
             // Ignoring persistent state makes SwiftUI open its fresh default window.
-            "-ApplePersistenceIgnoreState", "YES",
-        ] + extraArguments
+            // (Wave 23 fixed the app side — `MainWindowGuard` — and
+            // `LaunchSmokeTests.testLaunchWithSavedStateStillShowsWindow` launches
+            // without this flag to prove it; the flag stays for every other flow.)
+                "-ApplePersistenceIgnoreState", "YES",
+            ]
+        }
+        app.launchArguments = arguments + extraArguments
         app.launch()
         self.app = app
         return app

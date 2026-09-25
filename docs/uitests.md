@@ -321,7 +321,16 @@ Disco Elysium); Quick Add's format is a 3-segment control; the Settings account 
 `save-panel` dialog); the search narrows asynchronously (poll); the filter menu's first
 item must be read from the pop-up, not `app.menuItems` (menu bar first → 45 s stall).
 
-**Open (app, written up — not fixed here):**
+**Closed in wave 23 (W23-A)** — the three app bugs below are fixed (see
+`docs/LIMITATIONS.md` §2 for the how); a new `LaunchSmokeTests` case,
+`testLaunchWithSavedStateStillShowsWindow`, launches twice WITHOUT
+`-ApplePersistenceIgnoreState` (the first run leaves saved state) and expects exactly
+one main window. **UI suite not run in wave 23:** the owner's own VGN build (launched
+from Xcode) was running the whole session, and `XCUIApplication.launch()` terminates a
+running instance of the same bundle id — so the per-class run was skipped, not failed.
+Run `scripts/uitests.sh --per-class` once that app is quit.
+
+**Were open (app, written up in wave 22 — fixed in wave 23):**
 - *Background launch shows no window.* Steps: quit VGN with its window open; launch it
   without activating (`open -g "Video Game Nerd.app"`, a login item, a script). Expected:
   the library window. Actual: menu bar only, no window (restoration yields nil; SwiftUI

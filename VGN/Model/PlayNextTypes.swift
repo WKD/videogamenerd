@@ -297,9 +297,23 @@ struct PlayNextResult: Hashable, Sendable {
         self.replayUndatedCount = replayUndatedCount
     }
 
-    /// True when there is nothing at all to show — no regular pick and neither extra row.
+    /// True when there is nothing at all to show — no regular pick, neither extra row
+    /// **and** no unknown-length candidate (wave 23: a backlog whose games only lack a
+    /// length estimate is not "nothing to play").
     var isEmpty: Bool {
-        hero == nil && alternatives.isEmpty && finishWhatYouStarted.isEmpty && replay.isEmpty
+        !hasPicks && unknownLength.isEmpty
+    }
+
+    /// Something other than the unknown-length lane is on offer: a regular pick or an
+    /// extra-row card.
+    var hasPicks: Bool {
+        hero != nil || !alternatives.isEmpty || !finishWhatYouStarted.isEmpty || !replay.isEmpty
+    }
+
+    /// Every candidate only lacks a length estimate — the view shows the unknown-length
+    /// lane up front with a "fetch missing estimates" nudge instead of an empty state.
+    var hasOnlyUnknownLength: Bool {
+        !hasPicks && !unknownLength.isEmpty
     }
 
     /// The shortlist that drove the pick (hero + alternatives), in engine order —

@@ -34,6 +34,8 @@ struct TriageView: View {
         .task {
             await model.start()
             focused = true
+            // Follow the library while shown (wave 23) — ends when the view goes away.
+            await model.observeLibrary()
         }
         .onChange(of: model.current) { focused = true }
         .alert("Remove from library?", isPresented: removalPresented, presenting: model.removalPrompt) { _ in
@@ -89,6 +91,13 @@ struct TriageView: View {
             .padding(.horizontal)
             // Tiers = favourites, memories included (PLAN §7/§7b) — Holds Up is the "now" fact.
             RankingPhilosophyCaption(style: .triage)
+            if let notice = model.notice {
+                Text(notice)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .frame(maxWidth: 520)
+                    .accessibilityIdentifier("triage.notice")
+            }
 
             RankingCoverView(title: game.title, coverFile: game.coverFile,
                              platformID: game.platformIDs.first, loader: loader)
